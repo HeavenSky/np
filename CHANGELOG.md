@@ -30,7 +30,7 @@
 ### 运行环境
 
 - Node.js >= 16.14.0; 依赖调整为 `node-gyp` 10, `tar` 7.
-- 开发工具改为 oxlint 与 oxfmt.
+- 开发工具改为 oxlint 与 oxfmt; 测试由 egg-bin 改为直接使用 mocha 11 与 c8.
 
 ## [6.8.0](https://github.com/cnpm/npminstall/compare/v6.7.1...v6.8.0) (2023-12-18)
 

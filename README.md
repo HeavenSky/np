@@ -43,7 +43,7 @@ npm i -g github:HeavenSky/np#np-6.8.0
 | 在 `npm run` / `npx` 下安装需要 prepare 的 git 依赖 | 继承 `npm_config_allow_scripts`, 被 npm 12 以 `EALLOWSCRIPTS` 拒绝 | 正常安装; 失败时错误信息附带子进程 stderr |
 | `np6-uninstall` | 可能在 `package.json` 写回前返回 | 写回完成后返回 |
 | 依赖 | node-gyp 9, tar 6 | node-gyp 10, tar 7 |
-| 开发工具 | eslint | oxlint, oxfmt |
+| 开发工具 | eslint, egg-bin | oxlint, oxfmt, mocha 11, c8 |
 
 ## Use as Lib
 

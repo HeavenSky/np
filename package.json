@@ -16,9 +16,9 @@
   },
   "scripts": {
     "contributor": "git-contributor",
-    "test": "npm run lint && egg-bin test -t 2000000",
-    "test-cov": "egg-bin cov -t 2000000",
-    "test-local": "npm_china=true local=true egg-bin test -t 2000000 --full-trace",
+    "test": "npm run lint && mocha 'test/*.test.js'",
+    "test-cov": "c8 --reporter=text --reporter=lcov mocha 'test/*.test.js'",
+    "test-local": "npm_china=true local=true mocha --full-trace 'test/*.test.js'",
     "lint": "oxlint",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
@@ -56,10 +56,11 @@
     "utility": "^1.16.1"
   },
   "devDependencies": {
+    "c8": "^9.1.0",
     "coffee": "5",
-    "egg-bin": "5",
     "git-contributor": "1",
     "mm": "3",
+    "mocha": "^11.7.0",
     "oxfmt": "^0.70.0",
     "oxlint": "^1.85.0"
   },
