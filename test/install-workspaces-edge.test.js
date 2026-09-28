@@ -135,6 +135,30 @@ describe('test/install-workspaces-edge.test.js', () => {
       .end();
   });
 
+  describe('peerDependencies', () => {
+    async function peerWorkspace(rootDependencies) {
+      await writeJSON(path.join(tmp, 'vendor/c/package.json'), { name: 'c', version: '1.0.0', peerDependencies: { p: '^1.0.0' } });
+      await writeJSON(path.join(tmp, 'vendor/p/package.json'), { name: 'p', version: '1.0.0' });
+      await workspace({ 'packages/a': { name: 'pkg-a', dependencies: { c: 'file:../../vendor/c' } } }, { dependencies: rootDependencies });
+    }
+
+    it('should not warn when the peer is provided by workspace root', async () => {
+      await peerWorkspace({ p: 'file:./vendor/p' });
+      await run(helper.npminstall)
+        .expect('code', 0)
+        .notExpect('stderr', /requires a peer of p@\^1\.0\.0 but none was installed/)
+        .end();
+    });
+
+    it('should still warn when the peer is missing', async () => {
+      await peerWorkspace({});
+      await run(helper.npminstall)
+        .expect('code', 0)
+        .expect('stderr', /requires a peer of p@\^1\.0\.0 but none was installed/)
+        .end();
+    });
+  });
+
   it('should fail when the lockfile can not be loaded', async () => {
     await writeJSON(path.join(tmp, 'package.json'), { name: 'r', version: '1.0.0', dependencies: { ms: '2.1.3' } });
     await run(helper.npminstall, [ `--lockfile-path=${path.join(tmp, 'missing-lock.json')}` ])

@@ -9,7 +9,7 @@ const fs = require('node:fs/promises');
 const { writeFileSync } = require('node:fs');
 const chalk = require('chalk');
 const parseArgs = require('minimist');
-const { installLocal, installGlobal } = require('..');
+const { installLocal, installGlobal, validatePendingPeerDependencies } = require('..');
 const npa = require('../lib/npa');
 const utils = require('../lib/utils');
 const globalConfig = require('../lib/config');
@@ -324,6 +324,7 @@ debug('argv: %j, env: %j', argv, env);
     // install on one workspace package
     isWorkspacePackage: false,
     offline,
+    deferPeerCheck: enableWorkspace,
     // 本次只安装部分依赖树, 已提升的链接只允许升级不允许降级
     partialInstall: pkgs.length > 0 || installWorkspaceNames.length > 0 || !!installOnAllWorkspaces,
   };
@@ -524,6 +525,7 @@ debug('argv: %j, env: %j', argv, env);
       }
     }
   }
+  await validatePendingPeerDependencies(context);
 })().catch(err => {
   utils.exitWithError('np', err);
 });
