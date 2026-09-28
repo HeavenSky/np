@@ -47,4 +47,17 @@ describe('test/install-with-lockfile.test.js', () => {
       assert.strictEqual(Object.keys(dependenciesTree).length, 29);
     });
   }
+
+  it('should fail when the lockfile can not be loaded', async () => {
+    await coffee.fork(
+      helper.npminstall,
+      [
+        '--lockfile-path',
+        path.join(cwd, 'missing-lock.json'),
+      ], { cwd })
+      .debug()
+      .expect('code', 1)
+      .expect('stderr', /load lockfile from .*missing-lock\.json error/)
+      .end();
+  });
 });

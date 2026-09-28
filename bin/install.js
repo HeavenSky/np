@@ -140,7 +140,7 @@ Options:
   --no-cache: don't use the tarball disk cache, ignored when --cache-strict is set
   --custom-china-mirror-url: replace the default china binary mirror https://npmmirror.com/mirrors, used with -c
   --tarball-url-mapping: JSON object to rewrite tarball urls, e.g.: --tarball-url-mapping='{"https://a.com":"https://b.com"}'
-  --lockfile-path: install from package-lock.json (lockfileVersion >= 2), optionalDependencies in lockfile are ignored
+  --lockfile-path: install from package-lock.json (lockfileVersion >= 2), optionalDependencies in lockfile are ignored, fail if the lockfile can't be loaded
   --save-dependencies-tree: save the resolved dependencies tree to node_modules/.dependencies_tree.json
   -v, --version: show version
   -h, --help: show help
@@ -329,13 +329,14 @@ debug('argv: %j, env: %j', argv, env);
 
   const lockfilePath = argv['lockfile-path'];
   if (lockfilePath) {
+    // 加载失败必须中止: 回退到联网解析会装出与 lockfile 不一致的版本且退出码为 0
     try {
       const lockfileData = await fs.readFile(lockfilePath, 'utf8');
       config.dependenciesTree = lockfileConverter(JSON.parse(lockfileData), {
         ignoreOptionalDependencies: true,
       });
     } catch (error) {
-      console.warn(chalk.yellow('npminstall WARN load lockfile from %s error :%s'), lockfilePath, error.message);
+      throw new Error(`load lockfile from ${lockfilePath} error: ${error.message}`, { cause: error });
     }
   }
 
