@@ -9,10 +9,10 @@
     "node-gyp-bin"
   ],
   "bin": {
-    "npminstall": "bin/install.js",
-    "npmlink": "bin/link.js",
-    "npmuninstall": "bin/uninstall.js",
-    "npmupdate": "bin/update.js"
+    "np6": "bin/install.js",
+    "np6-link": "bin/link.js",
+    "np6-uninstall": "bin/uninstall.js",
+    "np6-update": "bin/update.js"
   },
   "scripts": {
     "contributor": "git-contributor",

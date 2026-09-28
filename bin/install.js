@@ -79,9 +79,6 @@ Object.assign(argv, parseArgs(originalArgv, {
     'cache-strict',
     'fix-bug-versions',
     'prune',
-    // disable dedupe mode https://docs.npmjs.com/cli/dedupe, back to npm@2 mode
-    // please don't use on frontend project
-    'disable-dedupe',
     'save-dependencies-tree',
     'force-link-latest',
   ],
@@ -286,7 +283,6 @@ debug('argv: %j, env: %j', argv, env);
     flatten,
     proxy,
     prune,
-    disableDedupe: argv['disable-dedupe'],
   };
   config.strictSSL = getStrictSSL();
   config.ignoreScripts = argv['ignore-scripts'] || getIgnoreScripts();
@@ -389,15 +385,12 @@ debug('argv: %j, env: %j', argv, env);
         if (pkg.config.npminstall.prune === true) {
           config.prune = true;
         }
-        if (pkg.config.npminstall.disableDedupe === true) {
-          config.disableDedupe = true;
-        }
         // env config
         // {
         //   "config": {
         //     "npminstall": {
         //       "env:production": {
-        //         "disableDedupe": true
+        //         "prune": true
         //       }
         //     }
         //   }
@@ -408,18 +401,12 @@ debug('argv: %j, env: %j', argv, env);
           if (envConfig.prune === true) {
             config.prune = true;
           }
-          if (envConfig.disableDedupe === true) {
-            config.disableDedupe = true;
-          }
         }
         // development
         if (!config.production && pkg.config.npminstall['env:development']) {
           const envConfig = pkg.config.npminstall['env:development'];
           if (envConfig.prune === true) {
             config.prune = true;
-          }
-          if (envConfig.disableDedupe === true) {
-            config.disableDedupe = true;
           }
         }
       }
