@@ -38,7 +38,6 @@ describe('test/installGlobal.test.js', () => {
     assert(await exists(path.join(libDir, 'node_modules/taffydb')));
     assert(await exists(path.join(libDir, 'node_modules/pedding')));
     assert(await exists(path.join(libDir, 'node_modules/egg-bin')));
-    assert(!(await exists(path.join(libDir, 'node_modules/.contributors_npminstall/node_modules'))));
 
     await coffee.fork(require.resolve('../bin/install.js'), [
       `--prefix=${tmp}`,

@@ -13,7 +13,6 @@ results
 node_modules
 npm-debug.log
 coverage/
-.npminstall
 .preinstall*
 .postisntall*
 .tmp
@@ -28,7 +27,7 @@ test/fixtures/css-loader-example2/webpack*.json
 !test/fixtures/warn-node-modules-exists/node_modules
 !test/fixtures/ignore-warn-node-modules-exists/node_modules
 .nyc_output
-.npminstall_tarball
+.np_tarball
 
 .editorconfig
 .DS_Store

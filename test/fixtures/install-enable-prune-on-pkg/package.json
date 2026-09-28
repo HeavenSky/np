@@ -7,7 +7,7 @@
     "antd": "*"
   },
   "config": {
-    "npminstall": {
+    "np": {
       "prune": true
     }
   }

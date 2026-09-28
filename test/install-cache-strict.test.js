@@ -30,7 +30,7 @@ describe('test/install-cache-strict.test.js', () => {
     })
       .debug()
       .end();
-    assert(await fs.stat(path.join(homedir, '.npminstall_tarball/d/e/b/u/debug')));
+    assert(await fs.stat(path.join(homedir, '.np_tarball/np-tgz/debug')));
   });
 
   it('should read disk cache on --cache-strict', async () => {
@@ -43,7 +43,7 @@ describe('test/install-cache-strict.test.js', () => {
     })
       .debug()
       .end();
-    assert(await fs.stat(path.join(homedir, '.npminstall_tarball/d/e/b/u/debug')));
+    assert(await fs.stat(path.join(homedir, '.np_tarball/np-tgz/debug')));
   });
 
   it('should read disk cache from npm_config_cache env', async () => {
@@ -51,12 +51,12 @@ describe('test/install-cache-strict.test.js', () => {
       cwd: demo,
       env: Object.assign({}, process.env, {
         HOME: homedir,
-        npm_config_cache: path.join(homedir, 'foocache/.npminstall_tarball'),
+        npm_config_cache: path.join(homedir, 'foocache/.np_tarball'),
       }),
     })
       .debug()
       .end();
-    assert(await fs.stat(path.join(homedir, 'foocache/.npminstall_tarball/d/e/b/u/debug')));
+    assert(await fs.stat(path.join(homedir, 'foocache/.np_tarball/np-tgz/debug')));
   });
 
   it('should read disk cache on --cache-strict NODE_ENV=production', async () => {
@@ -70,19 +70,19 @@ describe('test/install-cache-strict.test.js', () => {
     })
       .debug()
       .end();
-    assert(await fs.stat(path.join(homedir, '.npminstall_tarball/d/e/b/u/debug')));
+    assert(await fs.stat(path.join(homedir, '.np_tarball/np-tgz/debug')));
   });
 
-  it('should read disk cache from npminstall_cache env', async () => {
+  it('should read disk cache from np_cache env', async () => {
     await coffee.fork(helper.npminstall, [], {
       cwd: demo,
       env: Object.assign({}, process.env, {
         HOME: homedir,
-        npminstall_cache: path.join(homedir, 'foocache/.npminstall_tarball'),
+        np_cache: path.join(homedir, 'foocache/.np_tarball'),
       }),
     })
       .debug()
       .end();
-    assert(await fs.stat(path.join(homedir, 'foocache/.npminstall_tarball/d/e/b/u/debug')));
+    assert(await fs.stat(path.join(homedir, 'foocache/.np_tarball/np-tgz/debug')));
   });
 });

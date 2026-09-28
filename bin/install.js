@@ -171,7 +171,7 @@ Options:
 
 const pkgs = [];
 
-if (process.env.NPMINSTALL_BY_UPDATE) {
+if (process.env.NP_BY_UPDATE) {
   // ignore all package names on update
   argv._ = [];
 }
@@ -203,13 +203,13 @@ let installWorkspaceNames = utils.formatWorkspaceNames(argv);
 const production = argv.production || process.env.NODE_ENV === 'production';
 const cacheStrict = argv['cache-strict'];
 // support npm_config_cache to change default cache dir
-const defaultCacheDir = process.env.npm_config_cache || path.join(os.homedir(), '.npminstall_tarball');
+const defaultCacheDir = process.env.npm_config_cache || path.join(os.homedir(), '.np_tarball');
 let cacheDir = defaultCacheDir;
 if (!cacheStrict && (production || argv.cache === false)) {
   cacheDir = '';
 }
-if (process.env.npminstall_cache) {
-  cacheDir = process.env.npminstall_cache;
+if (process.env.np_cache) {
+  cacheDir = process.env.np_cache;
 }
 
 let forbiddenLicenses = argv['forbidden-licenses'];
@@ -430,30 +430,30 @@ debug('argv: %j, env: %j', argv, env);
     if (!exists) {
       console.warn(chalk.yellow(`np WARN package.json not exists: ${pkgFile}`));
     } else {
-      // try to read npminstall config from package.json
+      // try to read np config from package.json
       const pkg = await utils.readJSON(pkgFile);
       pkg.config = pkg.config || {};
-      pkg.config.npminstall = pkg.config.npminstall || {};
+      pkg.config.np = pkg.config.np || {};
       // {
       //   "config": {
-      //     "npminstall": {
+      //     "np": {
       //       "prune": true
       //     }
       //   }
       // }
-      if (pkg.config.npminstall.prune === true) {
+      if (pkg.config.np.prune === true) {
         config.prune = true;
       }
       // production
-      if (config.production && pkg.config.npminstall['env:production']) {
-        const envConfig = pkg.config.npminstall['env:production'];
+      if (config.production && pkg.config.np['env:production']) {
+        const envConfig = pkg.config.np['env:production'];
         if (envConfig.prune === true) {
           config.prune = true;
         }
       }
       // development
-      if (!config.production && pkg.config.npminstall['env:development']) {
-        const envConfig = pkg.config.npminstall['env:development'];
+      if (!config.production && pkg.config.np['env:development']) {
+        const envConfig = pkg.config.np['env:development'];
         if (envConfig.prune === true) {
           config.prune = true;
         }

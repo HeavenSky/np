@@ -58,7 +58,7 @@ Usage:
 
   console.log('[np-update] reinstall on %s', root);
   // make sure install ignore all package names
-  process.env.NPMINSTALL_BY_UPDATE = 'true';
+  process.env.NP_BY_UPDATE = 'true';
   require('./install');
 })().catch(err => {
   exitWithError('np-update', err);

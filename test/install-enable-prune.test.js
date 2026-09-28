@@ -22,7 +22,7 @@ describe('test/install-enable-prune.test.js', () => {
     });
   });
 
-  describe('pkg.config.npminstall.prune', () => {
+  describe('pkg.config.np.prune', () => {
     const cwd = helper.fixtures('install-enable-prune-on-pkg');
     const cleanup = helper.cleanup(cwd);
 
