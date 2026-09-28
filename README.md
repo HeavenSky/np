@@ -1,315 +1,64 @@
-# npminstall
+# np
 
-[![NPM version][npm-image]][npm-url]
-[![Node CI](https://github.com/cnpm/npminstall/actions/workflows/ci.yml/badge.svg)](https://github.com/cnpm/npminstall/actions/workflows/ci.yml)
-[![Test coverage][codecov-image]][codecov-url]
-[![Known Vulnerabilities][snyk-image]][snyk-url]
-[![npm download][download-image]][download-url]
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fcnpm%2Fnpminstall.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fcnpm%2Fnpminstall?ref=badge_shield)
+[cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1 的 fork. 使用 `np` 命令, 或需要判断它与上游行为差异时读本页.
 
-[npm-image]: https://img.shields.io/npm/v/npminstall.svg?style=flat-square
-[npm-url]: https://npmjs.org/package/npminstall
-[codecov-image]: https://codecov.io/gh/cnpm/npminstall/branch/master/graph/badge.svg
-[codecov-url]: https://codecov.io/gh/cnpm/npminstall
-[snyk-image]: https://snyk.io/test/npm/npminstall/badge.svg?style=flat-square
-[snyk-url]: https://snyk.io/test/npm/npminstall
-[download-image]: https://img.shields.io/npm/dm/npminstall.svg?style=flat-square
-[download-url]: https://npmjs.org/package/npminstall
+## 运行要求
 
-Make `npm install` fast and handy.
+- Node.js >= 16.14.0
+- 编译原生模块时需要 Python 3, 由 node-gyp 10 调用
 
-## Node.js and Python required
-
-- Node.js >= 20.x
-- Python >= 3.x
-
-## Use as Cli
-
-### Install
+## 安装
 
 ```bash
-$ npm i -g npminstall
+npm i -g github:HeavenSky/np#np
 ```
 
-### Usage
+作为依赖引用:
 
-#### In cnpm
-
-It is integrated in [cnpm](https://github.com/cnpm/cnpm).
-
-```bash
-$ npm i -g cnpm
-# will use npminstall
-$ cnpm install
+```json
+{ "dependencies": { "np": "github:HeavenSky/np#np" } }
 ```
 
-#### npminstall
+## 命令
 
-```bash
-Usage:
+| 命令 | 上游对应 |
+| --- | --- |
+| `np` | `npminstall` |
+| `np-link` | `npmlink` |
+| `np-uninstall` | `npmuninstall` |
+| `np-update` | `npmupdate` |
 
-  npminstall
-  npminstall <pkg>
-  npminstall <pkg>@<tag>
-  npminstall <pkg>@<version>
-  npminstall <pkg>@<version range>
-  npminstall <alias>@npm:<name>
-  npminstall <folder>
-  npminstall <tarball file>
-  npminstall <tarball url>
-  npminstall <git:// url>
-  npminstall <github username>/<github project>
+全部参数见 `np --help`.
 
-Can specify one or more: npm install ./foo.tgz bar@stable /some/folder
-If no argument is supplied, installs dependencies from ./package.json.
+## 与上游的差异
 
-Options:
+| 项 | 上游 8.0.1 | 本 fork |
+| --- | --- | --- |
+| `--dedup` | 无 | 把每个包的最新版本链接到 `<root>/node_modules`, 即 npminstall@6 的扁平效果; 优先级高于 `--public-hoist-pattern` |
+| 根目录提升 | 固定提升名称匹配 `/(eslint\|prettier\|babel)/i` 的包 | 默认不提升; 用 `--public-hoist-pattern=<regexp>` 或 `.npmrc` 的 `np-public-hoist-pattern` 指定 |
+| `--disable-fallback-store` | 可关闭 `.store/node_modules` 回退链接 | 移除, 回退链接始终建立 |
+| 缓存目录 | `manifests/` 与按包名拆分的多级 tarball 目录 | `np-manifests/`, `np-tgz/<name>/`, `np-tmp/<YYYYMMDD>/`; 不再自动清理过期临时目录 |
+| registry token | 附加到所有请求 | 只附加到与 registry 同 host 的请求 |
 
-  --production: won't install devDependencies
-  --save, --save-dev, --save-optional: save installed dependencies into package.json
-  -g, --global: install devDependencies to global directory which specified in `$ npm config get prefix`
-  -r, --registry: specify custom registry
-  -c, --china: specify in china, will automatically using chinese npm registry and other binary's mirrors
-  -d, --detail: show detail log of installation
-  --trace: show memory and cpu usages traces of installation
-  --ignore-scripts: ignore all preinstall / install and postinstall scripts during the installation
-  --no-optional: ignore optionalDependencies during the installation
-  --forbidden-licenses: forbit install packages which used these licenses
-  --engine-strict: refuse to install (or even consider installing) any package that claims to not be compatible with the current Node.js version.
-  --flatten: flatten dependencies by matching ancestors dependencies
-  --registry-only: make sure that all packages are installed from registry. Any package that is installed from remote(e.g.: git, remote url) will lead to a failure of installation.
-  --cache-strict: use disk cache even on production env
-```
+## node_modules 布局
 
-#### npmuninstall
+- 包实体位于 `node_modules/.store/<name>@<version>/node_modules/<name>`, 依赖以同级符号链接放在同一 `node_modules` 下.
+- 每个包的最新版本链接到 `node_modules/.store/node_modules`, 供 peerDependencies 回退解析.
+- 根目录只放直接依赖与被提升的包; 已存在的链接不覆盖, 需要更新时加 `--force-link-latest` 或删除 `node_modules` 后重装.
+- workspace 模式下开启 `--dedup` 时, 各 workspace 包按安装顺序向 workspace 根提升, 先装者生效, 根目录中的传递依赖版本取决于安装顺序.
 
-```bash
-Usage:
+## resolutions
 
-  npmuninstall <pkg>
-  npmuninstall <pkg>@<version>
-  npmuninstall <pkg>@<version> [<pkg>@<version>]
-  npminstall <alias>@npm:<name>
-```
+支持 yarn 的 [selective version resolutions](https://classic.yarnpkg.com/en/docs/selective-version-resolutions) 语法, 也支持 npm alias 作为目标版本; 写法见 `test/fixtures/resolutions/package.json` 与 `test/fixtures/resolutions-alias/package.json`.
 
-#### npmlink
+## 已知安全风险
 
-```bash
-Usage:
+为支持 Node 16 而保留的依赖, 以下公告未修复:
 
-  npmlink <folder>
-```
-
-## Use as Lib
-
-### Install
-
-```bash
-$ npm install npminstall --save
-```
-
-### Usage
-
-```js
-const npminstall = require('npminstall');
-
-(async () => {
-  await npminstall({
-    // install root dir
-    root: process.cwd(),
-    // optional packages need to install, default is package.json's dependencies and devDependencies
-    // pkgs: [
-    //   { name: 'foo', version: '~1.0.0' },
-    // ],
-    // install to specific directory, default to root
-    // targetDir: '/home/admin/.global/lib',
-    // link bin to specific directory (for global install)
-    // binDir: '/home/admin/.global/bin',
-    // registry, default is https://registry.npmjs.org
-    // registry: 'https://registry.npmjs.org',
-    // debug: false,
-    // storeDir: root + 'node_modules',
-    // ignoreScripts: true, // ignore pre/post install scripts, default is `false`
-    // forbiddenLicenses: forbit install packages which used these licenses
-  });
-})().catch(err => {
-  console.error(err);
-});
-```
-
-## Support Features
-
-- [x] all types of npm package
-  - [x] a) a folder containing a program described by a package.json file (`npm install file:eslint-rule`)
-  - [x] b) a gzipped tarball containing (a) (`npm install ./rule.tgz`)
-  - [x] c) a url that resolves to (b) (`npm install https://github.com/indexzero/forever/tarball/v0.5.6`)
-  - [x] d) a <name>@<version> that is published on the registry with (c)
-  - [x] e) a <name>@<tag> (see npm-dist-tag) that points to (d)
-  - [x] f) a <name> that has a "latest" tag satisfying (e)
-  - [x] g) a <git remote url> that resolves to (a) (`npm install git://github.com/timaschew/cogent#fix-redirects`)
-- [x] All platform support
-- [x] global install (`-g, --global`)
-- [x] `preinstall`, `install`, `postinstall` scripts
-- [x] node-gyp@9, only support Python@3
-  - [x] node-pre-gyp
-- [x] bin (yo@1.6.0, fsevents@1.0.6)
-- [x] scoped package
-- [x] bundleDependencies / bundledDependencies (node-pre-gyp@0.6.19, fsevents@1.0.6)
-- [x] optionalDependencies (pm2@1.0.0)
-- [x] peerDependencies (co-defer@1.0.0, co-mocha@1.1.2, estraverse-fb@1.3.1)
-- [x] deprecate message
-- [x] `--production` mode
-- [x] `save`, `save-dev`, `save-optional`
-- [x] support `ignore-scripts`
-- [x] uninstall
-- [x] resolutions
-- [x] [npm alias](https://github.com/npm/rfcs/blob/latest/implemented/0001-package-aliases.md)
-- [x] [npm workspaces](https://docs.npmjs.com/cli/v9/using-npm/workspaces?v=true)
-
-## Different with NPM
-
-This project is inspired by [pnpm](https://github.com/pnpm/pnpm), and has a similar store structure like pnpm. You can read [pnpm vs npm](https://github.com/pnpm/pnpm/blob/master/docs/pnpm-vs-npm.md) to see the different with npm.
-
-### Limitations
-
-- You can't install from [shrinkwrap](https://docs.npmjs.com/cli/shrinkwrap)(and don't want to support for now).
-- Peer dependencies are a little trickier to deal with(see rule 1 below).
-- You can't publish npm modules with bundleDependencies managed by npminstall(because of rule 2 below).
-- `npminstall` will collect all postinstall scripts, and execute them until all dependencies installed.
-- If last install failed, better to cleanup node_modules directory before retry.
-
-## `node_modules` directory
-
-Two rules:
-
-1. The latest version of modules will link at `options.storeDir`'s `node_modules`.
-2. Module's dependencies will link at module's `node_modules`.
-
-e.g.:
-
-- app: `{ "dependencies": { "debug": "2.2.0" } }` (root)
-- debug@2.2.0: `{ "dependencies": { "ms": "0.7.1" } }`
-
-```bash
-app/
-├── package.json
-└── node_modules
-    ├── _debug@2.2.0@debug
-    │   ├── node_modules
-    │   │   └── ms -> ../../_ms@0.7.1@ms
-    ├── _ms0.7.1@ms
-    ├── debug -> _debug@2.2.0@debug
-    └── ms -> _ms@0.7.1@ms # for peerDependencies
-```
-
-### flattened vs nested
-
-npminstall will always try to install the maximal matched version of semver:
-
-```
-root/
-  koa@1.1.0
-  mod/
-    koa@~1.1.0
-# will install two different version of koa when use npminstall.
-```
-
-you can enable flatten mode by `--flatten` flag, in this mod, npminstall will try to use ancestors' dependencies to minimize the dependence-tree.
-
-```
-root/
-  koa@1.1.0
-  mod/
-    koa@~1.1.0
-
-root/
-  koa@1.1.0
-  mod/
-    koa@^1.1.0
-# both the same version: 1.1.0
-
-root/
-  koa@~1.1.0
-  mod/
-    koa@^1.1.0
-# both the same version: 1.1.2
-
-root/
-  mod/
-    koa@^1.1.0
-  moe/
-    koa@~1.1.0
-# two different versions
-```
-
-**npminstall will always treat `n.x` and `n.m.x` as flattened**
-
-```
-root/
-  koa@1.1.0
-  mod/
-    koa@1.1.x
-both the same version: 1.1.0
-
-root/
-  koa@~1.1.0
-  mod/
-    koa@1.x
-both the same version: 1.1.2
-```
-
-## Resolutions
-
-support [selective version resolutions](https://yarnpkg.com/en/docs/selective-version-resolutions) like yarn. which lets you define custom package versions inside your dependencies through the resolutions field in your `package.json` file.
-
-resolutions also supports [npm alias](https://docs.npmjs.com/cli/v7/commands/npm-install). It's a workaround feature to fix some archived/inactive/ package by uploading your own bug-fixed version to npm registry.
-
-see use case at [unittest package.json](./test/fixtures/resolutions-alias/package.json).
-
-## Benchmarks
-
-https://github.com/cnpm/npminstall-benchmark
-
-### cnpmjs.org install
-
-- npminstall@1.2.0
-- pnpm@0.18.0
-- npm@2.14.12
-
-cli | real | user | sys
---- | ---  | ---  | ---
-npminstall | 0m10.908s | 0m8.733s | 0m4.282s
-npminstall with cache | 0m8.815s | 0m7.492s | 0m3.644s
-npminstall --no-cache | 0m10.279s | 0m8.255s | 0m3.932s
-pnpm | 0m13.509s | 0m11.650s | 0m4.443s
-npm | 0m28.171s | 0m26.085s | 0m8.219s
-npm with cache | 0m20.939s | 0m19.415s | 0m6.302s
-
-### pnpm benchmark
-
-see https://github.com/pnpm/pnpm#benchmark
-
-```bash
-npminstall babel-preset-es2015 browserify chalk debug minimist mkdirp
-    real	0m8.929s       user	0m5.606s       sys	0m2.913s
-```
-
-```bash
-pnpm i babel-preset-es2015 browserify chalk debug minimist mkdirp
-    real	0m12.998s      user	0m8.653s       sys	0m3.362s
-```
-
-```bash
-npm i babel-preset-es2015 browserify chalk debug minimist mkdirp
-    real	1m4.729s       user	0m55.589s      sys	0m23.135s
-```
+- urllib 3 依赖的 undici 5: 公告集中在 WebSocket, fetch, Cookie 与 retry 拦截器, np 不经过这些路径; 请求走私一类需要恶意 registry 或代理配合.
+- pacote 15 内嵌的 tar 6: 只在安装 git 依赖时由 pacote 调用; np 自身解压 tarball 使用顶层 tar 7.
+- pacote `addGitSha` DoS 与 sigstore 签名约束失效: 只涉及 git 依赖与签名校验, np 不启用签名校验.
 
 ## License
 
-[MIT](LICENSE.txt)
-
-## Contributors
-
-[![Contributors](https://contrib.rocks/image?repo=cnpm/npminstall)](https://github.com/cnpm/npminstall/graphs/contributors)
-
-Made with [contributors-img](https://contrib.rocks).
+MIT, 版权归属见 [LICENSE.txt](./LICENSE.txt).
