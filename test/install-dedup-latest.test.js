@@ -39,6 +39,14 @@ describe('test/install-dedup-latest.test.js', () => {
     assert.equal(await version('debug'), '2.6.9');
   });
 
+  it('should replace an older existing directory with the latest version', async () => {
+    await writeJSON(path.join(tmp, 'package.json'), { name: 'r', version: '1.0.0', dependencies: { koa: '2.15.3' } });
+    await writeJSON(path.join(tmp, 'node_modules/ms/package.json'), { name: 'ms', version: '1.0.0' });
+    await install();
+    assert.equal(await version('ms'), '2.1.3');
+    assert((await fs.lstat(path.join(tmp, 'node_modules/ms'))).isSymbolicLink());
+  });
+
   for (const workspaces of [[ 'packages/a', 'packages/b' ], [ 'packages/b', 'packages/a' ]]) {
     it(`should hoist the latest version regardless of workspace order ${workspaces.join(',')}`, async () => {
       await writeJSON(path.join(tmp, 'package.json'), { name: 'w', version: '1.0.0', private: true, workspaces });

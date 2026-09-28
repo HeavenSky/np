@@ -17,7 +17,7 @@ const argv = parseArgs(process.argv.slice(2), {
     'version',
     'help',
     'global',
-    'ignore-scripts',
+    // --ignore-scripts 已移除: uninstall 不执行任何生命周期脚本
     'workspaces',
   ],
   alias: {
@@ -55,7 +55,6 @@ if (!pkgs.length) help();
   };
 
   if (argv.global) {
-    // support custom prefix for global install
     // support custom prefix for global install
     const meta = utils.getGlobalInstallMeta(argv.prefix);
     config.targetDir = meta.targetDir;

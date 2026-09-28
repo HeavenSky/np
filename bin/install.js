@@ -35,7 +35,7 @@ Object.assign(argv, parseArgs(originalArgv, {
     'custom-china-mirror-url',
     // {"http://a.com":"http://b.com"}
     'tarball-url-mapping',
-    'proxy',
+    // --proxy 已移除: urllib 3 不支持 proxy / enableProxy 参数, 传入后请求仍直连
     'dependencies-tree',
     // np foo --workspace=aa
     // np foo -w aa
@@ -83,7 +83,7 @@ Object.assign(argv, parseArgs(originalArgv, {
     'fix-bug-versions',
     'prune',
     'save-dependencies-tree',
-    'force-link-latest',
+    // --force-link-latest 已移除: 提升到根目录时始终链接最高版本
     'dedup',
     'workspaces',
     'offline',
@@ -130,7 +130,6 @@ Usage:
   np <tarball url>
   np <git:// url>
   np <github username>/<github project>
-  np --proxy=http://localhost:8080
   np --lockfile-path=</path/to/package-lock.json>
 
 Can specify one or more: np ./foo.tgz bar@stable /some/folder
@@ -146,10 +145,9 @@ Options:
   -r, --registry: specify custom registry
   --root: install root directory, default is current working directory
   --prefix: global install prefix used with -g, default is '$npm config get prefix'
-  --proxy: http proxy for all requests, fallback to env npm_proxy or npm_config_proxy
   --no-cache: don't use the tarball disk cache, ignored when --cache-strict is set
   --custom-china-mirror-url: replace the default china binary mirror https://npmmirror.com/mirrors, used with -c
-  --tarball-url-mapping: JSON object to rewrite tarball urls, e.g.: --tarball-url-mapping='{"https://a.com":"https://b.com"}'
+  --tarball-url-mapping: JSON object to rewrite tarball urls before request, redirect targets are not rewritten, e.g.: --tarball-url-mapping='{"https://a.com":"https://b.com"}'
   --lockfile-path: install from package-lock.json (lockfileVersion >= 2), optionalDependencies in lockfile are ignored
   --save-dependencies-tree: save the resolved dependencies tree to node_modules/.dependencies_tree.json
   -v, --version: show version
@@ -170,8 +168,7 @@ Options:
   --fix-bug-versions: automatically fix bug version of packages.
   --prune: prune unnecessary files from ./node_modules, such as markdown, typescript source files, and so on.
   --dependencies-tree: install with dependencies tree to restore the last install.
-  --force-link-latest: force link latest version package to module root path.
-  --public-hoist-pattern: regexp of package names to link into <root>/node_modules, default is none.
+  --public-hoist-pattern: regexp of package names to link into <root>/node_modules with their latest version, default is none.
   --dedup: link every package's latest version into <root>/node_modules like npminstall@6, overrides --public-hoist-pattern.
   --offline: offline mode. If a package won't be found locally, the installation will fail.
 `
@@ -241,7 +238,6 @@ if (inChina) {
 // for env.npm_config_registry
 registry = registry || 'https://registry.npmjs.com';
 
-const proxy = argv.proxy || process.env.npm_proxy || process.env.npm_config_proxy;
 const offline = !!argv.offline;
 
 const env = {
@@ -293,7 +289,7 @@ debug('argv: %j, env: %j', argv, env);
   let binaryMirrors = {};
 
   if (inChina) {
-    binaryMirrors = await utils.getBinaryMirrors(registry, { proxy, offline, cacheDir });
+    binaryMirrors = await utils.getBinaryMirrors(registry, { offline, cacheDir });
     if (customChinaMirrorUrl) {
       for (const key in binaryMirrors) {
         const item = binaryMirrors[key];
@@ -317,26 +313,22 @@ debug('argv: %j, env: %j', argv, env);
     registry,
     pkgs,
     production,
-    cacheStrict: argv['cache-strict'],
     cacheDir,
     env,
     binaryMirrors,
     forbiddenLicenses,
     flatten,
-    proxy,
     prune,
     publicHoistPattern: argv.dedup ? '.*' : argv['public-hoist-pattern'],
     workspacesMap,
     // don't enable workspace on global install
     enableWorkspace,
     workspaceRoot: root,
-    // install on workspaces root
-    isWorkspaceRoot: true,
     // install on one workspace package
     isWorkspacePackage: false,
     offline,
   };
-  config.strictSSL = getStrictSSL();
+  // 不再读取 npm 的 strict-ssl: urllib 3 不支持 rejectUnauthorized, HTTPS 证书始终校验
   // when ignore-scripts is set to `false` by user, np will still
   // get config from npm settings instead of following user's specification,
   // should migrate to ?? or typeof.
@@ -344,7 +336,6 @@ debug('argv: %j, env: %j', argv, env);
   config.foregroundScripts = argv['foreground-scripts'];
   config.ignoreOptionalDependencies = !argv.optional;
   config.detail = argv.detail;
-  config.forceLinkLatest = !!argv['force-link-latest'];
   config.trace = argv.trace;
   config.engineStrict = argv['engine-strict'];
   config.registryOnly = argv['registry-only'];
@@ -366,7 +357,7 @@ debug('argv: %j, env: %j', argv, env);
   }
 
   if (argv['fix-bug-versions']) {
-    const packageVersionMapping = await utils.getBugVersions(registry, { proxy, offline, cacheDir });
+    const packageVersionMapping = await utils.getBugVersions(registry, { offline, cacheDir });
     config.autoFixVersion = function autoFixVersion(name, version) {
       const fixVersions = packageVersionMapping[name];
       return fixVersions && fixVersions[version] || null;
@@ -479,7 +470,6 @@ debug('argv: %j, env: %j', argv, env);
         installRootConfigs.push({
           ...config,
           root: workspaceRoot,
-          isWorkspaceRoot: false,
           isWorkspacePackage: true,
         });
       }
@@ -493,7 +483,6 @@ debug('argv: %j, env: %j', argv, env);
         installRootConfigs.push({
           ...config,
           root: workspaceRoot,
-          isWorkspaceRoot: false,
           isWorkspacePackage: true,
         });
       }
@@ -504,7 +493,6 @@ debug('argv: %j, env: %j', argv, env);
           installRootConfigs.push({
             ...config,
             root: workspaceRoot,
-            isWorkspaceRoot: false,
             isWorkspacePackage: true,
           });
         }
@@ -514,7 +502,6 @@ debug('argv: %j, env: %j', argv, env);
       installRootConfigs.push({
         ...config,
         root,
-        isWorkspaceRoot: true,
         isWorkspacePackage: false,
       });
     }
@@ -524,7 +511,6 @@ debug('argv: %j, env: %j', argv, env);
     installRootConfigs.push({
       ...config,
       root,
-      isWorkspaceRoot: true,
       isWorkspacePackage: false,
     });
   }
@@ -573,16 +559,6 @@ function getVersionSavePrefix() {
     }
   }
   return _versionSavePrefix;
-}
-
-function getStrictSSL() {
-  try {
-    const strictSSL = execSync('npm config get strict-ssl').toString().trim();
-    return strictSSL !== 'false';
-  } catch (err) {
-    debug(`exec npm config get strict-ssl ERROR: ${err.message}`);
-    return true;
-  }
 }
 
 function getIgnoreScripts() {
