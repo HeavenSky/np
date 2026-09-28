@@ -81,7 +81,7 @@ Object.assign(argv, parseArgs(originalArgv, {
     'registry-only',
     'cache-strict',
     'fix-bug-versions',
-    'prune',
+    // --prune 已移除: 按固定名单跳过解压文件会误删 tsconfig.json 等运行时文件
     'save-dependencies-tree',
     // --force-link-latest 已移除: 提升到根目录时始终链接最高版本
     'dedup',
@@ -166,7 +166,6 @@ Options:
   --registry-only: make sure all packages install from registry. Any package is installed from remote(e.g.: git, remote url) cause install fail.
   --cache-strict: use disk cache even on production env.
   --fix-bug-versions: automatically fix bug version of packages.
-  --prune: prune unnecessary files from ./node_modules, such as markdown, typescript source files, and so on, fallback to config.np.prune in package.json.
   --dependencies-tree: install with dependencies tree to restore the last install.
   --public-hoist-pattern: regexp of package names to link into <root>/node_modules with their latest version, fallback to config.np.publicHoistPattern in package.json, default is none.
   --dedup: link every package's latest version into <root>/node_modules like npminstall@6, overrides --public-hoist-pattern.
@@ -223,7 +222,6 @@ let forbiddenLicenses = argv['forbidden-licenses'];
 forbiddenLicenses = forbiddenLicenses ? forbiddenLicenses.split(',') : null;
 
 const flatten = argv.flatten;
-const prune = argv.prune;
 
 // if in china, will automatic using chinese registry and mirror.
 const inChina = argv.china || !!process.env.npm_china;
@@ -318,7 +316,6 @@ debug('argv: %j, env: %j', argv, env);
     binaryMirrors,
     forbiddenLicenses,
     flatten,
-    prune,
     publicHoistPattern: argv.dedup ? '.*' : argv['public-hoist-pattern'],
     workspacesMap,
     // don't enable workspace on global install
@@ -432,11 +429,8 @@ debug('argv: %j, env: %j', argv, env);
   }
 
   // package.json 的 config.np 对 `np` 与 `np <pkg>` 都生效, 命令行参数优先
-  // { "config": { "np": { "prune": true, "publicHoistPattern": "eslint|prettier" } } }
+  // { "config": { "np": { "publicHoistPattern": "eslint|prettier" } } }
   const npConfig = (await utils.readJSON(path.join(root, 'package.json'))).config?.np || {};
-  if (npConfig.prune === true) {
-    config.prune = true;
-  }
   if (!config.publicHoistPattern && typeof npConfig.publicHoistPattern === 'string') {
     config.publicHoistPattern = npConfig.publicHoistPattern;
   }
