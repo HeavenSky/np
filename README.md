@@ -42,7 +42,7 @@ npm i -g github:HeavenSky/np#np
 | npm `strict-ssl` | 读取后作为 `rejectUnauthorized` 传给 `HttpClient.request`, urllib 3/4 均不认, 不生效 | 不再读取, HTTPS 证书始终校验 |
 | `--tarball-url-mapping` | 声明也改写重定向地址, 但 urllib 3/4 不支持 `formatRedirectUrl` | 只改写首个请求地址 |
 | `np-uninstall --ignore-scripts` | 声明但无作用 | 移除 |
-| 缓存目录 | `~/.npminstall_tarball` 下的 `manifests/` 与按包名拆分的多级 tarball 目录 | `~/.np_tarball` 下的 `np-manifests/`, `np-tgz/<name>/`, `np-tmp/<YYYYMMDD>/`; 不再自动清理过期临时目录 |
+| 缓存目录 | `~/.npminstall_tarball` 下的 `manifests/` 与按包名拆分的多级 tarball 目录 | `~/.np_tarball` 下的 `np-manifests/<name>/<hash>.json`, `np-tgz/<name>/`, `np-tmp/<YYYYMMDD>/`; 不再自动清理过期临时目录 |
 | 缓存目录环境变量 | `npminstall_cache` | `np_cache`; `npm_config_cache` 两边都认 |
 | `package.json` 配置 | `config.npminstall` 的 `prune`, `env:production.prune`, `env:development.prune`, 只在不带包名安装时读取 | `config.np` 的 `publicHoistPattern`, `np` 与 `np <pkg>` 都读取; 移除 `prune` 与 `env:*` |
 | `--prune` | 解压时按固定名单跳过文件 | 移除; 名单含 `tsconfig.json`, `LICENSE`, `images/` 等, 会静默破坏 `@tsconfig/*` 这类包 |
