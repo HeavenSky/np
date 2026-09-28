@@ -115,6 +115,16 @@ Usage:
   np-uninstall <pkg>
   np-uninstall <pkg>@<version>
   np-uninstall <pkg>@<version> [<pkg>@<version>]
+
+Options:
+
+  --root: project root directory, default is current working directory
+  -g, --global: uninstall from the global directory
+  --prefix: global install prefix used with -g, default is '$npm config get prefix'
+  -w, --workspace: uninstall on one workspace only, e.g.: np-uninstall koa -w a
+  --workspaces: uninstall on all workspaces
+  -v, --version: show version
+  -h, --help: show help
 `
   );
   process.exit(0);

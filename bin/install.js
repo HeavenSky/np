@@ -144,6 +144,16 @@ Options:
   --no-save: Prevents saving to dependencies
   -g, --global: install devDependencies to global directory which specified in '$npm config get prefix'
   -r, --registry: specify custom registry
+  --root: install root directory, default is current working directory
+  --prefix: global install prefix used with -g, default is '$npm config get prefix'
+  --proxy: http proxy for all requests, fallback to env npm_proxy or npm_config_proxy
+  --no-cache: don't use the tarball disk cache, ignored when --cache-strict is set
+  --custom-china-mirror-url: replace the default china binary mirror https://npmmirror.com/mirrors, used with -c
+  --tarball-url-mapping: JSON object to rewrite tarball urls, e.g.: --tarball-url-mapping='{"https://a.com":"https://b.com"}'
+  --lockfile-path: install from package-lock.json (lockfileVersion >= 2), optionalDependencies in lockfile are ignored
+  --save-dependencies-tree: save the resolved dependencies tree to node_modules/.dependencies_tree.json
+  -v, --version: show version
+  -h, --help: show help
   -c, --china: specify in china, will automatically using chinese npm registry and other binary's mirrors
   -d, --detail: show detail log of installation
   -w, --workspace: install on one workspace only, e.g.: np koa -w a

@@ -11,6 +11,15 @@ function help(root) {
 Usage:
 
   np-update [--root=${root}]
+
+Remove node_modules of root and workspaces, then reinstall.
+
+Options:
+
+  --root: project root directory, default is current working directory
+  -w, --workspace: only clean root and the given workspace, then reinstall it
+  --clean-only: only remove node_modules, don't reinstall
+  -h, --help: show help
 `
   );
   process.exit(0);
