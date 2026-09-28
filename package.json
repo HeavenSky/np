@@ -39,7 +39,7 @@
     "minimist": "^1.2.0",
     "moment": "^2.24.0",
     "ms": "^2.1.1",
-    "node-gyp": "^9.0.0",
+    "node-gyp": "^10.0.0",
     "node-homedir": "^1.1.1",
     "normalize-package-data": "^5.0.0",
     "npm-normalize-package-bin": "^3.0.0",
@@ -80,7 +80,7 @@
     "fastest npm install"
   ],
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=16.14.0"
   },
   "author": "fengmk2 <fengmk2@gmail.com> (https://github.com/fengmk2)",
   "license": "MIT"

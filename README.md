@@ -20,7 +20,7 @@ Make `npm install` fast and handy.
 
 ## Node.js and Python required
 
-- Node.js >= 14.x
+- Node.js >= 16.14.0
 - Python >= 3.x
 
 ## Use as Cli
