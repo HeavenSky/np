@@ -68,9 +68,9 @@ describe('test/install-workpsaces.test.js', () => {
     assert.equal(pkg.name, '@cnpm/foo');
     assertFile.fail(path.join(root, 'node_modules/@cnpm/foo/node_modules/foo/package.json'));
 
-    // match publicHoistPattern pick eslint* modules to root node_modules
+    // workspace 直接依赖链接到根目录, 传递依赖默认不提升
     assertFile(path.join(root, 'node_modules/eslint-config-egg/package.json'));
-    assertFile(path.join(root, 'node_modules/eslint-plugin-eggache/package.json'));
+    assertFile.fail(path.join(root, 'node_modules/eslint-plugin-eggache/package.json'));
   });
 
   it('should install new package on one workspace', async () => {
