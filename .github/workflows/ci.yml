@@ -1,0 +1,51 @@
+# 两个包各自安装依赖, 各自 lint 与测试, 不共享 node_modules
+name: Node CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # oxlint / oxfmt 需要 node ^20.19 || >=22.12, 与测试用的 node 版本分开跑
+  lint:
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [ easy-np, easy-npd ]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+      - run: npm i
+      - run: npm run lint
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [ easy-np, easy-npd ]
+        node-version: [ 18.x, 22.x ]
+        os: [ ubuntu-latest, windows-latest ]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: packages/${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: npm i
+      - run: npm run test-cov
+        env:
+          NODE_OPTIONS: --max_old_space_size=6144

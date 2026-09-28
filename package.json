@@ -1,0 +1,12 @@
+{
+  "name": "np-packages",
+  "private": true,
+  "description": "easy-np and easy-npd, two independently installed and published npm packages",
+  "scripts": {
+    "install:all": "npm --prefix packages/easy-np i && npm --prefix packages/easy-npd i",
+    "lint": "npm --prefix packages/easy-np run lint && npm --prefix packages/easy-npd run lint",
+    "test:np": "npm --prefix packages/easy-np test",
+    "test:npd": "npm --prefix packages/easy-npd test",
+    "test": "npm run test:np && npm run test:npd"
+  }
+}
