@@ -36,7 +36,7 @@ Object.assign(argv, parseArgs(originalArgv, {
     'custom-china-mirror-url',
     // {"http://a.com":"http://b.com"}
     'tarball-url-mapping',
-    'proxy',
+    // --proxy 已移除: urllib 3 不支持 proxy / enableProxy 参数, 传入后请求仍直连
     // --high-speed-store=filepath
     'high-speed-store',
     'dependencies-tree',
@@ -120,7 +120,6 @@ Usage:
   npminstall <tarball url>
   npminstall <git:// url>
   npminstall <github username>/<github project>
-  npminstall --proxy=http://localhost:8080
   npminstall --lockfile-path=</path/to/package-lock.json>
 
 Can specify one or more: npminstall ./foo.tgz bar@stable /some/folder
@@ -136,10 +135,9 @@ Options:
   -r, --registry: specify custom registry
   --root: install root directory, default is current working directory
   --prefix: global install prefix used with -g, default is '$npm config get prefix'
-  --proxy: http proxy for all requests, fallback to env npm_proxy or npm_config_proxy
   --no-cache: don't use the tarball disk cache, ignored when --cache-strict is set
   --custom-china-mirror-url: replace the default china binary mirror https://npmmirror.com/mirrors, used with -c
-  --tarball-url-mapping: JSON object to rewrite tarball urls, e.g.: --tarball-url-mapping='{"https://a.com":"https://b.com"}'
+  --tarball-url-mapping: JSON object to rewrite tarball urls before request, redirect targets are not rewritten, e.g.: --tarball-url-mapping='{"https://a.com":"https://b.com"}'
   --lockfile-path: install from package-lock.json (lockfileVersion >= 2), optionalDependencies in lockfile are ignored, fail if the lockfile can't be loaded
   --save-dependencies-tree: save the resolved dependencies tree to node_modules/.dependencies_tree.json
   -v, --version: show version
@@ -224,8 +222,6 @@ if (inChina) {
 // for env.npm_config_registry
 registry = registry || 'https://registry.npmjs.com';
 
-const proxy = argv.proxy || process.env.npm_proxy || process.env.npm_config_proxy;
-
 const env = {
   npm_config_registry: registry,
   // set npm_config_argv
@@ -259,7 +255,7 @@ debug('argv: %j, env: %j', argv, env);
   let binaryMirrors = {};
 
   if (inChina) {
-    binaryMirrors = await utils.getBinaryMirrors(registry, { proxy });
+    binaryMirrors = await utils.getBinaryMirrors(registry, {});
     if (customChinaMirrorUrl) {
       for (const key in binaryMirrors) {
         const item = binaryMirrors[key];
@@ -289,9 +285,8 @@ debug('argv: %j, env: %j', argv, env);
     binaryMirrors,
     forbiddenLicenses,
     flatten,
-    proxy,
   };
-  config.strictSSL = getStrictSSL();
+  // 不再读取 npm 的 strict-ssl: urllib 3 不支持 rejectUnauthorized, HTTPS 证书始终校验
   config.ignoreScripts = argv['ignore-scripts'] || getIgnoreScripts();
   config.ignoreOptionalDependencies = !argv.optional;
   config.detail = argv.detail;
@@ -317,7 +312,7 @@ debug('argv: %j, env: %j', argv, env);
   }
 
   if (argv['fix-bug-versions']) {
-    const packageVersionMapping = await utils.getBugVersions(registry, { proxy });
+    const packageVersionMapping = await utils.getBugVersions(registry, {});
     config.autoFixVersion = function autoFixVersion(name, version) {
       const fixVersions = packageVersionMapping[name];
       return fixVersions && fixVersions[version] || null;
@@ -422,16 +417,6 @@ function getVersionSavePrefix() {
   } catch (err) {
     debug(`exec npm config get save-prefix ERROR: ${err.message}`);
     return '^';
-  }
-}
-
-function getStrictSSL() {
-  try {
-    const strictSSL = execSync('npm config get strict-ssl').toString().trim();
-    return strictSSL !== 'false';
-  } catch (err) {
-    debug(`exec npm config get strict-ssl ERROR: ${err.message}`);
-    return true;
   }
 }
 
