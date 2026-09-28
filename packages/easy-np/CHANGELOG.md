@@ -44,4 +44,4 @@ easy-np 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1, 上�
 ### 运行环境
 
 - Node.js >= 16.14.0; 依赖调整为 `@npmcli/arborist` 6, `pacote` 15, `node-gyp` 10, `urllib` 3, `tar` 7.
-- 开发工具改为 oxlint 与 oxfmt.
+- 开发工具改为 oxlint 与 oxfmt; 测试由 egg-bin 改为直接使用 mocha 11 与 c8.

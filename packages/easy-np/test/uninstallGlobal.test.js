@@ -9,7 +9,7 @@ describe('test/uninstallGlobal.test.js', () => {
 
   it('should uninstall with global and prefix', async () => {
     await coffee
-      .fork(helper.npminstall, [`--prefix=${tmp}`, '-g', 'mocha'])
+      .fork(helper.npminstall, [`--prefix=${tmp}`, '-g', 'mocha@11'])
       .debug()
       .expect('stdout', /All packages installed/)
       .expect('code', 0)

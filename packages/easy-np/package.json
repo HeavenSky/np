@@ -12,7 +12,7 @@
     "npminstall",
     "workspaces"
   ],
-  "homepage": "https://github.com/HeavenSky/np/tree/np#readme",
+  "homepage": "https://github.com/HeavenSky/np/tree/main/packages/easy-np#readme",
   "bugs": {
     "url": "https://github.com/HeavenSky/np/issues"
   },
@@ -20,7 +20,8 @@
   "author": "HeavenSky",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/HeavenSky/np.git"
+    "url": "git+https://github.com/HeavenSky/np.git",
+    "directory": "packages/easy-np"
   },
   "bin": {
     "np": "bin/install.js",
@@ -39,12 +40,12 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "test": "npm run lint && egg-bin test -t 2000000 -p",
+    "test": "npm run lint && mocha 'test/*.test.js'",
+    "test-cov": "c8 --reporter=text --reporter=lcov mocha 'test/*.test.js'",
     "lint": "oxlint",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
-    "cov": "egg-bin cov -t 2000000",
-    "ci": "npm run lint && npm run cov",
+    "ci": "npm run lint && npm run test-cov",
     "prepublishOnly": "npm run lint"
   },
   "dependencies": {
@@ -82,8 +83,9 @@
   "devDependencies": {
     "assert-file": "^1.0.0",
     "coffee": "^5.5.0",
-    "egg-bin": "^6.13.0",
+    "c8": "^9.1.0",
     "mm": "^3.2.1",
+    "mocha": "^11.7.0",
     "oxfmt": "^0.70.0",
     "oxlint": "^1.85.0"
   },

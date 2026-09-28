@@ -17,7 +17,7 @@ describe('test/installTarget.test.js', () => {
       binDir: path.join(tmp, 'binDir'),
       pkgs: [
         { name: 'koa', version: 'latest' },
-        { name: 'mocha', version: 'latest' },
+        { name: 'mocha', version: '11' },
       ],
     });
 
