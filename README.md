@@ -1,6 +1,6 @@
-# np
+# easy-np
 
-[cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1 的 fork. 使用 `np` 命令, 或需要判断它与上游行为差异时读本页.
+[cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1 的 fork, npm 包名 [`easy-np`](https://www.npmjs.com/package/easy-np), 提供 `np` 命令. 使用 `np` 命令, 或需要判断它与上游行为差异时读本页; 版本变更见 [CHANGELOG.md](./CHANGELOG.md).
 
 ## 运行要求
 
@@ -10,14 +10,18 @@
 ## 安装
 
 ```bash
-npm i -g github:HeavenSky/np#np
+npm i -g easy-np
 ```
 
 作为依赖引用:
 
 ```json
-{ "dependencies": { "np": "github:HeavenSky/np#np" } }
+{ "dependencies": { "easy-np": "^0.0.0" } }
 ```
+
+安装未发布的最新代码: `npm i -g github:HeavenSky/np#np`.
+
+全局命令 `np` 与 npm 包 [`np`](https://www.npmjs.com/package/np)(发布工具)同名, 两者全局安装时后装者覆盖先装者.
 
 ## 命令
 

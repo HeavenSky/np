@@ -1,12 +1,28 @@
 {
   "name": "easy-np",
-  "version": "8.0.1",
-  "description": "npminstall fork with --dedup and node 16 support",
+  "version": "0.0.0",
+  "description": "Fast npm installer forked from npminstall, with npm@6 style --dedup hoisting, npm workspaces fixes and node 16 support",
+  "keywords": [
+    "npm",
+    "npm install",
+    "npminstall",
+    "installer",
+    "dedup",
+    "hoist",
+    "workspaces",
+    "monorepo"
+  ],
+  "homepage": "https://github.com/HeavenSky/np/tree/np#readme",
+  "bugs": {
+    "url": "https://github.com/HeavenSky/np/issues"
+  },
+  "author": "HeavenSky",
   "main": "lib/index.js",
   "files": [
     "lib",
     "bin",
-    "node-gyp-bin"
+    "node-gyp-bin",
+    "CHANGELOG.md"
   ],
   "bin": {
     "np": "bin/install.js",
@@ -20,7 +36,8 @@
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "cov": "egg-bin cov -t 2000000",
-    "ci": "npm run lint && npm run cov"
+    "ci": "npm run lint && npm run cov",
+    "prepublishOnly": "npm run lint"
   },
   "dependencies": {
     "@npmcli/arborist": "^6.5.1",
@@ -64,7 +81,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/HeavenSky/np.git"
+    "url": "git+https://github.com/HeavenSky/np.git"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
   },
   "engines": {
     "node": ">=16.14.0"
