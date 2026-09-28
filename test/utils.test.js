@@ -1,7 +1,10 @@
 'use strict';
 
 const assert = require('assert');
+const fs = require('fs/promises');
+const path = require('path');
 const utils = require('../lib/utils');
+const helper = require('./helper');
 
 describe('test/utils.test.js', () => {
   describe('matchPlatform()', () => {
@@ -171,6 +174,32 @@ describe('test/utils.test.js', () => {
         'http://default.oss.com/@cnpmtest/download-test-module/-/@cnpmtest/download-test-module-1.0.0.tgz',
         'http://backup.oss.com/@cnpmtest/download-test-module/-/@cnpmtest/download-test-module-1.0.0.tgz',
       ]);
+    });
+  });
+
+  describe('pruneJSON()', () => {
+    const [ tmp, cleanup ] = helper.tmp();
+    beforeEach(cleanup);
+    afterEach(cleanup);
+
+    it('should finish writing package.json before resolve', async () => {
+      const pkgFile = path.join(tmp, 'package.json');
+      await fs.writeFile(pkgFile, JSON.stringify({
+        dependencies: { foo: '1.0.0', bar: '1.0.0' },
+        devDependencies: { foo: '1.0.0' },
+      }));
+      await utils.pruneJSON(pkgFile, 'foo');
+      const pkg = JSON.parse(await fs.readFile(pkgFile, 'utf8'));
+      assert.deepEqual(pkg.dependencies, { bar: '1.0.0' });
+      assert.deepEqual(pkg.devDependencies, {});
+    });
+
+    it('should keep package.json unchanged when dependency not found', async () => {
+      const pkgFile = path.join(tmp, 'package.json');
+      await fs.writeFile(pkgFile, JSON.stringify({ dependencies: { bar: '1.0.0' } }));
+      await utils.pruneJSON(pkgFile, 'foo');
+      const pkg = JSON.parse(await fs.readFile(pkgFile, 'utf8'));
+      assert.deepEqual(pkg.dependencies, { bar: '1.0.0' });
     });
   });
 });
