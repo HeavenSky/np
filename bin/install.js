@@ -161,7 +161,7 @@ Options:
   --prune: prune unnecessary files from ./node_modules, such as markdown, typescript source files, and so on.
   --dependencies-tree: install with dependencies tree to restore the last install.
   --force-link-latest: force link latest version package to module root path.
-  --public-hoist-pattern: regexp of package names to link into <root>/node_modules, fallback to 'np-public-hoist-pattern' in .npmrc, default is none.
+  --public-hoist-pattern: regexp of package names to link into <root>/node_modules, default is none.
   --dedup: link every package's latest version into <root>/node_modules like npminstall@6, overrides --public-hoist-pattern.
   --offline: offline mode. If a package won't be found locally, the installation will fail.
 `
@@ -315,7 +315,7 @@ debug('argv: %j, env: %j', argv, env);
     flatten,
     proxy,
     prune,
-    publicHoistPattern: argv.dedup ? '.*' : argv['public-hoist-pattern'] || globalConfig.npmrc['np-public-hoist-pattern'],
+    publicHoistPattern: argv.dedup ? '.*' : argv['public-hoist-pattern'],
     workspacesMap,
     // don't enable workspace on global install
     enableWorkspace,

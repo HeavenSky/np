@@ -35,7 +35,7 @@ npm i -g github:HeavenSky/np#np
 | 项 | 上游 8.0.1 | 本 fork |
 | --- | --- | --- |
 | `--dedup` | 无 | 把每个包的最新版本链接到 `<root>/node_modules`, 即 npminstall@6 的扁平效果; 优先级高于 `--public-hoist-pattern` |
-| 根目录提升 | 固定提升名称匹配 `/(eslint\|prettier\|babel)/i` 的包 | 默认不提升; 用 `--public-hoist-pattern=<regexp>` 或 `.npmrc` 的 `np-public-hoist-pattern` 指定 |
+| 根目录提升 | 固定提升名称匹配 `/(eslint\|prettier\|babel)/i` 的包 | 默认不提升; 用 `--public-hoist-pattern=<regexp>` 指定 |
 | `--disable-fallback-store` | 可关闭 `.store/node_modules` 回退链接 | 移除, 回退链接始终建立 |
 | 缓存目录 | `~/.npminstall_tarball` 下的 `manifests/` 与按包名拆分的多级 tarball 目录 | `~/.np_tarball` 下的 `np-manifests/`, `np-tgz/<name>/`, `np-tmp/<YYYYMMDD>/`; 不再自动清理过期临时目录 |
 | 缓存目录环境变量 | `npminstall_cache` | `np_cache`; `npm_config_cache` 两边都认 |
