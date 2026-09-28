@@ -80,7 +80,7 @@ Object.assign(argv, parseArgs(originalArgv, {
     'fix-bug-versions',
     // --prune 已移除: 按固定名单跳过解压文件会误删 tsconfig.json 等运行时文件
     'save-dependencies-tree',
-    'force-link-latest',
+    // --force-link-latest 已移除: 提升到根目录时始终链接最高版本
   ],
   default: {
     optional: true,
@@ -155,7 +155,6 @@ Options:
   --fix-bug-versions: auto fix bug version of package.
   --high-speed-store: specify high speed store script to cache tgz files, and so on. Should export '* getStream(url)' function.
   --dependencies-tree: install with dependencies tree to restore the last install.
-  --force-link-latest: force link latest version package to module root path.
 `
   );
   process.exit(0);
@@ -290,7 +289,6 @@ debug('argv: %j, env: %j', argv, env);
   config.ignoreScripts = argv['ignore-scripts'] || getIgnoreScripts();
   config.ignoreOptionalDependencies = !argv.optional;
   config.detail = argv.detail;
-  config.forceLinkLatest = !!argv['force-link-latest'];
   config.trace = argv.trace;
   config.engineStrict = argv['engine-strict'];
   config.registryOnly = argv['registry-only'];
