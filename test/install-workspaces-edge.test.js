@@ -59,6 +59,53 @@ describe('test/install-workspaces-edge.test.js', () => {
     assert.equal(require(path.join(tmp, 'packages/x/node_modules/ms/package.json')).version, '2.1.3');
   });
 
+  describe('sortWorkspacesByDependencies', () => {
+    const { sortWorkspacesByDependencies } = require('../lib/utils');
+    const info = (name, deps = []) => ({
+      package: { name, dependencies: Object.fromEntries(deps.map(dep => [ dep, '*' ])) },
+    });
+    const permutations = arr => (arr.length <= 1 ? [ arr ] :
+      arr.flatMap((item, i) => permutations([ ...arr.slice(0, i), ...arr.slice(i + 1) ]).map(rest => [ item, ...rest ])));
+
+    it('should always put dependencies before dependents', () => {
+      const graphs = [
+        { a: [ 'b' ], b: [ 'c' ], c: [] },
+        { a: [], b: [], c: [], d: [ 'a' ] },
+        { a: [ 'b', 'c' ], b: [ 'd' ], c: [ 'd' ], d: [] },
+      ];
+      for (const graph of graphs) {
+        for (const order of permutations(Object.keys(graph))) {
+          const sorted = sortWorkspacesByDependencies(order.map(name => info(name, graph[name])))
+            .map(item => item.package.name);
+          for (const [ name, deps ] of Object.entries(graph)) {
+            for (const dep of deps) {
+              assert(sorted.indexOf(dep) < sorted.indexOf(name), `${order} => ${sorted}: ${dep} should before ${name}`);
+            }
+          }
+        }
+      }
+    });
+
+    it('should keep original order without dependencies and on cycles', () => {
+      const names = infos => sortWorkspacesByDependencies(infos).map(item => item.package.name);
+      assert.deepEqual(names([ info('b'), info('a'), info('c') ]), [ 'b', 'a', 'c' ]);
+      assert.deepEqual(names([ info('x'), info('a', [ 'b' ]), info('b', [ 'a' ]) ]), [ 'x', 'a', 'b' ]);
+    });
+  });
+
+  it('should run dependency workspace scripts first', async () => {
+    const script = name => `node -e "require('fs').appendFileSync('../../order.txt', '${name}\\n')"`;
+    await workspace({
+      'packages/a': { name: 'pkg-a', scripts: { postinstall: script('pkg-a') } },
+      'packages/b': { name: 'pkg-b', scripts: { postinstall: script('pkg-b') } },
+      'packages/c': { name: 'pkg-c', scripts: { postinstall: script('pkg-c') } },
+      'packages/d': { name: 'pkg-d', dependencies: { 'pkg-a': '1.0.0' }, scripts: { postinstall: script('pkg-d') } },
+    });
+    await run(helper.npminstall).expect('code', 0).end();
+    const order = (await fs.readFile(path.join(tmp, 'order.txt'), 'utf8')).trim().split('\n');
+    assert(order.indexOf('pkg-a') < order.indexOf('pkg-d'), order.join(','));
+  });
+
   it('should fail when the lockfile can not be loaded', async () => {
     await writeJSON(path.join(tmp, 'package.json'), { name: 'r', version: '1.0.0', dependencies: { ms: '2.1.3' } });
     await run(helper.npminstall, [ `--lockfile-path=${path.join(tmp, 'missing-lock.json')}` ])
