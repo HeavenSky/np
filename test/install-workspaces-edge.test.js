@@ -16,6 +16,15 @@ describe('test/install-workspaces-edge.test.js', () => {
     await fs.writeFile(file, JSON.stringify(data));
   }
 
+  async function exists(file) {
+    try {
+      await fs.lstat(file);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   function run(bin, args = []) {
     return coffee.fork(bin, args, { cwd: tmp }).debug();
   }
@@ -156,6 +165,41 @@ describe('test/install-workspaces-edge.test.js', () => {
         .expect('code', 0)
         .expect('stderr', /requires a peer of p@\^1\.0\.0 but none was installed/)
         .end();
+    });
+  });
+
+  describe('np-uninstall hoisted links', () => {
+    const rootLink = name => path.join(tmp, 'node_modules', name);
+
+    it('should remove hoisted link when no workspace uses the package', async () => {
+      await workspace({
+        'packages/x': { name: 'pkg-x', dependencies: { pedding: '1.1.0' } },
+        'packages/y': { name: 'pkg-y' },
+      });
+      await run(helper.npminstall, [ '--dedup' ]).expect('code', 0).end();
+      assert(await exists(rootLink('pedding')));
+      await run(helper.npmuninstall, [ 'pedding', '-w', 'pkg-x' ]).expect('code', 0).end();
+      assert(!(await exists(rootLink('pedding'))));
+    });
+
+    it('should keep hoisted link when another workspace still declares it', async () => {
+      await workspace({
+        'packages/x': { name: 'pkg-x', dependencies: { pedding: '1.1.0' } },
+        'packages/y': { name: 'pkg-y', dependencies: { pedding: '1.1.0' } },
+      });
+      await run(helper.npminstall, [ '--dedup' ]).expect('code', 0).end();
+      await run(helper.npmuninstall, [ 'pedding', '-w', 'pkg-x' ]).expect('code', 0).end();
+      assert(await exists(rootLink('pedding')));
+    });
+
+    it('should keep hoisted link when another package still depends on it', async () => {
+      await workspace({
+        'packages/x': { name: 'pkg-x', dependencies: { ms: '2.1.3' } },
+        'packages/y': { name: 'pkg-y', dependencies: { debug: '4.4.3' } },
+      });
+      await run(helper.npminstall, [ '--dedup' ]).expect('code', 0).end();
+      await run(helper.npmuninstall, [ 'ms', '-w', 'pkg-x' ]).expect('code', 0).end();
+      assert(await exists(rootLink('ms')));
     });
   });
 

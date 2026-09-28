@@ -102,6 +102,8 @@ if (!pkgs.length) help();
     debug('uninstall in %s with pkg: %j, config: %j', uninstallRoot, pkgs, unsinstallRootConfig);
     await uninstall(unsinstallRootConfig);
   }
+  // 全部目标卸载完再统一判断, 避免 --workspaces 批量卸载时前一个 workspace 的判断受尚未卸载的后者影响
+  await uninstall.cleanupHoistedLinks(root, pkgs.map(pkg => pkg.name));
   console.log('');
 })().catch(err => {
   utils.exitWithError('np-uninstall', err);
