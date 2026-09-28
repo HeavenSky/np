@@ -269,17 +269,17 @@ debug('argv: %j, env: %j', argv, env);
 
 (async () => {
   const { workspaceRoots, workspacesMap } = await utils.readWorkspaces(root);
-  if (workspacesMap.size > 0) {
+  // don't enable workspace on global install
+  const enableWorkspace = !argv.global && workspacesMap.size > 0;
+  if (enableWorkspace) {
+    // 全局安装不能进入这里: forceSymlink 会先删除 root/node_modules 下同名的已有目录
     for (const info of workspacesMap.values()) {
       // link to root/node_modules
       const linkDir = path.join(root, 'node_modules', info.package.name);
       await utils.forceSymlink(info.root, linkDir);
       debug('add workspace %s on %s', info.package.name, info.root);
     }
-  }
-  // don't enable workspace on global install
-  const enableWorkspace = !argv.global && workspacesMap.size > 0;
-  if (!enableWorkspace) {
+  } else {
     installOnAllWorkspaces = false;
     installWorkspaceNames = [];
   }
