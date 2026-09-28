@@ -1,5 +1,5 @@
 {
-  "name": "npminstall",
+  "name": "easy-np",
   "version": "8.0.1",
   "description": "npminstall fork with --dedup and node 16 support",
   "main": "lib/index.js",
