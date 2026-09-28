@@ -17,6 +17,7 @@ coverage/
 .preinstall*
 .postisntall*
 .tmp
+.tmp_*
 test/fixtures/tmp
 .idea
 npm-debug.log.*
