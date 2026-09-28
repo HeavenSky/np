@@ -10,6 +10,20 @@ on:
     branches: [ master, 6.x, 5.x, 4.x, 3.x ]
 
 jobs:
+  # oxlint / oxfmt 需要 node ^20.19 || >=22.12, 与运行时支持的 node 版本分开跑
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Use Node.js 22.x
+        uses: actions/setup-node@v2
+        with:
+          node-version: 22.x
+      - name: Install dependencies
+        run: npm i
+      - name: Lint
+        run: npm run lint
+
   build:
     strategy:
       fail-fast: false
@@ -48,8 +62,8 @@ jobs:
           vs-version: ${{ matrix.vs-version }}
       - name: Install dependencies
         run: npm i
-      - name: Run CI
-        run: npm run ci
+      - name: Run tests
+        run: npm run test-cov
         env:
           NODE_OPTIONS: --max_old_space_size=6144
 

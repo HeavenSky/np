@@ -1,0 +1,9 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "env": {
+    "node": true,
+    "mocha": true,
+    "es2022": true
+  },
+  "ignorePatterns": ["test/fixtures/**", "coverage/**", "benchmark/**"]
+}
