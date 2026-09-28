@@ -36,6 +36,14 @@ Usage:
   npmlink <folder>
 
 Can specify one or more: npmlink /some/folder1 /some/folder2
+Without <folder>, install current package and link it to the global directory.
+
+Options:
+
+  --root: project root directory, default is current working directory
+  --prefix: global install prefix, default is '$npm config get prefix'
+  --version: show version
+  --help: show help
 `
   );
   process.exit(0);

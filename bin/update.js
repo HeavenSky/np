@@ -11,6 +11,13 @@ function help(root) {
 Usage:
 
   npmupdate [--root=${root}]
+
+Remove node_modules, then reinstall.
+
+Options:
+
+  --root: project root directory, default is current working directory
+  -h, --help: show help
 `
   );
   process.exit(0);

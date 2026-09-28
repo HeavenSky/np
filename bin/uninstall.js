@@ -113,6 +113,15 @@ Usage:
   npmuninstall <pkg>
   npmuninstall <pkg>@<version>
   npmuninstall <pkg>@<version> [<pkg>@<version>]
+
+Options:
+
+  --root: project root directory, default is current working directory
+  -g, --global: uninstall from the global directory
+  --prefix: global install prefix used with -g, default is '$npm config get prefix'
+  -S, --save, -D, --save-dev, -O, --save-optional: also remove the packages from dependencies, devDependencies or optionalDependencies in package.json
+  -v, --version: show version
+  -h, --help: show help
 `
   );
   process.exit(0);
