@@ -10,7 +10,7 @@ function help(root) {
   console.log(`
 Usage:
 
-  npmupdate [--root=${root}]
+  np-update [--root=${root}]
 `
   );
   process.exit(0);
@@ -48,7 +48,7 @@ Usage:
   }
   for (const rootDir of cleanRoots) {
     const nodeModules = path.join(rootDir, 'node_modules');
-    console.log('[npmupdate] removing %s', nodeModules);
+    console.log('[np-update] removing %s', nodeModules);
     await rimraf(nodeModules);
   }
   if (argv['clean-only']) {
@@ -56,10 +56,10 @@ Usage:
     return;
   }
 
-  console.log('[npmupdate] reinstall on %s', root);
+  console.log('[np-update] reinstall on %s', root);
   // make sure install ignore all package names
   process.env.NPMINSTALL_BY_UPDATE = 'true';
   require('./install');
 })().catch(err => {
-  exitWithError('npmupdate', err);
+  exitWithError('np-update', err);
 });

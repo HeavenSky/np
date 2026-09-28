@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const debug = require('node:util').debuglog('npminstall:bin:link');
+const debug = require('node:util').debuglog('np:bin:link');
 const assert = require('node:assert');
 const path = require('node:path');
 const npa = require('npm-package-arg');
@@ -30,9 +30,9 @@ if (argv.help) {
   console.log(`
 Usage:
 
-  npmlink <folder>
+  np-link <folder>
 
-Can specify one or more: npmlink /some/folder1 /some/folder2
+Can specify one or more: np-link /some/folder1 /some/folder2
 `
   );
   process.exit(0);
@@ -58,7 +58,7 @@ const folders = argv._.map(name => utils.formatPath(name));
   }
 
   if (folders.length === 0) {
-    // 1. npminstall
+    // 1. np
     // 2. link CWD to targetDir/node_modules/{name}
     // 3. link bins to binDir
     const pkgFile = path.join(root, 'package.json');
@@ -66,7 +66,7 @@ const folders = argv._.map(name => utils.formatPath(name));
     assert(pkg.name, `package.name not eixsts on ${pkgFile}`);
     const linkDir = path.join(globalMeta.targetDir, 'node_modules', pkg.name);
 
-    console.info(chalk.gray(`\`$ npminstall ${installArgs.join(' ')}\` on ${root}`));
+    console.info(chalk.gray(`\`$ np ${installArgs.join(' ')}\` on ${root}`));
     const installBin = path.join(__dirname, 'install.js');
     await utils.fork(installBin, installArgs, {
       cwd: root,
@@ -94,7 +94,7 @@ const folders = argv._.map(name => utils.formatPath(name));
     // if folder is package(not relative path), try
     //   1) if ${globalModuleDir}/package exists and match required spec
     //   2) otherwise install package from npm to ${globalModuleDir}
-    // else cd folder && npminstall
+    // else cd folder && np
     //
     // 2. link folder to CWD/node_modules/{name}
     // 3. link bins
@@ -122,7 +122,7 @@ const folders = argv._.map(name => utils.formatPath(name));
       if (pkgNotExist || specIsTag || specNotSemver || specNotSatisfies) {
         debug('%s not satisfies with requirement, try to install %s from npm', folder, pkgInfo.raw);
         // try install from npm registry
-        console.info(chalk.gray(`\`$ npminstall --global ${pkgInfo.raw}`));
+        console.info(chalk.gray(`\`$ np --global ${pkgInfo.raw}`));
         await utils.fork(installBin, installArgs.concat([ '-g', pkgInfo.raw ]), {
           env,
         });
@@ -145,7 +145,7 @@ const folders = argv._.map(name => utils.formatPath(name));
       assert(pkg.name, `package.name not eixsts on ${pkgFile}`);
 
       // install dependencies
-      console.info(chalk.gray(`\`$ npminstall ${installArgs.join(' ')}\` on ${folder}`));
+      console.info(chalk.gray(`\`$ np ${installArgs.join(' ')}\` on ${folder}`));
       await utils.fork(installBin, installArgs, {
         cwd: folder,
         env,
@@ -160,5 +160,5 @@ const folders = argv._.map(name => utils.formatPath(name));
     await bin(root, pkg, linkDir, { console });
   }
 })().catch(err => {
-  utils.exitWithError('npmlink', err);
+  utils.exitWithError('np-link', err);
 });

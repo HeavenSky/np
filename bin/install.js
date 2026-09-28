@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const debug = require('node:util').debuglog('npminstall:bin:install');
+const debug = require('node:util').debuglog('np:bin:install');
 const path = require('node:path');
 const util = require('node:util');
 const { execSync } = require('node:child_process');
@@ -37,14 +37,14 @@ Object.assign(argv, parseArgs(originalArgv, {
     'tarball-url-mapping',
     'proxy',
     'dependencies-tree',
-    // npminstall foo --workspace=aa
-    // npminstall foo -w aa
+    // np foo --workspace=aa
+    // np foo -w aa
     'workspace',
     /**
      * set package-lock.json path
      *
      * 1. only support package lock v2 and v3.
-     * 2. npminstall doesn't inspect <cwd>/package-lock.json by default.
+     * 2. np doesn't inspect <cwd>/package-lock.json by default.
      * 3. because arborist doesn't support client/build/isomorphic dependencies,
      *    these kinds of dependencies will all be ignored.
      * 4. this option doesn't do extra check for the equivalence of package-lock.json and package.json
@@ -109,7 +109,7 @@ Object.assign(argv, parseArgs(originalArgv, {
 );
 
 if (argv.version) {
-  console.log(`npminstall v${require('../package.json').version}`);
+  console.log(`np v${require('../package.json').version}`);
   process.exit(0);
 }
 
@@ -117,23 +117,23 @@ if (argv.help) {
   console.log(`
 Usage:
 
-  npminstall
-  npminstall <pkg>
-  npminstall <pkg> --workspace=<workspace>
-  npminstall <pkg> -w <workspace>
-  npminstall <pkg> --workspaces
-  npminstall <pkg>@<tag>
-  npminstall <pkg>@<version>
-  npminstall <pkg>@<version range>
-  npminstall <folder>
-  npminstall <tarball file>
-  npminstall <tarball url>
-  npminstall <git:// url>
-  npminstall <github username>/<github project>
-  npminstall --proxy=http://localhost:8080
-  npminstall --lockfile-path=</path/to/package-lock.json>
+  np
+  np <pkg>
+  np <pkg> --workspace=<workspace>
+  np <pkg> -w <workspace>
+  np <pkg> --workspaces
+  np <pkg>@<tag>
+  np <pkg>@<version>
+  np <pkg>@<version range>
+  np <folder>
+  np <tarball file>
+  np <tarball url>
+  np <git:// url>
+  np <github username>/<github project>
+  np --proxy=http://localhost:8080
+  np --lockfile-path=</path/to/package-lock.json>
 
-Can specify one or more: npminstall ./foo.tgz bar@stable /some/folder
+Can specify one or more: np ./foo.tgz bar@stable /some/folder
 If no argument is supplied, installs dependencies from ./package.json.
 
 Options:
@@ -146,8 +146,8 @@ Options:
   -r, --registry: specify custom registry
   -c, --china: specify in china, will automatically using chinese npm registry and other binary's mirrors
   -d, --detail: show detail log of installation
-  -w, --workspace: install on one workspace only, e.g.: npminstall koa -w a
-  --workspaces: install new package on all workspaces, e.g: npminstall foo --workspaces
+  -w, --workspace: install on one workspace only, e.g.: np koa -w a
+  --workspaces: install new package on all workspaces, e.g: np foo --workspaces
   --trace: show memory and cpu usages traces of installation
   --ignore-scripts: ignore all preinstall / install and postinstall scripts during the installation
   --foreground-scripts: scripts run in the background by default, to see the output, run with: --foreground-scripts
@@ -195,7 +195,7 @@ for (const name of argv._) {
 
 let root = argv.root || process.cwd();
 if (Array.isArray(root)) {
-  // use last one, e.g.: $ npminstall --root=abc --root=def
+  // use last one, e.g.: $ np --root=abc --root=def
   root = root[root.length - 1];
 }
 let installOnAllWorkspaces = argv.workspaces;
@@ -223,7 +223,7 @@ const inChina = argv.china || !!process.env.npm_china;
 // if exists, override default china mirror url
 const customChinaMirrorUrl = argv['custom-china-mirror-url'];
 
-// example: npminstall --registry xx --registry xxxx
+// example: np --registry xx --registry xxxx
 let registry = (Array.isArray(argv.registry) ? argv.registry[0] : argv.registry) || process.env.npm_registry;
 if (inChina) {
   registry = registry || globalConfig.chineseRegistry;
@@ -327,7 +327,7 @@ debug('argv: %j, env: %j', argv, env);
     offline,
   };
   config.strictSSL = getStrictSSL();
-  // when ignore-scripts is set to `false` by user, npminstall will still
+  // when ignore-scripts is set to `false` by user, np will still
   // get config from npm settings instead of following user's specification,
   // should migrate to ?? or typeof.
   config.ignoreScripts = argv['ignore-scripts'] || getIgnoreScripts();
@@ -371,7 +371,7 @@ debug('argv: %j, env: %j', argv, env);
         ignoreOptionalDependencies: true,
       });
     } catch (error) {
-      console.warn(chalk.yellow('npminstall WARN load lockfile from %s error :%s'), lockfilePath, error.message);
+      console.warn(chalk.yellow('np WARN load lockfile from %s error :%s'), lockfilePath, error.message);
     }
   }
 
@@ -381,7 +381,7 @@ debug('argv: %j, env: %j', argv, env);
       const content = await fs.readFile(dependenciesTree);
       config.dependenciesTree = JSON.parse(content);
     } catch (err) {
-      console.warn(chalk.yellow('npminstall WARN load dependencies tree %s error: %s'), dependenciesTree, err.message);
+      console.warn(chalk.yellow('np WARN load dependencies tree %s error: %s'), dependenciesTree, err.message);
     }
   }
   if (argv['save-dependencies-tree']) {
@@ -390,12 +390,12 @@ debug('argv: %j, env: %j', argv, env);
 
   process.on('exit', code => {
     if (code !== 0) {
-      writeFileSync(path.join(root, 'npminstall-debug.log'), util.inspect(config, { depth: 2 }));
+      writeFileSync(path.join(root, 'np-debug.log'), util.inspect(config, { depth: 2 }));
     }
   });
 
   if (config.offline) {
-    console.warn(chalk.yellow('npminstall WARN running on offline mode'));
+    console.warn(chalk.yellow('np WARN running on offline mode'));
   }
 
   // -g install to npm's global prefix
@@ -421,14 +421,14 @@ debug('argv: %j, env: %j', argv, env);
         const dirs = await fs.readdir(nodeModulesDir);
         // ignore [ '.bin', 'node' ], it will install first by https://github.com/cnpm/nodeinstall
         if (!(dirs.length === 2 && dirs.indexOf('.bin') >= 0 && dirs.indexOf('node') >= 0)) {
-          console.error(chalk.yellow(`npminstall WARN node_modules exists: ${nodeModulesDir}, contains ${dirs.length} dirs`));
+          console.error(chalk.yellow(`np WARN node_modules exists: ${nodeModulesDir}, contains ${dirs.length} dirs`));
         }
       }
     }
     const pkgFile = path.join(root, 'package.json');
     const exists = await utils.exists(pkgFile);
     if (!exists) {
-      console.warn(chalk.yellow(`npminstall WARN package.json not exists: ${pkgFile}`));
+      console.warn(chalk.yellow(`np WARN package.json not exists: ${pkgFile}`));
     } else {
       // try to read npminstall config from package.json
       const pkg = await utils.readJSON(pkgFile);
@@ -549,7 +549,7 @@ debug('argv: %j, env: %j', argv, env);
     }
   }
 })().catch(err => {
-  utils.exitWithError('npminstall', err);
+  utils.exitWithError('np', err);
 });
 
 let _versionSavePrefix = null;

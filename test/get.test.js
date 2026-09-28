@@ -20,7 +20,7 @@ describe('test/get.test.js', () => {
   it('should retry on JSON parse error', async () => {
     const logger = {
       warn(msg) {
-        assert(msg.includes('[npminstall:get] retry GET') || msg.includes('[npminstall:get:error] GET'));
+        assert(msg.includes('[np:get] retry GET') || msg.includes('[np:get:error] GET'));
       },
     };
     try {
@@ -35,7 +35,7 @@ describe('test/get.test.js', () => {
   it('should set auth info into header', async () => {
     const logger = {
       warn(msg) {
-        assert(msg.includes('[npminstall:get] retry GET') || msg.includes('[npminstall:get:error] GET'));
+        assert(msg.includes('[np:get] retry GET') || msg.includes('[np:get:error] GET'));
       },
     };
     const options = { dataType: 'json' };

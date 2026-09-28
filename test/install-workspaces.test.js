@@ -272,7 +272,7 @@ describe('test/install-workpsaces.test.js', () => {
     await coffee.fork(helper.npmupdate, [], { cwd: root })
       .debug()
       .expect('code', 0)
-      .expect('stdout', /\[npmupdate] removing/)
+      .expect('stdout', /\[np-update] removing/)
       .end();
 
     let pkg = await helper.readJSON(path.join(root, 'node_modules/aa/package.json'));
@@ -286,7 +286,7 @@ describe('test/install-workpsaces.test.js', () => {
     await coffee.fork(helper.npmupdate, [ '-w', 'aa' ], { cwd: root })
       .debug()
       .expect('code', 0)
-      .expect('stdout', /\[npmupdate] removing/)
+      .expect('stdout', /\[np-update] removing/)
       .end();
 
     let pkg = await helper.readJSON(path.join(root, 'node_modules/aa/package.json'));
@@ -301,7 +301,7 @@ describe('test/install-workpsaces.test.js', () => {
     await coffee.fork(helper.npmupdate, [ '-w', 'packages/a' ], { cwd: root })
       .debug()
       .expect('code', 0)
-      .expect('stdout', /\[npmupdate] removing/)
+      .expect('stdout', /\[np-update] removing/)
       .end();
     pkg = await helper.readJSON(path.join(root, 'node_modules/aa/node_modules/abbrev/package.json'));
     assert.equal(pkg.name, 'abbrev');

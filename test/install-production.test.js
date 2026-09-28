@@ -17,7 +17,7 @@ describe('test/install-production.test.js', () => {
       return coffee.fork(helper.npminstall, [ '--production' ], { cwd })
         .debug()
         .expect('code', 0)
-        .expect('stderr', /npminstall WARN node_modules exists/)
+        .expect('stderr', /np WARN node_modules exists/)
         .expect('stderr', /contains 1 dirs/)
         .end();
     });
@@ -32,7 +32,7 @@ describe('test/install-production.test.js', () => {
       return coffee.fork(helper.npminstall, [ '--production' ], { cwd })
         .debug()
         .expect('code', 0)
-        .notExpect('stderr', /npminstall WARN node_modules exists/)
+        .notExpect('stderr', /np WARN node_modules exists/)
         .end();
     });
   });

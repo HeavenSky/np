@@ -34,7 +34,7 @@ describe('test/production.test.js', () => {
       .debug()
       .expect('code', 0)
       .expect('stdout', /koa@\* is skipped because it already exists at/)
-      .expect('stderr', /npminstall WARN node_modules exists: .+?node_modules/)
+      .expect('stderr', /np WARN node_modules exists: .+?node_modules/)
       .end();
   });
 });

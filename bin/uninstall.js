@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const debug = require('node:util').debuglog('npminstall:bin:uninstall');
+const debug = require('node:util').debuglog('np:bin:uninstall');
 const path = require('node:path');
 const npa = require('npm-package-arg');
 const parseArgs = require('minimist');
@@ -105,16 +105,16 @@ if (!pkgs.length) help();
   }
   console.log('');
 })().catch(err => {
-  utils.exitWithError('npmuninstall', err);
+  utils.exitWithError('np-uninstall', err);
 });
 
 function help() {
   console.log(`
 Usage:
 
-  npmuninstall <pkg>
-  npmuninstall <pkg>@<version>
-  npmuninstall <pkg>@<version> [<pkg>@<version>]
+  np-uninstall <pkg>
+  np-uninstall <pkg>@<version>
+  np-uninstall <pkg>@<version> [<pkg>@<version>]
 `
   );
   process.exit(0);
