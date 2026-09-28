@@ -1,6 +1,6 @@
 {
-  "name": "npminstall",
-  "version": "6.8.0",
+  "name": "easy-npd",
+  "version": "0.0.0",
   "description": "Make npm install fast and handy.",
   "main": "lib/index.js",
   "files": [

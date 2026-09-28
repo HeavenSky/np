@@ -1,12 +1,12 @@
 # Changelog
 
-## np 补丁 (2026-09-28)
+## 0.0.0 (2026-09-28)
 
-基于 npminstall 6.8.0, `package.json` 版本号未变. 与上游行为差异的对照表见 [README.md](./README.md#与上游-680-的差异).
+easy-npd 基于 npminstall 6.8.0, 首个版本. 与上游行为差异的对照表见 [README.md](./README.md#与上游-680-的差异).
 
 ### 命名
 
-- 命令改为 `np6`, `np6-link`, `np6-uninstall`, `np6-update`; 包名, 日志前缀, 缓存根目录 `~/.npminstall_tarball`, 缓存环境变量 `npminstall_cache` 与配置键 `config.npminstall` 保持不变.
+- 包名 `easy-npd`; 命令改为 `np6`, `np6-link`, `np6-uninstall`, `np6-update`; 日志前缀, 缓存根目录 `~/.npminstall_tarball`, 缓存环境变量 `npminstall_cache` 与配置键 `config.npminstall` 保持不变.
 
 ### 新功能
 
