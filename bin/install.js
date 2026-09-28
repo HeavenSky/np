@@ -78,7 +78,7 @@ Object.assign(argv, parseArgs(originalArgv, {
     'registry-only',
     'cache-strict',
     'fix-bug-versions',
-    'prune',
+    // --prune 已移除: 按固定名单跳过解压文件会误删 tsconfig.json 等运行时文件
     'save-dependencies-tree',
     'force-link-latest',
   ],
@@ -155,7 +155,6 @@ Options:
   --registry-only: make sure all packages install from registry. Any package is installed from remote(e.g.: git, remote url) cause install fail.
   --cache-strict: use disk cache even on production env.
   --fix-bug-versions: auto fix bug version of package.
-  --prune: prune unnecessary files from ./node_modules, such as markdown, typescript source files, and so on.
   --high-speed-store: specify high speed store script to cache tgz files, and so on. Should export '* getStream(url)' function.
   --dependencies-tree: install with dependencies tree to restore the last install.
   --force-link-latest: force link latest version package to module root path.
@@ -211,7 +210,6 @@ let forbiddenLicenses = argv['forbidden-licenses'];
 forbiddenLicenses = forbiddenLicenses ? forbiddenLicenses.split(',') : null;
 
 const flatten = argv.flatten;
-const prune = argv.prune;
 
 // if in china, will automatic using chines registry and mirros.
 const inChina = argv.china || !!process.env.npm_china;
@@ -292,7 +290,6 @@ debug('argv: %j, env: %j', argv, env);
     forbiddenLicenses,
     flatten,
     proxy,
-    prune,
   };
   config.strictSSL = getStrictSSL();
   config.ignoreScripts = argv['ignore-scripts'] || getIgnoreScripts();
@@ -381,45 +378,6 @@ debug('argv: %j, env: %j', argv, env);
       const exists = await utils.exists(pkgFile);
       if (!exists) {
         console.warn(chalk.yellow(`npminstall WARN package.json not exists: ${pkgFile}`));
-      } else {
-        // try to read npminstall config from package.json
-        const pkg = await utils.readJSON(pkgFile);
-        pkg.config = pkg.config || {};
-        pkg.config.npminstall = pkg.config.npminstall || {};
-        // {
-        //   "config": {
-        //     "npminstall": {
-        //       "prune": true
-        //     }
-        //   }
-        // }
-        if (pkg.config.npminstall.prune === true) {
-          config.prune = true;
-        }
-        // env config
-        // {
-        //   "config": {
-        //     "npminstall": {
-        //       "env:production": {
-        //         "prune": true
-        //       }
-        //     }
-        //   }
-        // }
-        // production
-        if (config.production && pkg.config.npminstall['env:production']) {
-          const envConfig = pkg.config.npminstall['env:production'];
-          if (envConfig.prune === true) {
-            config.prune = true;
-          }
-        }
-        // development
-        if (!config.production && pkg.config.npminstall['env:development']) {
-          const envConfig = pkg.config.npminstall['env:development'];
-          if (envConfig.prune === true) {
-            config.prune = true;
-          }
-        }
       }
     }
     await installLocal(config, context);
