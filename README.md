@@ -1,114 +1,56 @@
-# npminstall
+# npminstall 6.8.0 (np 补丁版)
 
-[![NPM version][npm-image]][npm-url]
-[![Node CI](https://github.com/cnpm/npminstall/actions/workflows/ci.yml/badge.svg)](https://github.com/cnpm/npminstall/actions/workflows/ci.yml)
-[![Test coverage][codecov-image]][codecov-url]
-[![Known Vulnerabilities][snyk-image]][snyk-url]
-[![npm download][download-image]][download-url]
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fcnpm%2Fnpminstall.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fcnpm%2Fnpminstall?ref=badge_shield)
+[cnpm/npminstall](https://github.com/cnpm/npminstall) 6.8.0 的补丁版, 包名仍为 `npminstall`, 命令改名为 `np6` 系列. 使用 `np6` 命令, 或需要判断它与上游 6.8.0 的行为差异时读本页; 版本变更见 [CHANGELOG.md](./CHANGELOG.md).
 
-[npm-image]: https://img.shields.io/npm/v/npminstall.svg?style=flat-square
-[npm-url]: https://npmjs.org/package/npminstall
-[codecov-image]: https://codecov.io/gh/cnpm/npminstall/branch/master/graph/badge.svg
-[codecov-url]: https://codecov.io/gh/cnpm/npminstall
-[snyk-image]: https://snyk.io/test/npm/npminstall/badge.svg?style=flat-square
-[snyk-url]: https://snyk.io/test/npm/npminstall
-[download-image]: https://img.shields.io/npm/dm/npminstall.svg?style=flat-square
-[download-url]: https://npmjs.org/package/npminstall
-
-Make `npm install` fast and handy.
-
-## Node.js and Python required
+## 运行要求
 
 - Node.js >= 16.14.0
-- Python >= 3.x
+- 编译原生模块时需要 Python 3, 由 node-gyp 10 调用
 
-## Use as Cli
-
-### Install
+## 安装
 
 ```bash
-$ npm install npminstall -g
+npm i -g github:HeavenSky/np#np-6.8.0
 ```
 
-### Usage
+包名与 npm 上的 `npminstall` 相同, 全局安装会替换已全局安装的 `npminstall`, 此后 `npminstall` 系列命令不再可用.
 
-#### In cnpm
+## 命令
 
-It is integrated in [cnpm](https://github.com/cnpm/cnpm).
+| 命令            | 上游对应       |
+| --------------- | -------------- |
+| `np6`           | `npminstall`   |
+| `np6-link`      | `npmlink`      |
+| `np6-uninstall` | `npmuninstall` |
+| `np6-update`    | `npmupdate`    |
 
-```bash
-$ npm install cnpm -g
-# will use npminstall
-$ cnpm install
-```
+全部参数见 `np6 --help`, 其余三个命令同样支持 `--help`.
 
-#### npminstall
+## 与上游 6.8.0 的差异
 
-```bash
-Usage:
-
-  npminstall
-  npminstall <pkg>
-  npminstall <pkg>@<tag>
-  npminstall <pkg>@<version>
-  npminstall <pkg>@<version range>
-  npminstall <alias>@npm:<name>
-  npminstall <folder>
-  npminstall <tarball file>
-  npminstall <tarball url>
-  npminstall <git:// url>
-  npminstall <github username>/<github project>
-
-Can specify one or more: npm install ./foo.tgz bar@stable /some/folder
-If no argument is supplied, installs dependencies from ./package.json.
-
-Options:
-
-  --production: won't install devDependencies
-  --save, --save-dev, --save-optional: save installed dependencies into package.json
-  -g, --global: install devDependencies to global directory which specified in `$ npm config get prefix`
-  -r, --registry: specify custom registry
-  -c, --china: specify in china, will automatically using chinese npm registry and other binary's mirrors
-  -d, --detail: show detail log of installation
-  --trace: show memory and cpu usages traces of installation
-  --ignore-scripts: ignore all preinstall / install and postinstall scripts during the installation
-  --no-optional: ignore optionalDependencies during the installation
-  --forbidden-licenses: forbit install packages which used these licenses
-  --engine-strict: refuse to install (or even consider installing) any package that claims to not be compatible with the current Node.js version.
-  --flatten: flatten dependencies by matching ancestors dependencies
-  --registry-only: make sure all packages install from registry. Any package is installed from remote(e.g.: git, remote url) cause install fail.
-  --cache-strict: use disk cache even on production env
-```
-
-
-[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fcnpm%2Fnpminstall.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fcnpm%2Fnpminstall?ref=badge_large)
-
-#### npmuninstall
-
-```bash
-Usage:
-
-  npmuninstall <pkg>
-  npmuninstall <pkg>@<version>
-  npmuninstall <pkg>@<version> [<pkg>@<version>]
-  npminstall <alias>@npm:<name>
-```
-
-#### npmlink
-
-```bash
-Usage:
-
-  npmlink <folder>
-```
+| 项 | 上游 6.8.0 | 本补丁版 |
+| --- | --- | --- |
+| 命令名 | `npminstall`, `npmlink`, `npmuninstall`, `npmupdate` | `np6`, `np6-link`, `np6-uninstall`, `np6-update` |
+| 缓存目录布局 | `~/.npminstall_tarball` 下的 `manifests/<h>/<h>/<h>/`, 按包名拆分的多级 tarball 目录, `.tmp/YYYY/MM/DD`; 自动清理过期临时目录 | 同一根目录下的 `np-manifests/<name>/<hash>.json`, `np-tgz/<name>/`, `np-tmp/<YYYYMMDD>/`; 不再自动清理过期临时目录, 旧布局的缓存不再读取 |
+| 根目录提升链接 | 已存在即跳过, 依赖变化后重装不会更新; `--force-link-latest` 才用更高版本覆盖 | 始终链接最高版本: 更高版本覆盖已有链接; 完整安装(不带包名)时上次的提升链接替换为本次依赖树中的最高版本, 可能降级; 根 `package.json` 声明的包不覆盖 |
+| `--force-link-latest` | 见上 | 移除 |
+| `--disable-dedupe`, `config.npminstall.disableDedupe` | 关闭根目录扁平链接 | 移除 |
+| `--prune`, `config.npminstall.prune`, `env:production` / `env:development` | 解压时按固定名单跳过文件 | 移除; 名单含 `tsconfig.json`, `LICENSE`, `images/` 等, 会静默破坏 `@tsconfig/*` 这类包 |
+| `--proxy`, `npm_proxy`, `npm_config_proxy` | 声明支持, 但 urllib 3 不认 `proxy` 参数, 实际直连 | 移除 |
+| npm `strict-ssl` | 读取后作为 `rejectUnauthorized` 传入, urllib 3 不认, 不生效 | 不再读取, HTTPS 证书始终校验 |
+| `--tarball-url-mapping` | 声称也改写重定向地址, 但 urllib 3 不支持 `formatRedirectUrl` | 只改写首个请求地址 |
+| `--lockfile-path` 加载失败 | 告警后联网解析, 退出码 0 | 报错退出 |
+| 在 `npm run` / `npx` 下安装需要 prepare 的 git 依赖 | 继承 `npm_config_allow_scripts`, 被 npm 12 以 `EALLOWSCRIPTS` 拒绝 | 正常安装; 失败时错误信息附带子进程 stderr |
+| `np6-uninstall` | 可能在 `package.json` 写回前返回 | 写回完成后返回 |
+| 依赖 | node-gyp 9, tar 6 | node-gyp 10, tar 7 |
+| 开发工具 | eslint | oxlint, oxfmt |
 
 ## Use as Lib
 
 ### Install
 
 ```bash
-$ npm install npminstall --save
+$ npm install github:HeavenSky/np#np-6.8.0 --save
 ```
 
 ### Usage
@@ -153,7 +95,7 @@ const npminstall = require('npminstall');
 - [x] All platform support
 - [x] global install (`-g, --global`)
 - [x] `preinstall`, `install`, `postinstall` scripts
-- [x] node-gyp@9, only support Python@3
+- [x] node-gyp@10, only support Python@3
   - [x] node-pre-gyp
 - [x] bin (yo@1.6.0, fsevents@1.0.6)
 - [x] scoped package
@@ -184,7 +126,7 @@ This project is inspired by [pnpm](https://github.com/pnpm/pnpm), and has a simi
 
 Two rules:
 
-1. The latest version of modules will link at `options.storeDir`'s `node_modules`.
+1. The latest version of modules will link at `options.storeDir`'s `node_modules`, except packages declared in the root `package.json`.
 2. Module's dependencies will link at module's `node_modules`.
 
 e.g.:
