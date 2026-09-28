@@ -48,6 +48,17 @@ describe('test/install-workspaces-edge.test.js', () => {
       .end();
   });
 
+  it('should keep other workspaces working after np-update -w', async () => {
+    await workspace({
+      'packages/x': { name: 'pkg-x', dependencies: { ms: '2.1.3' } },
+      'packages/y': { name: 'pkg-y', dependencies: { pedding: '1.1.0' } },
+    });
+    await run(helper.npminstall).expect('code', 0).end();
+    await run(helper.npmupdate, [ '-w', 'pkg-x' ]).expect('code', 0).end();
+    assert.equal(require(path.join(tmp, 'packages/y/node_modules/pedding/package.json')).version, '1.1.0');
+    assert.equal(require(path.join(tmp, 'packages/x/node_modules/ms/package.json')).version, '2.1.3');
+  });
+
   it('should fail when the lockfile can not be loaded', async () => {
     await writeJSON(path.join(tmp, 'package.json'), { name: 'r', version: '1.0.0', dependencies: { ms: '2.1.3' } });
     await run(helper.npminstall, [ `--lockfile-path=${path.join(tmp, 'missing-lock.json')}` ])

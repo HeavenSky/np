@@ -17,7 +17,7 @@ Remove node_modules of root and workspaces, then reinstall.
 Options:
 
   --root: project root directory, default is current working directory
-  -w, --workspace: only clean root and the given workspace, then reinstall it
+  -w, --workspace: only clean the given workspace's node_modules then reinstall it, root node_modules and the shared store are kept
   --clean-only: only remove node_modules, don't reinstall
   -h, --help: show help
 `
@@ -51,7 +51,8 @@ Options:
     if (installWorkspaceInfos.length === 0) {
       throw new Error(`No workspaces found: --workspace=${installWorkspaceNames.join(',')}`);
     }
-    cleanRoots = [ root, ...installWorkspaceInfos.map(info => info.root) ];
+    // 不清理 root/node_modules: 其中的 .store 被所有 workspace 共享, 只重装指定 workspace 无法恢复其他 workspace 的依赖
+    cleanRoots = installWorkspaceInfos.map(info => info.root);
   } else {
     cleanRoots = [ root, ...workspaceRoots ];
   }
