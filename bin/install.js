@@ -166,9 +166,9 @@ Options:
   --registry-only: make sure all packages install from registry. Any package is installed from remote(e.g.: git, remote url) cause install fail.
   --cache-strict: use disk cache even on production env.
   --fix-bug-versions: automatically fix bug version of packages.
-  --prune: prune unnecessary files from ./node_modules, such as markdown, typescript source files, and so on.
+  --prune: prune unnecessary files from ./node_modules, such as markdown, typescript source files, and so on, fallback to config.np.prune in package.json.
   --dependencies-tree: install with dependencies tree to restore the last install.
-  --public-hoist-pattern: regexp of package names to link into <root>/node_modules with their latest version, default is none.
+  --public-hoist-pattern: regexp of package names to link into <root>/node_modules with their latest version, fallback to config.np.publicHoistPattern in package.json, default is none.
   --dedup: link every package's latest version into <root>/node_modules like npminstall@6, overrides --public-hoist-pattern.
   --offline: offline mode. If a package won't be found locally, the installation will fail.
 `
@@ -426,40 +426,19 @@ debug('argv: %j, env: %j', argv, env);
         }
       }
     }
-    const pkgFile = path.join(root, 'package.json');
-    const exists = await utils.exists(pkgFile);
-    if (!exists) {
-      console.warn(chalk.yellow(`np WARN package.json not exists: ${pkgFile}`));
-    } else {
-      // try to read np config from package.json
-      const pkg = await utils.readJSON(pkgFile);
-      pkg.config = pkg.config || {};
-      pkg.config.np = pkg.config.np || {};
-      // {
-      //   "config": {
-      //     "np": {
-      //       "prune": true
-      //     }
-      //   }
-      // }
-      if (pkg.config.np.prune === true) {
-        config.prune = true;
-      }
-      // production
-      if (config.production && pkg.config.np['env:production']) {
-        const envConfig = pkg.config.np['env:production'];
-        if (envConfig.prune === true) {
-          config.prune = true;
-        }
-      }
-      // development
-      if (!config.production && pkg.config.np['env:development']) {
-        const envConfig = pkg.config.np['env:development'];
-        if (envConfig.prune === true) {
-          config.prune = true;
-        }
-      }
+    if (!(await utils.exists(path.join(root, 'package.json')))) {
+      console.warn(chalk.yellow(`np WARN package.json not exists: ${path.join(root, 'package.json')}`));
     }
+  }
+
+  // package.json 的 config.np 对 `np` 与 `np <pkg>` 都生效, 命令行参数优先
+  // { "config": { "np": { "prune": true, "publicHoistPattern": "eslint|prettier" } } }
+  const npConfig = (await utils.readJSON(path.join(root, 'package.json'))).config?.np || {};
+  if (npConfig.prune === true) {
+    config.prune = true;
+  }
+  if (!config.publicHoistPattern && typeof npConfig.publicHoistPattern === 'string') {
+    config.publicHoistPattern = npConfig.publicHoistPattern;
   }
 
   const installRootConfigs = [];

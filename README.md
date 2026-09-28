@@ -35,7 +35,7 @@ npm i -g github:HeavenSky/np#np
 | 项 | 上游 8.0.1 | 本 fork |
 | --- | --- | --- |
 | `--dedup` | 无 | 把每个包的最新版本链接到 `<root>/node_modules`, 即 npminstall@6 的扁平效果; 优先级高于 `--public-hoist-pattern` |
-| 根目录提升 | 固定提升名称匹配 `/(eslint\|prettier\|babel)/i` 的包 | 默认不提升; 用 `--public-hoist-pattern=<regexp>` 指定 |
+| 根目录提升 | 固定提升名称匹配 `/(eslint\|prettier\|babel)/i` 的包 | 默认不提升; 用 `--public-hoist-pattern=<regexp>` 或 `package.json` 的 `config.np.publicHoistPattern` 指定, 命令行优先 |
 | `--disable-fallback-store` | 可关闭 `.store/node_modules` 回退链接 | 移除, 回退链接始终建立 |
 | `--force-link-latest` | 显式开启才用更高版本覆盖根目录已有链接 | 移除, 提升时始终链接最高版本 |
 | `--proxy`, `npm_proxy`, `npm_config_proxy` | 声明支持, 但 urllib 3/4 不认 `proxy` 参数, 实际直连 | 移除 |
@@ -44,7 +44,7 @@ npm i -g github:HeavenSky/np#np
 | `np-uninstall --ignore-scripts` | 声明但无作用 | 移除 |
 | 缓存目录 | `~/.npminstall_tarball` 下的 `manifests/` 与按包名拆分的多级 tarball 目录 | `~/.np_tarball` 下的 `np-manifests/`, `np-tgz/<name>/`, `np-tmp/<YYYYMMDD>/`; 不再自动清理过期临时目录 |
 | 缓存目录环境变量 | `npminstall_cache` | `np_cache`; `npm_config_cache` 两边都认 |
-| `package.json` 配置 | `config.npminstall` | `config.np` |
+| `package.json` 配置 | `config.npminstall` 的 `prune`, `env:production.prune`, `env:development.prune`, 只在不带包名安装时读取 | `config.np` 的 `prune`, `publicHoistPattern`, `np` 与 `np <pkg>` 都读取; 移除 `env:*` |
 | 安装完成标记 | 包内 `package.json` 的 `__npminstall_done` | `__np_done`; 由上游装出的 `node_modules` 会被视为未完成, 切换时先删除 `node_modules` |
 | registry token | 附加到所有请求 | 只附加到与 registry 同 host 的请求 |
 
@@ -54,7 +54,7 @@ npm i -g github:HeavenSky/np#np
 - 每个包的最新版本链接到 `node_modules/.store/node_modules`, 供 peerDependencies 回退解析.
 - 根目录只放直接依赖与被提升的包.
 - 被提升的包取本次安装涉及的全部依赖树(workspace 模式下含所有被安装的 workspace 包)中的最高版本, 与安装顺序无关; 重装时指向 `.store` 的旧链接会被更新.
-- 根目录 `package.json` 声明的依赖保持声明版本, workspace 包自身的链接不被覆盖; 其余不指向 `.store` 的目录或链接在版本低于待提升版本时被覆盖.
+- 根目录 `package.json` 声明且本次模式会安装的依赖(production 下不含 devDependencies)保持声明版本, `np <pkg>` 只装部分包时同样生效; workspace 包自身的链接不被覆盖; 其余不指向 `.store` 的目录或链接在版本低于待提升版本时被覆盖.
 - `.store/node_modules` 下的回退链接同样在已有版本更低时更新.
 - 本次安装未涉及的包名保留上次的链接.
 

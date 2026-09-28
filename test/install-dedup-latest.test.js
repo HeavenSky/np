@@ -39,6 +39,14 @@ describe('test/install-dedup-latest.test.js', () => {
     assert.equal(await version('debug'), '2.6.9');
   });
 
+  it('should keep declared dependency version when installing named packages', async () => {
+    await writeJSON(path.join(tmp, 'package.json'), { name: 'r', version: '1.0.0', dependencies: { ms: '2.0.0' } });
+    await install();
+    assert.equal(await version('ms'), '2.0.0');
+    await install([ 'koa@2.15.3' ]);
+    assert.equal(await version('ms'), '2.0.0');
+  });
+
   it('should replace an older existing directory with the latest version', async () => {
     await writeJSON(path.join(tmp, 'package.json'), { name: 'r', version: '1.0.0', dependencies: { koa: '2.15.3' } });
     await writeJSON(path.join(tmp, 'node_modules/ms/package.json'), { name: 'ms', version: '1.0.0' });

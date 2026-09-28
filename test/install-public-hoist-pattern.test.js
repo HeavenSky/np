@@ -1,5 +1,6 @@
 // 根目录提升: 默认不提升, --public-hoist-pattern 按正则提升, --dedup 提升全部包
 const path = require('node:path');
+const fs = require('node:fs/promises');
 const coffee = require('coffee');
 const assertFile = require('assert-file');
 const helper = require('./helper');
@@ -42,5 +43,44 @@ describe('test/install-public-hoist-pattern.test.js', () => {
       .end();
     assertFile(rootModule('eslint-plugin-eggache'));
     assertFile(rootModule('ajv'));
+  });
+
+  describe('config.np.publicHoistPattern in package.json', () => {
+    const [ tmp, cleanupTmp ] = helper.tmp();
+    const tmpModule = name => path.join(tmp, 'node_modules', name, 'package.json');
+
+    beforeEach(async () => {
+      await cleanupTmp();
+      await fs.mkdir(tmp, { recursive: true });
+      await fs.writeFile(path.join(tmp, 'package.json'), JSON.stringify({
+        name: 'cfg', version: '1.0.0', dependencies: { debug: '2.6.9' }, config: { np: { publicHoistPattern: '^ms$' } },
+      }));
+    });
+    after(cleanupTmp);
+
+    it('should hoist packages matched by config', async () => {
+      await coffee.fork(helper.npminstall, [], { cwd: tmp })
+        .debug()
+        .expect('code', 0)
+        .end();
+      assertFile(tmpModule('ms'));
+    });
+
+    it('should prefer --public-hoist-pattern over config', async () => {
+      await coffee.fork(helper.npminstall, [ '--public-hoist-pattern=none' ], { cwd: tmp })
+        .debug()
+        .expect('code', 0)
+        .end();
+      assertFile.fail(tmpModule('ms'));
+    });
+
+    it('should read config when installing named packages', async () => {
+      await coffee.fork(helper.npminstall, [ 'debug@2.6.9' ], { cwd: tmp })
+        .debug()
+        .expect('code', 0)
+        .end();
+      assertFile(tmpModule('debug'));
+      assertFile(tmpModule('ms'));
+    });
   });
 });
