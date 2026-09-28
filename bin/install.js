@@ -148,7 +148,7 @@ Options:
   --no-cache: don't use the tarball disk cache, ignored when --cache-strict is set
   --custom-china-mirror-url: replace the default china binary mirror https://npmmirror.com/mirrors, used with -c
   --tarball-url-mapping: JSON object to rewrite tarball urls before request, redirect targets are not rewritten, e.g.: --tarball-url-mapping='{"https://a.com":"https://b.com"}'
-  --lockfile-path: install from package-lock.json (lockfileVersion >= 2), optionalDependencies in lockfile are ignored
+  --lockfile-path: install from package-lock.json (lockfileVersion >= 2), optionalDependencies in lockfile are ignored, not supported with workspaces, fail if the lockfile can't be loaded
   --save-dependencies-tree: save the resolved dependencies tree to node_modules/.dependencies_tree.json
   -v, --version: show version
   -h, --help: show help
@@ -363,13 +363,18 @@ debug('argv: %j, env: %j', argv, env);
 
   const lockfilePath = argv['lockfile-path'];
   if (lockfilePath) {
+    // lockfileConverter 查不到 workspace 子包的依赖, 且依赖树的键不区分 workspace, 放行会静默装错版本
+    if (enableWorkspace) {
+      throw new Error('--lockfile-path is not supported with npm workspaces');
+    }
+    // 加载失败必须中止: 回退到联网解析会装出与 lockfile 不一致的版本且退出码为 0
     try {
       const lockfileData = await fs.readFile(lockfilePath, 'utf8');
       config.dependenciesTree = lockfileConverter(JSON.parse(lockfileData), {
         ignoreOptionalDependencies: true,
       });
     } catch (error) {
-      console.warn(chalk.yellow('np WARN load lockfile from %s error :%s'), lockfilePath, error.message);
+      throw new Error(`load lockfile from ${lockfilePath} error: ${error.message}`, { cause: error });
     }
   }
 

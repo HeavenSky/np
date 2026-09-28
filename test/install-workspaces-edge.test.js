@@ -38,4 +38,21 @@ describe('test/install-workspaces-edge.test.js', () => {
       .end();
     assert.equal(await fs.readFile(path.join(tmp, 'node_modules/pkg-a/marker.txt'), 'utf8'), 'keep');
   });
+
+  it('should reject --lockfile-path in workspaces', async () => {
+    await workspace({ 'packages/a': { name: 'pkg-a', dependencies: { ms: '^2.0.0' } } });
+    await writeJSON(path.join(tmp, 'package-lock.json'), { lockfileVersion: 3, packages: {} });
+    await run(helper.npminstall, [ `--lockfile-path=${path.join(tmp, 'package-lock.json')}` ])
+      .expect('code', 1)
+      .expect('stderr', /--lockfile-path is not supported with npm workspaces/)
+      .end();
+  });
+
+  it('should fail when the lockfile can not be loaded', async () => {
+    await writeJSON(path.join(tmp, 'package.json'), { name: 'r', version: '1.0.0', dependencies: { ms: '2.1.3' } });
+    await run(helper.npminstall, [ `--lockfile-path=${path.join(tmp, 'missing-lock.json')}` ])
+      .expect('code', 1)
+      .expect('stderr', /load lockfile from .*missing-lock\.json error/)
+      .end();
+  });
 });
