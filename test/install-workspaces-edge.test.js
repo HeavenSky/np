@@ -121,7 +121,10 @@ describe('test/install-workspaces-edge.test.js', () => {
       'packages/b': { name: 'pkg-b' },
       'packages/c': { name: 'pkg-c' },
     });
-    await run(helper.npminstall).expect('code', 0).end();
+    await run(helper.npminstall, [ '-d' ])
+      .expect('code', 0)
+      .expect('stdout', /pkg-b@\* is skipped because it resolves to the local workspace:/)
+      .end();
     assert.equal(await fs.realpath(path.join(tmp, 'node_modules/pkg-b')), await fs.realpath(path.join(tmp, 'packages/b')));
   });
 
