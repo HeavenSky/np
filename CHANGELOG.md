@@ -30,6 +30,8 @@ easy-np 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1, 上�
 - `np-uninstall` 后移除已无人使用的提升链接与 `.store/node_modules` 回退链接.
 - workspace 版本不满足声明范围时告警; 依赖指向本地 workspace 时日志给出真实目录.
 - `--lockfile-path` 加载失败时报错退出, 不再静默回退为联网解析; workspace 下暂不支持并直接报错.
+- 在 `npm run` / `npx` 下安装需要 prepare 的 git 依赖时, 不再因继承 `npm_config_allow_scripts` 被 npm 12 以 `EALLOWSCRIPTS` 拒绝; git 依赖安装失败时报错附带子进程 stderr.
+- `np-uninstall` 等待 `package.json` 写回完成后再返回.
 
 ### 移除
 
