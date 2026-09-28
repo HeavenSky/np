@@ -54,7 +54,7 @@ npm i -g github:HeavenSky/np#np
 - 包实体位于 `node_modules/.store/<name>@<version>/node_modules/<name>`, 依赖以同级符号链接放在同一 `node_modules` 下.
 - 每个包的最新版本链接到 `node_modules/.store/node_modules`, 供 peerDependencies 回退解析.
 - 根目录只放直接依赖与被提升的包.
-- 被提升的包取本次安装涉及的全部依赖树(workspace 模式下含所有被安装的 workspace 包)中的最高版本, 与安装顺序无关; 重装时指向 `.store` 的旧链接会被更新.
+- 被提升的包取本次安装涉及的全部依赖树(workspace 模式下含所有被安装的 workspace 包)中的最高版本, 与安装顺序无关; 完整安装(不带包名, 不带 `-w` / `--workspaces`)时指向 `.store` 的旧链接会被替换为本次结果, 可能降级; 部分安装只会升级已有链接, 不会降级.
 - 根目录 `package.json` 声明且本次模式会安装的依赖(production 下不含 devDependencies)保持声明版本, `np <pkg>` 只装部分包时同样生效; workspace 包自身的链接不被覆盖; 其余不指向 `.store` 的目录或链接在版本低于待提升版本时被覆盖.
 - `.store/node_modules` 下的回退链接同样在已有版本更低时更新.
 - 本次安装未涉及的包名保留上次的链接.

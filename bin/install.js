@@ -324,6 +324,8 @@ debug('argv: %j, env: %j', argv, env);
     // install on one workspace package
     isWorkspacePackage: false,
     offline,
+    // 本次只安装部分依赖树, 已提升的链接只允许升级不允许降级
+    partialInstall: pkgs.length > 0 || installWorkspaceNames.length > 0 || !!installOnAllWorkspaces,
   };
   // 不再读取 npm 的 strict-ssl: urllib 3 不支持 rejectUnauthorized, HTTPS 证书始终校验
   // when ignore-scripts is set to `false` by user, np will still
