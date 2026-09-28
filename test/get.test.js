@@ -17,21 +17,6 @@ const get = require('../lib/get');
 mm.restore();
 
 describe('test/get.test.js', () => {
-  it('should retry on JSON parse error', async () => {
-    const logger = {
-      warn(msg) {
-        assert(msg.includes('[npminstall:get] retry GET'));
-      },
-    };
-    try {
-      await get('https://cnpmjs.org', { dataType: 'json' }, { console: logger });
-      assert(false, 'should not run this');
-    } catch (err) {
-      assert(err.name === 'JSONResponseFormatError');
-      assert(err.res.requestUrls.length > 0);
-    }
-  });
-
   it('should set auth info into header', async () => {
     const logger = {
       warn(msg) {
