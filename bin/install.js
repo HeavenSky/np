@@ -134,6 +134,7 @@ Usage:
 
 Can specify one or more: np ./foo.tgz bar@stable /some/folder
 If no argument is supplied, installs dependencies from ./package.json.
+With <pkg>, only the given packages are installed: other dependencies in package.json are not refreshed and root lifecycle scripts are not run.
 
 Options:
 
@@ -155,7 +156,7 @@ Options:
   -c, --china: specify in china, will automatically using chinese npm registry and other binary's mirrors
   -d, --detail: show detail log of installation
   -w, --workspace: install on one workspace only, e.g.: np koa -w a
-  --workspaces: install new package on all workspaces, e.g: np foo --workspaces
+  --workspaces: install on all workspaces, e.g: np foo --workspaces; without <pkg> the workspace root's own dependencies are not installed
   --trace: show memory and cpu usages traces of installation
   --ignore-scripts: ignore all preinstall / install and postinstall scripts during the installation
   --foreground-scripts: scripts run in the background by default, to see the output, run with: --foreground-scripts

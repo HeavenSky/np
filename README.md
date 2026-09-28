@@ -49,6 +49,25 @@ npm i -g github:HeavenSky/np#np
 | 安装完成标记 | 包内 `package.json` 的 `__npminstall_done` | `__np_done`; 由上游装出的 `node_modules` 会被视为未完成, 切换时先删除 `node_modules` |
 | registry token | 附加到所有请求 | 只附加到与 registry 同 host 的请求 |
 
+## 安装范围
+
+| 命令 | 安装内容 |
+| --- | --- |
+| `np` | 根 `package.json` 的全部依赖; workspace 模式下另含全部 workspace |
+| `np <pkg>` | 只安装 `<pkg>` 并写入 `package.json`; 不刷新其余已声明依赖, 不执行根包生命周期脚本 |
+| `np -w <name>` | 只安装指定 workspace, 不含根包自身依赖 |
+| `np --workspaces` | 安装全部 workspace, 不含根包自身依赖, 与 `npm install --workspaces` 一致 |
+
+## workspace
+
+- workspace 按依赖关系拓扑排序后依次安装与执行生命周期脚本, 存在循环依赖的 workspace 保持 glob 顺序并告警.
+- 依赖名命中 workspace 时总是链接本地 workspace; 本地版本不满足声明范围时告警, 不改装 registry 同名包.
+- 支持 `workspace:*`, `workspace:^`, `workspace:~` 与 `workspace:<range>`; 找不到同名 workspace 时报错.
+- peerDependencies 校验在全部 workspace 与根包安装完成后统一执行.
+- `np-update -w <name>` 只清理该 workspace 的 `node_modules`, 保留根目录与共享的 `.store`.
+- `np-uninstall` 之后, 不再被任何 `package.json` 声明且不被 `.store` 中其他包依赖的提升链接会被移除.
+- `--lockfile-path` 不支持 workspace, 会直接报错.
+
 ## node_modules 布局
 
 - 包实体位于 `node_modules/.store/<name>@<version>/node_modules/<name>`, 依赖以同级符号链接放在同一 `node_modules` 下.
