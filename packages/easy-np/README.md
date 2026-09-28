@@ -19,7 +19,7 @@ npm i -g easy-np
 { "dependencies": { "easy-np": "^0.0.0" } }
 ```
 
-安装未发布的最新代码: `npm i -g github:HeavenSky/np#np`.
+安装未发布的最新代码: 在本仓库的 `packages/easy-np` 下执行 `npm pack`, 再 `npm i -g ./easy-np-<version>.tgz`; npm 不支持从 git 仓库子目录安装.
 
 全局命令 `np` 与 npm 包 [`np`](https://www.npmjs.com/package/np)(sindresorhus 的发布工具 "A better npm publish")的命令同名: 已全局安装其中一个时, 再全局安装另一个会报 `EEXIST: file already exists` 并拒绝安装, 加 `--force` 才会覆盖; 作为项目依赖安装时各自位于 `node_modules/.bin`, 互不影响.
 

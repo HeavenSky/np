@@ -10,8 +10,10 @@
 ## 安装
 
 ```bash
-npm i -g github:HeavenSky/np#npd
+npm i -g easy-npd
 ```
+
+安装未发布的最新代码: 在本仓库的 `packages/easy-npd` 下执行 `npm pack`, 再 `npm i -g ./easy-npd-<version>.tgz`; npm 不支持从 git 仓库子目录安装.
 
 ## 命令
 
@@ -48,7 +50,7 @@ npm i -g github:HeavenSky/np#npd
 ### Install
 
 ```bash
-$ npm install github:HeavenSky/np#npd --save
+$ npm install easy-npd --save
 ```
 
 ### Usage
