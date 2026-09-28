@@ -14,11 +14,7 @@ const npa = require('../lib/npa');
 const utils = require('../lib/utils');
 const globalConfig = require('../lib/config');
 const { parsePackageName } = require('../lib/alias');
-const {
-  LOCAL_TYPES,
-  REMOTE_TYPES,
-  ALIAS_TYPES,
-} = require('../lib/npa_types');
+const { LOCAL_TYPES, REMOTE_TYPES, ALIAS_TYPES } = require('../lib/npa_types');
 const Context = require('../lib/context');
 const { lockfileConverter } = require('../lib/lockfile_resolver');
 
@@ -26,86 +22,88 @@ const originalArgv = process.argv.slice(2);
 
 // since minimist consider --no-xx is xx:false, we handle it manually here
 const argv = { 'no-save': originalArgv.includes('--no-save') };
-Object.assign(argv, parseArgs(originalArgv, {
-  string: [
-    'root',
-    'registry',
-    'prefix',
-    'forbidden-licenses',
-    'custom-china-mirror-url',
-    // {"http://a.com":"http://b.com"}
-    'tarball-url-mapping',
-    // --proxy 已移除: urllib 3 不支持 proxy / enableProxy 参数, 传入后请求仍直连
-    'dependencies-tree',
-    // np foo --workspace=aa
-    // np foo -w aa
-    'workspace',
-    /**
-     * set package-lock.json path
-     *
-     * 1. only support package lock v2 and v3.
-     * 2. np doesn't inspect <cwd>/package-lock.json by default.
-     * 3. because arborist doesn't support client/build/isomorphic dependencies,
-     *    these kinds of dependencies will all be ignored.
-     * 4. this option doesn't do extra check for the equivalence of package-lock.json and package.json
-     *    simply behaves like `npm ci` but doesn't remove the node_modules in advance.
-     * 5. you're not supposed to install extra dependencies along with a lockfile.
-     */
-    'lockfile-path',
-    'public-hoist-pattern',
-  ],
-  boolean: [
-    'version',
-    'help',
-    'production',
-    'client',
-    'global',
-    'save',
-    'save-dev',
-    'save-optional',
-    'save-client',
-    'save-build',
-    'save-isomorphic',
-    // Saved dependencies will be configured with an exact version rather than using npm's default semver range operator.
-    'save-exact',
-    'china',
-    'ignore-scripts',
-    // run scripts on foreground, default is background
-    'foreground-scripts',
-    // install ignore optionalDependencies
-    'optional',
-    'detail',
-    'trace',
-    'engine-strict',
-    'flatten',
-    'registry-only',
-    'cache-strict',
-    'fix-bug-versions',
-    // --prune 已移除: 按固定名单跳过解压文件会误删 tsconfig.json 等运行时文件
-    'save-dependencies-tree',
-    // --force-link-latest 已移除: 提升到根目录时始终链接最高版本
-    'dedup',
-    'workspaces',
-    'offline',
-  ],
-  default: {
-    optional: true,
-  },
-  alias: {
-    // npm install [-S|--save|-D|--save-dev|-O|--save-optional] [-E|--save-exact] [-d|--detail] [-w|--workspace]
-    S: 'save',
-    D: 'save-dev',
-    O: 'save-optional',
-    E: 'save-exact',
-    v: 'version',
-    h: 'help',
-    g: 'global',
-    c: 'china',
-    r: 'registry',
-    d: 'detail',
-    w: 'workspace',
-  },
-})
+Object.assign(
+  argv,
+  parseArgs(originalArgv, {
+    string: [
+      'root',
+      'registry',
+      'prefix',
+      'forbidden-licenses',
+      'custom-china-mirror-url',
+      // {"http://a.com":"http://b.com"}
+      'tarball-url-mapping',
+      // --proxy 已移除: urllib 3 不支持 proxy / enableProxy 参数, 传入后请求仍直连
+      'dependencies-tree',
+      // np foo --workspace=aa
+      // np foo -w aa
+      'workspace',
+      /**
+       * set package-lock.json path
+       *
+       * 1. only support package lock v2 and v3.
+       * 2. np doesn't inspect <cwd>/package-lock.json by default.
+       * 3. because arborist doesn't support client/build/isomorphic dependencies,
+       *    these kinds of dependencies will all be ignored.
+       * 4. this option doesn't do extra check for the equivalence of package-lock.json and package.json
+       *    simply behaves like `npm ci` but doesn't remove the node_modules in advance.
+       * 5. you're not supposed to install extra dependencies along with a lockfile.
+       */
+      'lockfile-path',
+      'public-hoist-pattern',
+    ],
+    boolean: [
+      'version',
+      'help',
+      'production',
+      'client',
+      'global',
+      'save',
+      'save-dev',
+      'save-optional',
+      'save-client',
+      'save-build',
+      'save-isomorphic',
+      // Saved dependencies will be configured with an exact version rather than using npm's default semver range operator.
+      'save-exact',
+      'china',
+      'ignore-scripts',
+      // run scripts on foreground, default is background
+      'foreground-scripts',
+      // install ignore optionalDependencies
+      'optional',
+      'detail',
+      'trace',
+      'engine-strict',
+      'flatten',
+      'registry-only',
+      'cache-strict',
+      'fix-bug-versions',
+      // --prune 已移除: 按固定名单跳过解压文件会误删 tsconfig.json 等运行时文件
+      'save-dependencies-tree',
+      // --force-link-latest 已移除: 提升到根目录时始终链接最高版本
+      'dedup',
+      'workspaces',
+      'offline',
+    ],
+    default: {
+      optional: true,
+    },
+    alias: {
+      // npm install [-S|--save|-D|--save-dev|-O|--save-optional] [-E|--save-exact] [-d|--detail] [-w|--workspace]
+      S: 'save',
+      D: 'save-dev',
+      O: 'save-optional',
+      E: 'save-exact',
+      v: 'version',
+      h: 'help',
+      g: 'global',
+      c: 'china',
+      r: 'registry',
+      d: 'detail',
+      w: 'workspace',
+    },
+  })
 );
 
 if (argv.version) {
@@ -171,8 +169,7 @@ Options:
   --public-hoist-pattern: regexp of package names to link into <root>/node_modules with their latest version, fallback to config.np.publicHoistPattern in package.json, default is none.
   --dedup: link every package's latest version into <root>/node_modules like npminstall@6, overrides --public-hoist-pattern.
   --offline: offline mode. If a package won't be found locally, the installation will fail.
-`
-  );
+`);
   process.exit(0);
 }
 
@@ -185,10 +182,8 @@ if (process.env.NP_BY_UPDATE) {
 
 const context = new Context();
 for (const name of argv._) {
-  context.nested.update([ name ]);
-  const [
-    aliasPackageName,
-  ] = parsePackageName(name, context.nested);
+  context.nested.update([name]);
+  const [aliasPackageName] = parsePackageName(name, context.nested);
   const p = npa(name, { where: argv.root, nested: context.nested });
   pkgs.push({
     name: p.name,
@@ -361,7 +356,7 @@ debug('argv: %j, env: %j', argv, env);
     const packageVersionMapping = await utils.getBugVersions(registry, { offline, cacheDir });
     config.autoFixVersion = function autoFixVersion(name, version) {
       const fixVersions = packageVersionMapping[name];
-      return fixVersions && fixVersions[version] || null;
+      return (fixVersions && fixVersions[version]) || null;
     };
   }
 
@@ -557,7 +552,7 @@ function getIgnoreScripts() {
 async function updateDependencies(root, pkgs, propName, saveExact, remoteNames) {
   const pkgFile = path.join(root, 'package.json');
   const pkg = await utils.readJSON(pkgFile);
-  const deps = pkg[propName] = pkg[propName] || {};
+  const deps = (pkg[propName] = pkg[propName] || {});
   console.log('%s:', chalk.cyanBright(propName));
   for (const item of pkgs) {
     let saveName;

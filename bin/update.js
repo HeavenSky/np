@@ -2,9 +2,7 @@
 
 const path = require('node:path');
 const parseArgs = require('minimist');
-const {
-  rimraf, readWorkspaces, getWorkspaceInfos, formatWorkspaceNames, exitWithError,
-} = require('../lib/utils');
+const { rimraf, readWorkspaces, getWorkspaceInfos, formatWorkspaceNames, exitWithError } = require('../lib/utils');
 
 function help(root) {
   console.log(`
@@ -20,21 +18,14 @@ Options:
   -w, --workspace: only clean the given workspace's node_modules then reinstall it, root node_modules and the shared store are kept
   --clean-only: only remove node_modules, don't reinstall
   -h, --help: show help
-`
-  );
+`);
   process.exit(0);
 }
 
 (async () => {
   const argv = parseArgs(process.argv.slice(2), {
-    string: [
-      'root',
-      'workspace',
-    ],
-    boolean: [
-      'help',
-      'clean-only',
-    ],
+    string: ['root', 'workspace'],
+    boolean: ['help', 'clean-only'],
     alias: {
       h: 'help',
       w: 'workspace',
@@ -54,7 +45,7 @@ Options:
     // 不清理 root/node_modules: 其中的 .store 被所有 workspace 共享, 只重装指定 workspace 无法恢复其他 workspace 的依赖
     cleanRoots = installWorkspaceInfos.map(info => info.root);
   } else {
-    cleanRoots = [ root, ...workspaceRoots ];
+    cleanRoots = [root, ...workspaceRoots];
   }
   for (const rootDir of cleanRoots) {
     const nodeModules = path.join(rootDir, 'node_modules');

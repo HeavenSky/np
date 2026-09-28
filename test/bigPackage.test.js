@@ -20,8 +20,5 @@ describe('test/bigPackage.test.js', () => {
     });
   }
 
-  [
-    'alotta-files',
-    'standardtest',
-  ].forEach(testcase);
+  ['alotta-files', 'standardtest'].forEach(testcase);
 });

@@ -8,11 +8,7 @@ const utils = require('../lib/utils');
 const uninstall = require('../lib/uninstall');
 
 const argv = parseArgs(process.argv.slice(2), {
-  string: [
-    'root',
-    'prefix',
-    'workspace',
-  ],
+  string: ['root', 'prefix', 'workspace'],
   boolean: [
     'version',
     'help',
@@ -82,12 +78,12 @@ if (!pkgs.length) help();
         uninstallRoots = workspaceRoots;
       } else {
         // uninstall <pkg>
-        uninstallRoots = [ root ];
+        uninstallRoots = [root];
       }
     }
   } else {
     // uninstall <pkg>
-    uninstallRoots = [ root ];
+    uninstallRoots = [root];
   }
 
   for (const uninstallRoot of uninstallRoots) {
@@ -103,7 +99,10 @@ if (!pkgs.length) help();
     await uninstall(unsinstallRootConfig);
   }
   // 全部目标卸载完再统一判断, 避免 --workspaces 批量卸载时前一个 workspace 的判断受尚未卸载的后者影响
-  await uninstall.cleanupHoistedLinks(root, pkgs.map(pkg => pkg.name));
+  await uninstall.cleanupHoistedLinks(
+    root,
+    pkgs.map(pkg => pkg.name)
+  );
   console.log('');
 })().catch(err => {
   utils.exitWithError('np-uninstall', err);
@@ -126,7 +125,6 @@ Options:
   --workspaces: uninstall on all workspaces
   -v, --version: show version
   -h, --help: show help
-`
-  );
+`);
   process.exit(0);
 }

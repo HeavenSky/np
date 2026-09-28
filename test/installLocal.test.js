@@ -17,9 +17,7 @@ describe('test/installLocal.test.js', () => {
   it('should install local folder ok', async () => {
     await npminstall({
       root,
-      pkgs: [
-        { name: 'test', version: 'file:pkg' },
-      ],
+      pkgs: [{ name: 'test', version: 'file:pkg' }],
     });
     const pkg = await helper.readJSON(path.join(root, 'node_modules/pkg/package.json'));
     assert.equal(pkg.name, 'pkg');
@@ -29,9 +27,7 @@ describe('test/installLocal.test.js', () => {
     mm.error(utils, 'exec');
     await npminstall({
       root,
-      pkgs: [
-        { name: 'test', version: 'file:pkg' },
-      ],
+      pkgs: [{ name: 'test', version: 'file:pkg' }],
     });
     const pkg = await helper.readJSON(path.join(root, 'node_modules/pkg/package.json'));
     assert.equal(pkg.name, 'pkg');
@@ -40,9 +36,7 @@ describe('test/installLocal.test.js', () => {
   it('should install local folder with relative path ok', async () => {
     await npminstall({
       root,
-      pkgs: [
-        { name: 'test', version: './pkg' },
-      ],
+      pkgs: [{ name: 'test', version: './pkg' }],
     });
     const pkg = await helper.readJSON(path.join(root, 'node_modules/pkg/package.json'));
     assert.equal(pkg.name, 'pkg');
@@ -54,9 +48,7 @@ describe('test/installLocal.test.js', () => {
     }
     await npminstall({
       root,
-      pkgs: [
-        { name: 'test', version: 'file:pkg-link' },
-      ],
+      pkgs: [{ name: 'test', version: 'file:pkg-link' }],
     });
     const pkg = await helper.readJSON(path.join(root, 'node_modules/pkg/package.json'));
     assert.equal(pkg.name, 'pkg');
@@ -65,9 +57,7 @@ describe('test/installLocal.test.js', () => {
   it('should install local gzip tarball ok', async () => {
     await npminstall({
       root,
-      pkgs: [
-        { name: null, version: 'file:sequelize.tgz' },
-      ],
+      pkgs: [{ name: null, version: 'file:sequelize.tgz' }],
     });
 
     const pkg = await helper.readJSON(path.join(root, 'node_modules/sequelize/package.json'));
@@ -80,9 +70,7 @@ describe('test/installLocal.test.js', () => {
     }
     await npminstall({
       root,
-      pkgs: [
-        { name: null, version: 'file:sequelize-link.tgz' },
-      ],
+      pkgs: [{ name: null, version: 'file:sequelize-link.tgz' }],
     });
 
     const pkg = await helper.readJSON(path.join(root, 'node_modules/sequelize/package.json'));
@@ -92,9 +80,7 @@ describe('test/installLocal.test.js', () => {
   it('should install local naked tarball ok', async () => {
     await npminstall({
       root,
-      pkgs: [
-        { name: null, version: 'file:pkg.tar' },
-      ],
+      pkgs: [{ name: null, version: 'file:pkg.tar' }],
     });
     const pkg = await helper.readJSON(path.join(root, 'node_modules/pkg/package.json'));
     assert.equal(pkg.name, 'pkg');
@@ -104,9 +90,7 @@ describe('test/installLocal.test.js', () => {
     try {
       await npminstall({
         root,
-        pkgs: [
-          { name: null, version: 'file:not-pkg' },
-        ],
+        pkgs: [{ name: null, version: 'file:not-pkg' }],
       });
       throw new Error('should not exec');
     } catch (err) {
@@ -118,9 +102,7 @@ describe('test/installLocal.test.js', () => {
     try {
       await npminstall({
         root,
-        pkgs: [
-          { name: null, version: 'file:not-pkg.tar' },
-        ],
+        pkgs: [{ name: null, version: 'file:not-pkg.tar' }],
       });
       throw new Error('should not exec');
     } catch (err) {
@@ -132,9 +114,7 @@ describe('test/installLocal.test.js', () => {
     try {
       await npminstall({
         root,
-        pkgs: [
-          { name: null, version: 'file:pkg-without-name' },
-        ],
+        pkgs: [{ name: null, version: 'file:pkg-without-name' }],
       });
       throw new Error('should not exec');
     } catch (err) {
@@ -146,9 +126,7 @@ describe('test/installLocal.test.js', () => {
     try {
       await npminstall({
         root,
-        pkgs: [
-          { name: null, version: 'file:pkg-without-name.tgz' },
-        ],
+        pkgs: [{ name: null, version: 'file:pkg-without-name.tgz' }],
       });
       throw new Error('should not exec');
     } catch (err) {
@@ -191,9 +169,7 @@ describe('test/installLocal.test.js', () => {
     it('should install the same tarball ok', async () => {
       await npminstall({
         root,
-        pkgs: [
-          { name: null, version: 'file:pkg.tar' },
-        ],
+        pkgs: [{ name: null, version: 'file:pkg.tar' }],
       });
       let pkg = await helper.readJSON(path.join(root, 'node_modules/pkg/package.json'));
       assert.equal(pkg.name, 'pkg');
@@ -211,9 +187,7 @@ describe('test/installLocal.test.js', () => {
     it('should install the same local folder ok', async () => {
       await npminstall({
         root,
-        pkgs: [
-          { name: 'test', version: 'file:pkg' },
-        ],
+        pkgs: [{ name: 'test', version: 'file:pkg' }],
       });
       let pkg = await helper.readJSON(path.join(root, 'node_modules/pkg/package.json'));
       assert.equal(pkg.name, 'pkg');
@@ -231,12 +205,10 @@ describe('test/installLocal.test.js', () => {
     if (process.env.npm_china) {
       it('should install from custom china mirror url work', () => {
         const cli = require.resolve('../bin/install');
-        return coffee.fork(cli, [
-          'phantomjs-prebuilt',
-          '--custom-china-mirror-url=https://npmmirror.com/mirrors',
-        ], {
-          cwd: root,
-        })
+        return coffee
+          .fork(cli, ['phantomjs-prebuilt', '--custom-china-mirror-url=https://npmmirror.com/mirrors'], {
+            cwd: root,
+          })
           .coverage(false)
           .debug()
           .expect('code', 0)

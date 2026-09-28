@@ -6,7 +6,10 @@ const mm = require('mm');
 
 const mockCnpmrc = path.join(__dirname, './fixtures/auth/');
 if (!fs.existsSync(path.join(mockCnpmrc, '.cnpmrc'))) {
-  fs.writeFileSync(path.join(mockCnpmrc, '.cnpmrc'), 'registry=https://registry-mock.org/\n//registry-mock.org/:always-auth=true\n//registry-mock.org/:_password="bW9jaw=="\n//registry-mock.org/:username=hyj19911120');
+  fs.writeFileSync(
+    path.join(mockCnpmrc, '.cnpmrc'),
+    'registry=https://registry-mock.org/\n//registry-mock.org/:always-auth=true\n//registry-mock.org/:_password="bW9jaw=="\n//registry-mock.org/:username=hyj19911120'
+  );
 }
 mm(process.env, 'HOME', mockCnpmrc);
 mm(process.env, 'USERPROFILE', mockCnpmrc);

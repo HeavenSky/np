@@ -5,7 +5,7 @@ const npminstall = require('./npminstall');
 const helper = require('./helper');
 
 describe('test/cleanup.test.js', () => {
-  const [ tmp, cleanup ] = helper.tmp();
+  const [tmp, cleanup] = helper.tmp();
 
   beforeEach(cleanup);
   afterEach(cleanup);
@@ -15,9 +15,7 @@ describe('test/cleanup.test.js', () => {
     try {
       await npminstall({
         root: tmp,
-        pkgs: [
-          { name: 'install-error', version: 'latest' },
-        ],
+        pkgs: [{ name: 'install-error', version: 'latest' }],
       });
     } catch (err) {
       throwError = true;
@@ -25,16 +23,14 @@ describe('test/cleanup.test.js', () => {
     assert(throwError);
 
     const dirs = await fs.readdir(path.join(tmp, 'node_modules'));
-    assert.deepEqual(dirs, [ '.store' ]);
+    assert.deepEqual(dirs, ['.store']);
 
     // install again will try to download
     throwError = false;
     try {
       await npminstall({
         root: tmp,
-        pkgs: [
-          { name: 'install-error', version: 'latest' },
-        ],
+        pkgs: [{ name: 'install-error', version: 'latest' }],
       });
     } catch (err) {
       throwError = true;

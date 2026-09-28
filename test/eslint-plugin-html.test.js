@@ -25,7 +25,8 @@ if (process.platform !== 'win32') {
 }
 
 function runLint(cwd) {
-  return coffee.spawn('npm', [ 'run', 'lint' ], { cwd })
+  return coffee
+    .spawn('npm', ['run', 'lint'], { cwd })
     .debug()
     .expect('code', 0)
     .expect('stdout', /eslint index\.js/)

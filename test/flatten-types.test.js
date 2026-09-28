@@ -15,10 +15,7 @@ describe('test/flatten-types.test.js', () => {
   beforeEach(cleanup);
 
   it('should flatten when name starts with @types/', async () => {
-    await coffee.fork(helper.npminstall, [], { cwd: tmp })
-      .debug()
-      .expect('code', 0)
-      .end();
+    await coffee.fork(helper.npminstall, [], { cwd: tmp }).debug().expect('code', 0).end();
     let pkg = await getPkg('node_modules/@types/react/package.json');
     assert(pkg.version === '0.14.57');
     pkg = await getPkg('node_modules/@types/react-dom/package.json');

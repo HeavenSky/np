@@ -3,32 +3,40 @@
   "version": "0.0.0",
   "description": "Fast npm installer forked from npminstall, with npm@6 style --dedup hoisting, npm workspaces fixes and node 16 support",
   "keywords": [
+    "dedup",
+    "hoist",
+    "installer",
+    "monorepo",
     "npm",
     "npm install",
     "npminstall",
-    "installer",
-    "dedup",
-    "hoist",
-    "workspaces",
-    "monorepo"
+    "workspaces"
   ],
   "homepage": "https://github.com/HeavenSky/np/tree/np#readme",
   "bugs": {
     "url": "https://github.com/HeavenSky/np/issues"
   },
+  "license": "MIT",
   "author": "HeavenSky",
-  "main": "lib/index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HeavenSky/np.git"
+  },
+  "bin": {
+    "np": "bin/install.js",
+    "np-link": "bin/link.js",
+    "np-uninstall": "bin/uninstall.js",
+    "np-update": "bin/update.js"
+  },
   "files": [
     "lib",
     "bin",
     "node-gyp-bin",
     "CHANGELOG.md"
   ],
-  "bin": {
-    "np": "bin/install.js",
-    "np-link": "bin/link.js",
-    "np-uninstall": "bin/uninstall.js",
-    "np-update": "bin/update.js"
+  "main": "lib/index.js",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "test": "npm run lint && egg-bin test -t 2000000 -p",
@@ -79,15 +87,7 @@
     "oxfmt": "^0.70.0",
     "oxlint": "^1.85.0"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/HeavenSky/np.git"
-  },
-  "publishConfig": {
-    "registry": "https://registry.npmjs.org/"
-  },
   "engines": {
     "node": ">=16.14.0"
-  },
-  "license": "MIT"
+  }
 }

@@ -4,7 +4,7 @@ const npminstall = require('./npminstall');
 const helper = require('./helper');
 
 describe('test/node-sass.test.js', () => {
-  const [ tmp, cleanup ] = helper.tmp();
+  const [tmp, cleanup] = helper.tmp();
 
   beforeEach(cleanup);
   afterEach(cleanup);
@@ -20,9 +20,7 @@ describe('test/node-sass.test.js', () => {
     }
     await npminstall({
       root: tmp,
-      pkgs: [
-        { name: 'node-sass', version: sassVersion },
-      ],
+      pkgs: [{ name: 'node-sass', version: sassVersion }],
       env: {
         npm_config_cache: undefined,
       },

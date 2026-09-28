@@ -3,7 +3,7 @@ const coffee = require('coffee');
 const helper = require('./helper');
 
 describe('test/install-offline.test.js', () => {
-  const [ homedir, cleanupTmp ] = helper.tmp();
+  const [homedir, cleanupTmp] = helper.tmp();
   const demo = helper.fixtures('install-offline');
   const cleanupModules = helper.cleanup(demo);
 
@@ -16,37 +16,40 @@ describe('test/install-offline.test.js', () => {
   afterEach(cleanup);
 
   it('should install fail when cache manifests not exists', async () => {
-    await coffee.fork(helper.npminstall, [ '--offline' ], {
-      cwd: demo,
-      env: Object.assign({}, process.env, {
-        npm_config_cache: path.join(homedir, 'foocache/.npminstall_tarball'),
-      }),
-    })
+    await coffee
+      .fork(helper.npminstall, ['--offline'], {
+        cwd: demo,
+        env: Object.assign({}, process.env, {
+          npm_config_cache: path.join(homedir, 'foocache/.npminstall_tarball'),
+        }),
+      })
       .debug()
       .expect('code', 1)
-      .expect('stderr', /Can\'t find package .+? manifests on offline mode/)
+      .expect('stderr', /Can't find package .+? manifests on offline mode/)
       .end();
   });
 
   it('should install success when cache manifests exists', async () => {
-    await coffee.fork(helper.npminstall, [ '-d' ], {
-      cwd: demo,
-      env: Object.assign({}, process.env, {
-        npm_config_cache: path.join(homedir, 'foocache/.npminstall_tarball'),
-      }),
-    })
+    await coffee
+      .fork(helper.npminstall, ['-d'], {
+        cwd: demo,
+        env: Object.assign({}, process.env, {
+          npm_config_cache: path.join(homedir, 'foocache/.npminstall_tarball'),
+        }),
+      })
       .debug()
       .expect('code', 0)
       .expect('stdout', /All packages installed/)
       .end();
 
     await cleanupModules();
-    await coffee.fork(helper.npminstall, [ '-d', '--offline' ], {
-      cwd: demo,
-      env: Object.assign({}, process.env, {
-        npm_config_cache: path.join(homedir, 'foocache/.npminstall_tarball'),
-      }),
-    })
+    await coffee
+      .fork(helper.npminstall, ['-d', '--offline'], {
+        cwd: demo,
+        env: Object.assign({}, process.env, {
+          npm_config_cache: path.join(homedir, 'foocache/.npminstall_tarball'),
+        }),
+      })
       .debug()
       .expect('code', 0)
       .expect('stdout', /All packages installed/)

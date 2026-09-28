@@ -12,13 +12,8 @@ const { REGISTRY_TYPES } = require('../lib/npa_types');
 
 const orignalArgv = process.argv.slice(2);
 const argv = parseArgs(orignalArgv, {
-  string: [
-    'root',
-  ],
-  boolean: [
-    'version',
-    'help',
-  ],
+  string: ['root'],
+  boolean: ['version', 'help'],
 });
 
 if (argv.version) {
@@ -41,8 +36,7 @@ Options:
   --prefix: global install prefix, default is '$npm config get prefix'
   --version: show version
   --help: show help
-`
-  );
+`);
   process.exit(0);
 }
 
@@ -91,10 +85,13 @@ const folders = argv._.map(name => utils.formatPath(name));
 
   // link folders to current dir
   const targetDir = path.join(root, 'node_modules');
-  const env = Object.assign({
-    // should keep npm_rootpath be current dir
-    npm_rootpath: root,
-  }, process.env);
+  const env = Object.assign(
+    {
+      // should keep npm_rootpath be current dir
+      npm_rootpath: root,
+    },
+    process.env
+  );
   const installBin = path.join(__dirname, 'install.js');
 
   for (let folder of folders) {
@@ -124,14 +121,15 @@ const folders = argv._.map(name => utils.formatPath(name));
       const pkgNotExist = !pkg.name;
       const specIsTag = pkgInfo.type === 'tag' && !!pkgInfo.rawSpec;
       const specNotSemver = !REGISTRY_TYPES.includes(pkgInfo.type);
-      const specNotSatisfies = (pkgInfo.type === 'range' || pkgInfo.type === 'version')
-        && !utils.fastSemverSatisfies(pkg.version, pkgInfo.spec);
+      const specNotSatisfies =
+        (pkgInfo.type === 'range' || pkgInfo.type === 'version') &&
+        !utils.fastSemverSatisfies(pkg.version, pkgInfo.spec);
 
       if (pkgNotExist || specIsTag || specNotSemver || specNotSatisfies) {
         debug('%s not satisfies with requirement, try to install %s from npm', folder, pkgInfo.raw);
         // try install from npm registry
         console.info(chalk.gray(`\`$ np --global ${pkgInfo.raw}`));
-        await utils.fork(installBin, installArgs.concat([ '-g', pkgInfo.raw ]), {
+        await utils.fork(installBin, installArgs.concat(['-g', pkgInfo.raw]), {
           env,
         });
       }

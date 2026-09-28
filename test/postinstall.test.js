@@ -15,7 +15,8 @@ describe('test/postinstall.test.js', () => {
     afterEach(cleanup);
 
     it('should run preinstall, install, postinstall and prepublish', async () => {
-      await coffee.fork(helper.npminstall, [], { cwd: root })
+      await coffee
+        .fork(helper.npminstall, [], { cwd: root })
         .debug()
         .expect('code', 0)
         // should run deps scripts on background by default
@@ -32,7 +33,10 @@ describe('test/postinstall.test.js', () => {
       // install pass
       assert.equal(fs.readFileSync(path.join(root, 'node_modules', '.install.txt'), 'utf8'), 'success: install');
       // postinstall pass
-      assert.equal(fs.readFileSync(path.join(root, 'node_modules', '.postinstall.txt'), 'utf8'), 'success: postinstall');
+      assert.equal(
+        fs.readFileSync(path.join(root, 'node_modules', '.postinstall.txt'), 'utf8'),
+        'success: postinstall'
+      );
       // prepublish pass
       assert.equal(fs.readFileSync(path.join(root, 'node_modules', '.prepublish.txt'), 'utf8'), 'success: prepublish');
       // prepare pass
@@ -40,7 +44,8 @@ describe('test/postinstall.test.js', () => {
     });
 
     it('should run preinstall, install, postinstall and prepublish --foreground-scripts', async () => {
-      await coffee.fork(helper.npminstall, [ '--foreground-scripts' ], { cwd: root })
+      await coffee
+        .fork(helper.npminstall, ['--foreground-scripts'], { cwd: root })
         .debug()
         .expect('code', 0)
         // should run deps scripts on foreground
@@ -57,7 +62,10 @@ describe('test/postinstall.test.js', () => {
       // install pass
       assert.equal(fs.readFileSync(path.join(root, 'node_modules', '.install.txt'), 'utf8'), 'success: install');
       // postinstall pass
-      assert.equal(fs.readFileSync(path.join(root, 'node_modules', '.postinstall.txt'), 'utf8'), 'success: postinstall');
+      assert.equal(
+        fs.readFileSync(path.join(root, 'node_modules', '.postinstall.txt'), 'utf8'),
+        'success: postinstall'
+      );
       // prepublish pass
       assert.equal(fs.readFileSync(path.join(root, 'node_modules', '.prepublish.txt'), 'utf8'), 'success: prepublish');
       // prepare pass
@@ -95,12 +103,10 @@ describe('test/postinstall.test.js', () => {
         afterEach(cleanup);
 
         it('should install --save pedding and update dependencies', async () => {
-          await coffee.fork(helper.npminstall, [
-            '--foo_bar_haha=okok',
-            '-d',
-          ], {
-            cwd: root,
-          })
+          await coffee
+            .fork(helper.npminstall, ['--foo_bar_haha=okok', '-d'], {
+              cwd: root,
+            })
             .debug()
             .expect('stdout', /pedding@1\.0\.0 installed/)
             .expect('stdout', /npm_config_foo_bar_haha = okok/)

@@ -17,7 +17,8 @@ describe('test/custom-registry.test.js', () => {
       '--registry=https://registry.npmmirror.com?bucket=bar',
       '-d',
     ];
-    await coffee.fork(helper.npminstall, args, { cwd: tmp })
+    await coffee
+      .fork(helper.npminstall, args, { cwd: tmp })
       .debug()
       .expect('stdout', /All packages installed/)
       .expect('code', 0)

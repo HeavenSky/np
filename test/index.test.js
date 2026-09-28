@@ -6,7 +6,7 @@ const { readJSON, rimraf, exists, isInstallDone } = require('../lib/utils');
 const helper = require('./helper');
 
 describe('test/index.test.js', () => {
-  const [ tmp, cleanup ] = helper.tmp();
+  const [tmp, cleanup] = helper.tmp();
 
   beforeEach(cleanup);
   afterEach(cleanup);
@@ -19,8 +19,14 @@ describe('test/index.test.js', () => {
     });
     assert(await isInstallDone(path.join(root, 'node_modules/utility')));
     assert(await isInstallDone(path.join(root, 'node_modules/@babel/preset-react')));
-    assert(await exists(path.join(root, 'node_modules/.store/@babel+preset-react@7.18.6/node_modules/@babel/preset-react')));
-    assert(await exists(path.join(root, 'node_modules/.store/@babel+preset-react@7.18.6/node_modules/@babel/plugin-transform-react-jsx')));
+    assert(
+      await exists(path.join(root, 'node_modules/.store/@babel+preset-react@7.18.6/node_modules/@babel/preset-react'))
+    );
+    assert(
+      await exists(
+        path.join(root, 'node_modules/.store/@babel+preset-react@7.18.6/node_modules/@babel/plugin-transform-react-jsx')
+      )
+    );
   });
 
   it('should install @emotion/react with react, fix link pear deps bug', async () => {
@@ -49,9 +55,7 @@ describe('test/index.test.js', () => {
   it('should handle @types/escodegen@0.0.2 tgz', async () => {
     await npminstall({
       root: tmp,
-      pkgs: [
-        { name: '@types/escodegen', version: '0.0.2' },
-      ],
+      pkgs: [{ name: '@types/escodegen', version: '0.0.2' }],
     });
     assert(await isInstallDone(path.join(tmp, 'node_modules/@types/escodegen')));
     assert(await exists(path.join(tmp, 'node_modules/@types/escodegen/package.json')));
@@ -62,9 +66,7 @@ describe('test/index.test.js', () => {
     try {
       await npminstall({
         root: tmp,
-        pkgs: [
-          { name: 'mocha1111' },
-        ],
+        pkgs: [{ name: 'mocha1111' }],
       });
       throw new Error('should not run this');
     } catch (err) {
@@ -95,18 +97,14 @@ describe('test/index.test.js', () => {
   it('should relink exists link file work', async () => {
     await npminstall({
       root: tmp,
-      pkgs: [
-        { name: 'pedding', version: '0' },
-      ],
+      pkgs: [{ name: 'pedding', version: '0' }],
     });
     const v0 = await readJSON(path.join(tmp, 'node_modules', 'pedding', 'package.json'));
     assert.equal(v0.version[0], '0');
 
     await npminstall({
       root: tmp,
-      pkgs: [
-        { name: 'pedding', version: '1' },
-      ],
+      pkgs: [{ name: 'pedding', version: '1' }],
     });
     const v1 = await readJSON(path.join(tmp, 'node_modules', 'pedding', 'package.json'));
     assert.equal(v1.version[0], '1');
@@ -115,9 +113,7 @@ describe('test/index.test.js', () => {
   it('should request registry when not install from package.json', async () => {
     await npminstall({
       root: tmp,
-      pkgs: [
-        { name: 'koa-onerror', version: '1.2.0' },
-      ],
+      pkgs: [{ name: 'koa-onerror', version: '1.2.0' }],
     });
 
     const v1 = await readJSON(path.join(tmp, 'node_modules', 'koa-onerror', 'package.json'));
@@ -125,9 +121,7 @@ describe('test/index.test.js', () => {
 
     await npminstall({
       root: tmp,
-      pkgs: [
-        { name: 'koa-onerror', version: '1' },
-      ],
+      pkgs: [{ name: 'koa-onerror', version: '1' }],
     });
 
     const v2 = await readJSON(path.join(tmp, 'node_modules', 'koa-onerror', 'package.json'));
@@ -137,9 +131,7 @@ describe('test/index.test.js', () => {
   it('should install chromedriver work', async () => {
     await npminstall({
       root: tmp,
-      pkgs: [
-        { name: 'chromedriver', version: '2.10.0' },
-      ],
+      pkgs: [{ name: 'chromedriver', version: '2.10.0' }],
     });
   });
 
@@ -167,7 +159,7 @@ describe('test/index.test.js', () => {
 
       const bytesPkg = await readJSON(path.join(root, 'node_modules', 'bytes', 'package.json'));
       assert.equal(bytesPkg._from, 'bytes@https://github.com/visionmedia/bytes.js.git');
-      assert(/git\+ssh\:\/\/git@github.com\/visionmedia\/bytes\.js\.git#\w+/.test(bytesPkg._resolved));
+      assert(/git\+ssh:\/\/git@github.com\/visionmedia\/bytes\.js\.git#\w+/.test(bytesPkg._resolved));
     });
   });
 });

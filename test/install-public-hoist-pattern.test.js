@@ -18,17 +18,15 @@ describe('test/install-public-hoist-pattern.test.js', () => {
   after(cleanup);
 
   it('should not hoist transitive deps by default', async () => {
-    await coffee.fork(helper.npminstall, [ '--ignore-scripts' ], { cwd, env })
-      .debug()
-      .expect('code', 0)
-      .end();
+    await coffee.fork(helper.npminstall, ['--ignore-scripts'], { cwd, env }).debug().expect('code', 0).end();
     assertFile(rootModule('eslint-config-egg'));
     assertFile.fail(rootModule('eslint-plugin-eggache'));
     assertFile.fail(rootModule('ajv'));
   });
 
   it('should hoist packages matched by --public-hoist-pattern', async () => {
-    await coffee.fork(helper.npminstall, [ '--public-hoist-pattern=eslint' ], { cwd, env })
+    await coffee
+      .fork(helper.npminstall, ['--public-hoist-pattern=eslint'], { cwd, env })
       .debug()
       .expect('code', 0)
       .end();
@@ -37,7 +35,8 @@ describe('test/install-public-hoist-pattern.test.js', () => {
   });
 
   it('should hoist all packages with --dedup', async () => {
-    await coffee.fork(helper.npminstall, [ '--dedup', '--public-hoist-pattern=none' ], { cwd, env })
+    await coffee
+      .fork(helper.npminstall, ['--dedup', '--public-hoist-pattern=none'], { cwd, env })
       .debug()
       .expect('code', 0)
       .end();
@@ -46,28 +45,32 @@ describe('test/install-public-hoist-pattern.test.js', () => {
   });
 
   describe('config.np.publicHoistPattern in package.json', () => {
-    const [ tmp, cleanupTmp ] = helper.tmp();
+    const [tmp, cleanupTmp] = helper.tmp();
     const tmpModule = name => path.join(tmp, 'node_modules', name, 'package.json');
 
     beforeEach(async () => {
       await cleanupTmp();
       await fs.mkdir(tmp, { recursive: true });
-      await fs.writeFile(path.join(tmp, 'package.json'), JSON.stringify({
-        name: 'cfg', version: '1.0.0', dependencies: { debug: '2.6.9' }, config: { np: { publicHoistPattern: '^ms$' } },
-      }));
+      await fs.writeFile(
+        path.join(tmp, 'package.json'),
+        JSON.stringify({
+          name: 'cfg',
+          version: '1.0.0',
+          dependencies: { debug: '2.6.9' },
+          config: { np: { publicHoistPattern: '^ms$' } },
+        })
+      );
     });
     after(cleanupTmp);
 
     it('should hoist packages matched by config', async () => {
-      await coffee.fork(helper.npminstall, [], { cwd: tmp })
-        .debug()
-        .expect('code', 0)
-        .end();
+      await coffee.fork(helper.npminstall, [], { cwd: tmp }).debug().expect('code', 0).end();
       assertFile(tmpModule('ms'));
     });
 
     it('should prefer --public-hoist-pattern over config', async () => {
-      await coffee.fork(helper.npminstall, [ '--public-hoist-pattern=none' ], { cwd: tmp })
+      await coffee
+        .fork(helper.npminstall, ['--public-hoist-pattern=none'], { cwd: tmp })
         .debug()
         .expect('code', 0)
         .end();
@@ -75,10 +78,7 @@ describe('test/install-public-hoist-pattern.test.js', () => {
     });
 
     it('should read config when installing named packages', async () => {
-      await coffee.fork(helper.npminstall, [ 'debug@2.6.9' ], { cwd: tmp })
-        .debug()
-        .expect('code', 0)
-        .end();
+      await coffee.fork(helper.npminstall, ['debug@2.6.9'], { cwd: tmp }).debug().expect('code', 0).end();
       assertFile(tmpModule('debug'));
       assertFile(tmpModule('ms'));
     });

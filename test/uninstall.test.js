@@ -20,19 +20,21 @@ describe('test/uninstall.test.js', () => {
     await cleanup();
     const content = await fs.readFile(path.join(root, 'package.json.template'));
     await fs.writeFile(path.join(root, 'package.json'), content);
-    await coffee.fork(helper.npminstall, [], {
-      cwd: root,
-      stdio: 'pipe',
-    })
+    await coffee
+      .fork(helper.npminstall, [], {
+        cwd: root,
+        stdio: 'pipe',
+      })
       .end();
   });
   afterEach(cleanup);
 
   it('should uninstall ok', async () => {
-    await coffee.fork(npmuninstall, [ 'koa', 'pkg@1.0.0' ], {
-      cwd: root,
-      stdio: 'pipe',
-    })
+    await coffee
+      .fork(npmuninstall, ['koa', 'pkg@1.0.0'], {
+        cwd: root,
+        stdio: 'pipe',
+      })
       .end();
     assertFile.fail(path.join(root, 'node_modules/koa'));
     assertFile.fail(path.join(root, 'node_modules/pkg'));
@@ -41,10 +43,11 @@ describe('test/uninstall.test.js', () => {
   });
 
   it('should uninstall --save', async () => {
-    await coffee.fork(npmuninstall, [ 'pkg@1.0.0', '--save' ], {
-      cwd: root,
-      stdio: 'pipe',
-    })
+    await coffee
+      .fork(npmuninstall, ['pkg@1.0.0', '--save'], {
+        cwd: root,
+        stdio: 'pipe',
+      })
       .debug()
       .expect('code', 0)
       .end();
@@ -57,13 +60,14 @@ describe('test/uninstall.test.js', () => {
   });
 
   it('should prune package.json by default', async () => {
-    await coffee.fork(npmuninstall, [ 'pkg@1.0.0' ], {
-      cwd: root,
-      stdio: 'pipe',
-    })
+    await coffee
+      .fork(npmuninstall, ['pkg@1.0.0'], {
+        cwd: root,
+        stdio: 'pipe',
+      })
       .end();
     const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json')));
-    const depKeys = [ 'dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies' ];
+    const depKeys = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
     depKeys.forEach(key => assert(!pkg[key].pkg));
   });
 });

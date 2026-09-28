@@ -18,11 +18,8 @@ describe('test/peer.test.js', () => {
 
     // will fail on Windows, ignore it
     if (process.platform !== 'win32') {
-      it('should use ancestor\'s dependency for peerDependencies', async () => {
-        await coffee.fork(helper.npminstall, [], { cwd: tmp })
-          .debug()
-          .expect('code', 0)
-          .end();
+      it("should use ancestor's dependency for peerDependencies", async () => {
+        await coffee.fork(helper.npminstall, [], { cwd: tmp }).debug().expect('code', 0).end();
         let pkg = await getPkg(tmp, 'node_modules/antd-tools/package.json');
         assert(pkg);
         pkg = await getPkg(tmp, `node_modules/.store/antd-tools@${pkg.version}/node_modules/tslint/package.json`);
@@ -31,9 +28,15 @@ describe('test/peer.test.js', () => {
         assert(pkg.version === '2.1.6');
 
         pkg = await getPkg(tmp, 'node_modules/antd-tools/package.json');
-        pkg = await getPkg(tmp, `node_modules/.store/antd-tools@${pkg.version}/node_modules/gulp-typescript/package.json`);
+        pkg = await getPkg(
+          tmp,
+          `node_modules/.store/antd-tools@${pkg.version}/node_modules/gulp-typescript/package.json`
+        );
         assert(pkg);
-        pkg = await getPkg(tmp, `node_modules/.store/gulp-typescript@${pkg.version}/node_modules/typescript/package.json`);
+        pkg = await getPkg(
+          tmp,
+          `node_modules/.store/gulp-typescript@${pkg.version}/node_modules/typescript/package.json`
+        );
         assert(pkg.version === '2.1.6');
 
         pkg = await getPkg(tmp, 'node_modules/antd-tools/package.json');
@@ -43,10 +46,7 @@ describe('test/peer.test.js', () => {
     }
 
     it('should ignore peerDependency if in dependencies', async () => {
-      await coffee.fork(helper.npminstall, [ 'react-countup@1.3.0' ], { cwd: tmp })
-        .debug()
-        .expect('code', 0)
-        .end();
+      await coffee.fork(helper.npminstall, ['react-countup@1.3.0'], { cwd: tmp }).debug().expect('code', 0).end();
       let pkg = await getPkg(tmp, 'node_modules/react-countup/package.json');
       assert(pkg.dependencies.react === '^15.3.2');
       assert(pkg.peerDependencies.react === '>=0.14.0');
@@ -61,10 +61,7 @@ describe('test/peer.test.js', () => {
     beforeEach(cleanup);
 
     it('should link peerDependency match with root too', async () => {
-      await coffee.fork(helper.npminstall, [], { cwd: tmp })
-        .debug()
-        .expect('code', 0)
-        .end();
+      await coffee.fork(helper.npminstall, [], { cwd: tmp }).debug().expect('code', 0).end();
       const pkg = await getPkg(tmp, 'node_modules/react-dom/package.json');
       assertFile(path.join(tmp, `node_modules/.store/react-dom@${pkg.version}/node_modules/react`));
       assertFile(path.join(tmp, 'node_modules/react-dom'));

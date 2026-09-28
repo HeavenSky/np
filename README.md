@@ -25,42 +25,42 @@ npm i -g easy-np
 
 ## 命令
 
-| 命令 | 上游对应 |
-| --- | --- |
-| `np` | `npminstall` |
-| `np-link` | `npmlink` |
+| 命令           | 上游对应       |
+| -------------- | -------------- |
+| `np`           | `npminstall`   |
+| `np-link`      | `npmlink`      |
 | `np-uninstall` | `npmuninstall` |
-| `np-update` | `npmupdate` |
+| `np-update`    | `npmupdate`    |
 
 全部参数见 `np --help`.
 
 ## 与上游的差异
 
-| 项 | 上游 8.0.1 | 本 fork |
-| --- | --- | --- |
-| `--dedup` | 无 | 把每个包的最新版本链接到 `<root>/node_modules`, 即 npminstall@6 的扁平效果; 优先级高于 `--public-hoist-pattern` |
-| 根目录提升 | 固定提升名称匹配 `/(eslint\|prettier\|babel)/i` 的包 | 默认不提升; 用 `--public-hoist-pattern=<regexp>` 或 `package.json` 的 `config.np.publicHoistPattern` 指定, 命令行优先 |
-| `--disable-fallback-store` | 可关闭 `.store/node_modules` 回退链接 | 移除, 回退链接始终建立 |
-| `--force-link-latest` | 显式开启才用更高版本覆盖根目录已有链接 | 移除, 提升时始终链接最高版本 |
-| `--proxy`, `npm_proxy`, `npm_config_proxy` | 声明支持, 但 urllib 3/4 不认 `proxy` 参数, 实际直连 | 移除 |
-| npm `strict-ssl` | 读取后作为 `rejectUnauthorized` 传给 `HttpClient.request`, urllib 3/4 均不认, 不生效 | 不再读取, HTTPS 证书始终校验 |
-| `--tarball-url-mapping` | 声明也改写重定向地址, 但 urllib 3/4 不支持 `formatRedirectUrl` | 只改写首个请求地址 |
-| `np-uninstall --ignore-scripts` | 声明但无作用 | 移除 |
-| 缓存目录 | `~/.npminstall_tarball` 下的 `manifests/` 与按包名拆分的多级 tarball 目录 | `~/.np_tarball` 下的 `np-manifests/<name>/<hash>.json`, `np-tgz/<name>/`, `np-tmp/<YYYYMMDD>/`; 不再自动清理过期临时目录 |
-| 缓存目录环境变量 | `npminstall_cache` | `np_cache`; `npm_config_cache` 两边都认 |
-| `package.json` 配置 | `config.npminstall` 的 `prune`, `env:production.prune`, `env:development.prune`, 只在不带包名安装时读取 | `config.np` 的 `publicHoistPattern`, `np` 与 `np <pkg>` 都读取; 移除 `prune` 与 `env:*` |
-| `--prune` | 解压时按固定名单跳过文件 | 移除; 名单含 `tsconfig.json`, `LICENSE`, `images/` 等, 会静默破坏 `@tsconfig/*` 这类包 |
-| 安装完成标记 | 包内 `package.json` 的 `__npminstall_done` | `__np_done`; 由上游装出的 `node_modules` 会被视为未完成, 切换时先删除 `node_modules` |
-| registry token | 附加到所有请求 | 只附加到与 registry 同 host 的请求 |
+| 项                                         | 上游 8.0.1                                                                                              | 本 fork                                                                                                                  |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `--dedup`                                  | 无                                                                                                      | 把每个包的最新版本链接到 `<root>/node_modules`, 即 npminstall@6 的扁平效果; 优先级高于 `--public-hoist-pattern`          |
+| 根目录提升                                 | 固定提升名称匹配 `/(eslint\|prettier\|babel)/i` 的包                                                    | 默认不提升; 用 `--public-hoist-pattern=<regexp>` 或 `package.json` 的 `config.np.publicHoistPattern` 指定, 命令行优先    |
+| `--disable-fallback-store`                 | 可关闭 `.store/node_modules` 回退链接                                                                   | 移除, 回退链接始终建立                                                                                                   |
+| `--force-link-latest`                      | 显式开启才用更高版本覆盖根目录已有链接                                                                  | 移除, 提升时始终链接最高版本                                                                                             |
+| `--proxy`, `npm_proxy`, `npm_config_proxy` | 声明支持, 但 urllib 3/4 不认 `proxy` 参数, 实际直连                                                     | 移除                                                                                                                     |
+| npm `strict-ssl`                           | 读取后作为 `rejectUnauthorized` 传给 `HttpClient.request`, urllib 3/4 均不认, 不生效                    | 不再读取, HTTPS 证书始终校验                                                                                             |
+| `--tarball-url-mapping`                    | 声明也改写重定向地址, 但 urllib 3/4 不支持 `formatRedirectUrl`                                          | 只改写首个请求地址                                                                                                       |
+| `np-uninstall --ignore-scripts`            | 声明但无作用                                                                                            | 移除                                                                                                                     |
+| 缓存目录                                   | `~/.npminstall_tarball` 下的 `manifests/` 与按包名拆分的多级 tarball 目录                               | `~/.np_tarball` 下的 `np-manifests/<name>/<hash>.json`, `np-tgz/<name>/`, `np-tmp/<YYYYMMDD>/`; 不再自动清理过期临时目录 |
+| 缓存目录环境变量                           | `npminstall_cache`                                                                                      | `np_cache`; `npm_config_cache` 两边都认                                                                                  |
+| `package.json` 配置                        | `config.npminstall` 的 `prune`, `env:production.prune`, `env:development.prune`, 只在不带包名安装时读取 | `config.np` 的 `publicHoistPattern`, `np` 与 `np <pkg>` 都读取; 移除 `prune` 与 `env:*`                                  |
+| `--prune`                                  | 解压时按固定名单跳过文件                                                                                | 移除; 名单含 `tsconfig.json`, `LICENSE`, `images/` 等, 会静默破坏 `@tsconfig/*` 这类包                                   |
+| 安装完成标记                               | 包内 `package.json` 的 `__npminstall_done`                                                              | `__np_done`; 由上游装出的 `node_modules` 会被视为未完成, 切换时先删除 `node_modules`                                     |
+| registry token                             | 附加到所有请求                                                                                          | 只附加到与 registry 同 host 的请求                                                                                       |
 
 ## 安装范围
 
-| 命令 | 安装内容 |
-| --- | --- |
-| `np` | 根 `package.json` 的全部依赖; workspace 模式下另含全部 workspace |
-| `np <pkg>` | 只安装 `<pkg>` 并写入 `package.json`; 不刷新其余已声明依赖, 不执行根包生命周期脚本 |
-| `np -w <name>` | 只安装指定 workspace, 不含根包自身依赖 |
-| `np --workspaces` | 安装全部 workspace, 不含根包自身依赖, 与 `npm install --workspaces` 一致 |
+| 命令              | 安装内容                                                                           |
+| ----------------- | ---------------------------------------------------------------------------------- |
+| `np`              | 根 `package.json` 的全部依赖; workspace 模式下另含全部 workspace                   |
+| `np <pkg>`        | 只安装 `<pkg>` 并写入 `package.json`; 不刷新其余已声明依赖, 不执行根包生命周期脚本 |
+| `np -w <name>`    | 只安装指定 workspace, 不含根包自身依赖                                             |
+| `np --workspaces` | 安装全部 workspace, 不含根包自身依赖, 与 `npm install --workspaces` 一致           |
 
 ## workspace
 

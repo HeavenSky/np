@@ -18,15 +18,11 @@ describe('test/install-with-lockfile.test.js', () => {
   // the Windows path sucks, shamefully skip these tests
   if (process.platform !== 'win32') {
     it('should install successfully', async () => {
-      await coffee.fork(
-        helper.npminstall,
-        [
-          '--lockfile-path',
-          path.join(cwd, 'package-lock.json'),
-        ], { cwd })
+      await coffee
+        .fork(helper.npminstall, ['--lockfile-path', path.join(cwd, 'package-lock.json')], { cwd })
         .debug()
         .expect('code', 0)
-        .notExpect('stdout', 'TypeError: Cannot read properties of undefined (reading \'ignoreOptionalDependencies\')')
+        .notExpect('stdout', "TypeError: Cannot read properties of undefined (reading 'ignoreOptionalDependencies')")
         .end();
       assert.strictEqual(
         await fs.readlink(path.join(cwd, 'node_modules', 'lodash.has3'), 'utf8'),
@@ -39,9 +35,13 @@ describe('test/install-with-lockfile.test.js', () => {
     });
 
     it('should convert package-lock.json to .dependencies-tree.json successfully', () => {
-      const dependenciesTree = lockfileConverter(lockfile, {
-        ignoreOptionalDependencies: true,
-      }, nested);
+      const dependenciesTree = lockfileConverter(
+        lockfile,
+        {
+          ignoreOptionalDependencies: true,
+        },
+        nested
+      );
 
       assert.strictEqual(Object.keys(dependenciesTree).length, 29);
     });

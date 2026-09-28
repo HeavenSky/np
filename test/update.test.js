@@ -10,20 +10,22 @@ describe('test/update.test.js', () => {
 
   beforeEach(async () => {
     await cleanup();
-    await coffee.fork(helper.npminstall, [], {
-      cwd,
-      stdio: 'pipe',
-    })
+    await coffee
+      .fork(helper.npminstall, [], {
+        cwd,
+        stdio: 'pipe',
+      })
       .debug()
       .end();
   });
   afterEach(cleanup);
 
   it('should update ok', async () => {
-    await coffee.fork(npmupdate, [], {
-      cwd,
-      stdio: 'pipe',
-    })
+    await coffee
+      .fork(npmupdate, [], {
+        cwd,
+        stdio: 'pipe',
+      })
       .debug()
       .end();
     assertFile(path.join(cwd, 'node_modules/pedding'));
@@ -31,10 +33,11 @@ describe('test/update.test.js', () => {
   });
 
   it('should update --clean-only', async () => {
-    await coffee.fork(npmupdate, [ '--clean-only' ], {
-      cwd,
-      stdio: 'pipe',
-    })
+    await coffee
+      .fork(npmupdate, ['--clean-only'], {
+        cwd,
+        stdio: 'pipe',
+      })
       .debug()
       .end();
     assertFile.fail(path.join(cwd, 'node_modules/pedding'));
@@ -42,10 +45,11 @@ describe('test/update.test.js', () => {
   });
 
   it('should update pedding ok', async () => {
-    await coffee.fork(npmupdate, [ 'pedding' ], {
-      cwd,
-      stdio: 'pipe',
-    })
+    await coffee
+      .fork(npmupdate, ['pedding'], {
+        cwd,
+        stdio: 'pipe',
+      })
       .debug()
       .end();
     assertFile(path.join(cwd, 'node_modules/pedding'));

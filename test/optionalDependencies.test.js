@@ -7,13 +7,10 @@ const helper = require('./helper');
 describe('test/optionalDependencies.test.js', () => {
   const root = helper.fixtures('optional');
   const cleanupModules = helper.cleanup(root);
-  const [ tmp, cleanupTmp ] = helper.tmp();
+  const [tmp, cleanupTmp] = helper.tmp();
 
   async function cleanup() {
-    await Promise.all([
-      cleanupModules(),
-      cleanupTmp(),
-    ]);
+    await Promise.all([cleanupModules(), cleanupTmp()]);
   }
 
   beforeEach(cleanup);
@@ -22,9 +19,7 @@ describe('test/optionalDependencies.test.js', () => {
   it('should install optionalDependencies', async () => {
     await npminstall({
       root: tmp,
-      pkgs: [
-        { name: 'koa-redis', version: '3.1.0' },
-      ],
+      pkgs: [{ name: 'koa-redis', version: '3.1.0' }],
     });
     const pkg = await helper.readJSON(path.join(tmp, 'node_modules/koa-redis/package.json'));
     assert(pkg.optionalDependencies.hiredis);
@@ -44,7 +39,9 @@ describe('test/optionalDependencies.test.js', () => {
     // less should exists
     const pkg = await helper.readJSON(path.join(root, 'node_modules/less/package.json'));
     assert(pkg.optionalDependencies.mkdirp);
-    const pkg2 = await helper.readJSON(path.join(root, `node_modules/.store/less@${pkg.version}/node_modules/mkdirp/package.json`));
+    const pkg2 = await helper.readJSON(
+      path.join(root, `node_modules/.store/less@${pkg.version}/node_modules/mkdirp/package.json`)
+    );
     assert.equal(pkg2.name, 'mkdirp');
   });
 });

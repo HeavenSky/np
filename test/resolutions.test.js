@@ -23,13 +23,16 @@ describe('test/resolutions.test.js', () => {
     afterEach(cleanup);
 
     it('should install error', () => {
-      return coffee.fork(helper.npminstall, {
-        cwd: root,
-      })
-        // .debug()
-        .expect('code', 1)
-        .expect('stderr', /resolution package foo\/\*\* format error/)
-        .end();
+      return (
+        coffee
+          .fork(helper.npminstall, {
+            cwd: root,
+          })
+          // .debug()
+          .expect('code', 1)
+          .expect('stderr', /resolution package foo\/\*\* format error/)
+          .end()
+      );
     });
   });
 
@@ -41,13 +44,16 @@ describe('test/resolutions.test.js', () => {
     afterEach(cleanup);
 
     it('should install error', () => {
-      return coffee.fork(helper.npminstall, {
-        cwd: root,
-      })
-        // .debug()
-        .expect('code', 1)
-        .expect('stderr', /resolution package foo\/bar-\* format error/)
-        .end();
+      return (
+        coffee
+          .fork(helper.npminstall, {
+            cwd: root,
+          })
+          // .debug()
+          .expect('code', 1)
+          .expect('stderr', /resolution package foo\/bar-\* format error/)
+          .end()
+      );
     });
   });
 
@@ -59,9 +65,10 @@ describe('test/resolutions.test.js', () => {
     afterEach(cleanup);
 
     it('should work', async () => {
-      await coffee.fork(helper.npminstall, {
-        cwd: root,
-      })
+      await coffee
+        .fork(helper.npminstall, {
+          cwd: root,
+        })
         // .debug()
         .expect('code', 0)
         .end();
@@ -83,15 +90,22 @@ describe('test/resolutions.test.js', () => {
     afterEach(cleanup);
 
     it('should work', async () => {
-      await coffee.fork(helper.npminstall, {
-        cwd: root,
-      })
+      await coffee
+        .fork(helper.npminstall, {
+          cwd: root,
+        })
         .debug()
         .expect('code', 0)
         .end();
 
       const pkgJSON1 = require(path.join(root, 'node_modules', 'object-pipeline/package.json'));
-      const pkgJSON = require(path.join(root, 'node_modules', `.store/object-pipeline@${pkgJSON1.version}/node_modules/lodash.has/package.json`));
+      const pkgJSON = require(
+        path.join(
+          root,
+          'node_modules',
+          `.store/object-pipeline@${pkgJSON1.version}/node_modules/lodash.has/package.json`
+        )
+      );
       assert.strictEqual(pkgJSON.name, 'lodash.get');
       assert.strictEqual(pkgJSON.version, '4.4.2');
     });

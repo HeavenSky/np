@@ -25,12 +25,14 @@ describe('test/production.test.js', () => {
   });
 
   it('should show detail and check node_modules dir on production mode', async () => {
-    await coffee.fork(helper.npminstall, [ '--production' ], { cwd })
+    await coffee
+      .fork(helper.npminstall, ['--production'], { cwd })
       .expect('code', 0)
       .expect('stdout', /installed at node_modules/)
       .end();
     // again
-    await coffee.fork(helper.npminstall, [ '--production' ], { cwd })
+    await coffee
+      .fork(helper.npminstall, ['--production'], { cwd })
       .debug()
       .expect('code', 0)
       .expect('stdout', /koa@\* is skipped because it already exists at/)

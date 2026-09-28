@@ -12,7 +12,8 @@ describe('test/install-vscode.test.js', () => {
   afterEach(cleanup);
 
   it('should install vscode version on dependencies', async () => {
-    await coffee.fork(helper.npminstall, [ '-c', '-d' ], { cwd, env: { NP_TEST_LOCAL_PKG: '1' } })
+    await coffee
+      .fork(helper.npminstall, ['-c', '-d'], { cwd, env: { NP_TEST_LOCAL_PKG: '1' } })
       .debug()
       .expect('code', 0)
       .expect('stdout', /All packages installed/)

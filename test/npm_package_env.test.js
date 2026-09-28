@@ -17,9 +17,10 @@ describe('test/npm_package_env.test.js', () => {
   afterEach(cleanup);
 
   it('should set npm_package_* env on preinstall, postinstall', async () => {
-    await coffee.fork(helper.npminstall, [], {
-      cwd: root,
-    })
+    await coffee
+      .fork(helper.npminstall, [], {
+        cwd: root,
+      })
       .debug()
       .expect('code', 0)
       .end();
@@ -33,6 +34,9 @@ describe('test/npm_package_env.test.js', () => {
     assert(postinstallEnv.npm_package_engines_foo_bar_0 === '1111');
     assert(postinstallEnv.npm_package_greenkeeper_ignore_0 === 'glob');
     assert(postinstallEnv.npm_package_greenkeeper_ignore_4 === 'showdown-ghost');
-    assert(postinstallEnv.npm_config_user_agent === `easy-np/${pkg.version} npm/? node/${process.version} ${process.platform} ${process.arch}`);
+    assert(
+      postinstallEnv.npm_config_user_agent ===
+        `easy-np/${pkg.version} npm/? node/${process.version} ${process.platform} ${process.arch}`
+    );
   });
 });

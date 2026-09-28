@@ -18,9 +18,10 @@ describe('test/seperate-dependencies.test.js', () => {
   afterEach(cleanup);
 
   it('should install all', async () => {
-    await coffee.fork(helper.npminstall, [], {
-      cwd,
-    })
+    await coffee
+      .fork(helper.npminstall, [], {
+        cwd,
+      })
       .debug()
       .expect('code', 0)
       .end();
@@ -32,9 +33,10 @@ describe('test/seperate-dependencies.test.js', () => {
   });
 
   it('should install production', async () => {
-    await coffee.fork(helper.npminstall, [ '--production' ], {
-      cwd,
-    })
+    await coffee
+      .fork(helper.npminstall, ['--production'], {
+        cwd,
+      })
       .end();
     await checkPkg('koa', '1.0.0');
     await checkPkg('mocha', undefined);
@@ -44,9 +46,10 @@ describe('test/seperate-dependencies.test.js', () => {
   });
 
   it('should install client', async () => {
-    await coffee.fork(helper.npminstall, [ '--client', '--prodcution' ], {
-      cwd,
-    })
+    await coffee
+      .fork(helper.npminstall, ['--client', '--prodcution'], {
+        cwd,
+      })
       .end();
     await checkPkg('koa', undefined);
     await checkPkg('mocha', undefined);

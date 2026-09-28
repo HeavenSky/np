@@ -6,13 +6,16 @@ const helper = require('./helper');
 const npminstall = require('./npminstall');
 
 describe('test/installScopeRegistry.test.js', () => {
-  const [ tmp, cleanup ] = helper.tmp();
+  const [tmp, cleanup] = helper.tmp();
   let mockCnpmrc;
 
   before(() => {
     mockCnpmrc = path.join(__dirname, './fixtures/scope/');
     if (!fs.existsSync(mockCnpmrc + '.cnpmrc')) {
-      fs.writeFileSync(mockCnpmrc + '.cnpmrc', '@starthubit:registry=https://registry-mock.org/\n@rstacruz:registry=https://mirrors.huaweicloud.com/repository/npm/\n');
+      fs.writeFileSync(
+        mockCnpmrc + '.cnpmrc',
+        '@starthubit:registry=https://registry-mock.org/\n@rstacruz:registry=https://mirrors.huaweicloud.com/repository/npm/\n'
+      );
     }
     mm(process.env, 'HOME', mockCnpmrc);
     mm(process.env, 'USERPROFILE', mockCnpmrc);
@@ -29,9 +32,7 @@ describe('test/installScopeRegistry.test.js', () => {
   it('should install scope package with huawei available scope registry', async () => {
     await npminstall({
       root: tmp,
-      pkgs: [
-        { name: '@rstacruz/tap-spec', version: '~4.1.0' },
-      ],
+      pkgs: [{ name: '@rstacruz/tap-spec', version: '~4.1.0' }],
     });
     const pkg = await helper.readJSON(path.join(tmp, 'node_modules/@rstacruz/tap-spec/package.json'));
     assert(pkg.version === '4.1.1');
@@ -41,9 +42,7 @@ describe('test/installScopeRegistry.test.js', () => {
     try {
       await npminstall({
         root: tmp,
-        pkgs: [
-          { name: '@starthubit/npm-test-pkg', version: '~0.0.2' },
-        ],
+        pkgs: [{ name: '@starthubit/npm-test-pkg', version: '~0.0.2' }],
       });
     } catch (err) {
       assert(err.name === 'RequestError');

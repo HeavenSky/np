@@ -1,10 +1,7 @@
 const Nested = require('../lib/nested');
 const assert = require('node:assert');
 
-const mockPkgs = [
-  'a@1.0.0',
-  'b@2.0.0',
-];
+const mockPkgs = ['a@1.0.0', 'b@2.0.0'];
 
 describe('test/nested.test.js', () => {
   it('should nested success, when pkgs is Array', () => {
@@ -14,9 +11,8 @@ describe('test/nested.test.js', () => {
 
   it('should nested success, when update', () => {
     const nested = new Nested(mockPkgs);
-    nested.update([ 'c@3.0.0' ]);
+    nested.update(['c@3.0.0']);
     assert.strictEqual(nested.showPath('c@3.0.0'), 'root › c@3.0.0');
-
   });
 
   it('should showPath sucess', () => {
@@ -33,6 +29,5 @@ describe('test/nested.test.js', () => {
     nested.depMap.set('b@^1', 'c@^1');
     nested.depMap.set('c@^1', 'a@^1');
     assert.strictEqual(nested.showPath('a@^1'), 'c@^1 › b@^1 › a@^1');
-
   });
 });

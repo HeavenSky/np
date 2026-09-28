@@ -20,9 +20,10 @@ describe('test/link-module.test.js', () => {
   afterEach(cleanup);
 
   it('should link debug work', async () => {
-    await coffee.fork(npmlink, [ 'debug', `--prefix=${globalRoot}` ], {
-      cwd: root,
-    })
+    await coffee
+      .fork(npmlink, ['debug', `--prefix=${globalRoot}`], {
+        cwd: root,
+      })
       .debug()
       .end();
 
@@ -31,9 +32,10 @@ describe('test/link-module.test.js', () => {
   });
 
   it('should link debug@semver work', async () => {
-    await coffee.fork(npmlink, [ 'debug@~2.2.0', `--prefix=${globalRoot}` ], {
-      cwd: root,
-    })
+    await coffee
+      .fork(npmlink, ['debug@~2.2.0', `--prefix=${globalRoot}`], {
+        cwd: root,
+      })
       .debug()
       .end();
 
@@ -41,9 +43,10 @@ describe('test/link-module.test.js', () => {
     assert(existsSync(path.join(globalTarget, 'node_modules/debug')));
     assert(readJSON(path.join(root, 'node_modules/debug/package.json')).version === '2.2.0');
 
-    await coffee.fork(npmlink, [ 'debug@1.0.0', `--prefix=${globalRoot}` ], {
-      cwd: root,
-    })
+    await coffee
+      .fork(npmlink, ['debug@1.0.0', `--prefix=${globalRoot}`], {
+        cwd: root,
+      })
       .debug()
       .end();
 
@@ -51,9 +54,10 @@ describe('test/link-module.test.js', () => {
     assert(existsSync(path.join(globalTarget, 'node_modules/debug')));
     assert(readJSON(path.join(root, 'node_modules/debug/package.json')).version === '1.0.0');
 
-    await coffee.fork(npmlink, [ 'debug', `--prefix=${globalRoot}` ], {
-      cwd: root,
-    })
+    await coffee
+      .fork(npmlink, ['debug', `--prefix=${globalRoot}`], {
+        cwd: root,
+      })
       .debug()
       .end();
 
@@ -61,9 +65,10 @@ describe('test/link-module.test.js', () => {
     assert(existsSync(path.join(globalTarget, 'node_modules/debug')));
     assert(readJSON(path.join(root, 'node_modules/debug/package.json')).version === '1.0.0');
 
-    await coffee.fork(npmlink, [ 'debug@latest', `--prefix=${globalRoot}` ], {
-      cwd: root,
-    })
+    await coffee
+      .fork(npmlink, ['debug@latest', `--prefix=${globalRoot}`], {
+        cwd: root,
+      })
       .debug()
       .end();
 

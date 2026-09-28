@@ -14,7 +14,8 @@ describe('test/install-production.test.js', () => {
     after(() => cleanup(cwd));
 
     it('should warning node_modules exists on production', () => {
-      return coffee.fork(helper.npminstall, [ '--production' ], { cwd })
+      return coffee
+        .fork(helper.npminstall, ['--production'], { cwd })
         .debug()
         .expect('code', 0)
         .expect('stderr', /np WARN node_modules exists/)
@@ -29,7 +30,8 @@ describe('test/install-production.test.js', () => {
     after(() => cleanup(cwd));
 
     it('should ignore [ .bin, node ] node_modules', () => {
-      return coffee.fork(helper.npminstall, [ '--production' ], { cwd })
+      return coffee
+        .fork(helper.npminstall, ['--production'], { cwd })
         .debug()
         .expect('code', 0)
         .notExpect('stderr', /np WARN node_modules exists/)

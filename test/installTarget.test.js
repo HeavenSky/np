@@ -5,7 +5,7 @@ const helper = require('./helper');
 const npminstall = require('./npminstall');
 
 describe('test/installTarget.test.js', () => {
-  const [ tmp, cleanup ] = helper.tmp();
+  const [tmp, cleanup] = helper.tmp();
 
   beforeEach(cleanup);
   afterEach(cleanup);

@@ -6,7 +6,7 @@ const coffee = require('coffee');
 const helper = require('./helper');
 
 describe('test/install-workspaces-edge.test.js', () => {
-  const [ tmp, cleanup ] = helper.tmp();
+  const [tmp, cleanup] = helper.tmp();
 
   beforeEach(cleanup);
   afterEach(cleanup);
@@ -31,9 +31,13 @@ describe('test/install-workspaces-edge.test.js', () => {
 
   async function workspace(packages, rootPkg = {}) {
     await writeJSON(path.join(tmp, 'package.json'), {
-      name: 'root', version: '1.0.0', private: true, workspaces: Object.keys(packages), ...rootPkg,
+      name: 'root',
+      version: '1.0.0',
+      private: true,
+      workspaces: Object.keys(packages),
+      ...rootPkg,
     });
-    for (const [ dir, pkg ] of Object.entries(packages)) {
+    for (const [dir, pkg] of Object.entries(packages)) {
       await writeJSON(path.join(tmp, dir, 'package.json'), { version: '1.0.0', ...pkg });
     }
   }
@@ -42,7 +46,7 @@ describe('test/install-workspaces-edge.test.js', () => {
     await workspace({ 'packages/a': { name: 'pkg-a' } });
     await fs.mkdir(path.join(tmp, 'node_modules/pkg-a'), { recursive: true });
     await fs.writeFile(path.join(tmp, 'node_modules/pkg-a/marker.txt'), 'keep');
-    await run(helper.npminstall, [ '-g', 'ms@2.1.3', `--prefix=${path.join(tmp, 'gprefix')}` ])
+    await run(helper.npminstall, ['-g', 'ms@2.1.3', `--prefix=${path.join(tmp, 'gprefix')}`])
       .expect('code', 0)
       .end();
     assert.equal(await fs.readFile(path.join(tmp, 'node_modules/pkg-a/marker.txt'), 'utf8'), 'keep');
@@ -51,7 +55,7 @@ describe('test/install-workspaces-edge.test.js', () => {
   it('should reject --lockfile-path in workspaces', async () => {
     await workspace({ 'packages/a': { name: 'pkg-a', dependencies: { ms: '^2.0.0' } } });
     await writeJSON(path.join(tmp, 'package-lock.json'), { lockfileVersion: 3, packages: {} });
-    await run(helper.npminstall, [ `--lockfile-path=${path.join(tmp, 'package-lock.json')}` ])
+    await run(helper.npminstall, [`--lockfile-path=${path.join(tmp, 'package-lock.json')}`])
       .expect('code', 1)
       .expect('stderr', /--lockfile-path is not supported with npm workspaces/)
       .end();
@@ -63,7 +67,7 @@ describe('test/install-workspaces-edge.test.js', () => {
       'packages/y': { name: 'pkg-y', dependencies: { pedding: '1.1.0' } },
     });
     await run(helper.npminstall).expect('code', 0).end();
-    await run(helper.npmupdate, [ '-w', 'pkg-x' ]).expect('code', 0).end();
+    await run(helper.npmupdate, ['-w', 'pkg-x']).expect('code', 0).end();
     assert.equal(require(path.join(tmp, 'packages/y/node_modules/pedding/package.json')).version, '1.1.0');
     assert.equal(require(path.join(tmp, 'packages/x/node_modules/ms/package.json')).version, '2.1.3');
   });
@@ -71,22 +75,27 @@ describe('test/install-workspaces-edge.test.js', () => {
   describe('sortWorkspacesByDependencies', () => {
     const { sortWorkspacesByDependencies } = require('../lib/utils');
     const info = (name, deps = []) => ({
-      package: { name, dependencies: Object.fromEntries(deps.map(dep => [ dep, '*' ])) },
+      package: { name, dependencies: Object.fromEntries(deps.map(dep => [dep, '*'])) },
     });
-    const permutations = arr => (arr.length <= 1 ? [ arr ] :
-      arr.flatMap((item, i) => permutations([ ...arr.slice(0, i), ...arr.slice(i + 1) ]).map(rest => [ item, ...rest ])));
+    const permutations = arr =>
+      arr.length <= 1
+        ? [arr]
+        : arr.flatMap((item, i) =>
+            permutations([...arr.slice(0, i), ...arr.slice(i + 1)]).map(rest => [item, ...rest])
+          );
 
     it('should always put dependencies before dependents', () => {
       const graphs = [
-        { a: [ 'b' ], b: [ 'c' ], c: [] },
-        { a: [], b: [], c: [], d: [ 'a' ] },
-        { a: [ 'b', 'c' ], b: [ 'd' ], c: [ 'd' ], d: [] },
+        { a: ['b'], b: ['c'], c: [] },
+        { a: [], b: [], c: [], d: ['a'] },
+        { a: ['b', 'c'], b: ['d'], c: ['d'], d: [] },
       ];
       for (const graph of graphs) {
         for (const order of permutations(Object.keys(graph))) {
-          const sorted = sortWorkspacesByDependencies(order.map(name => info(name, graph[name])))
-            .map(item => item.package.name);
-          for (const [ name, deps ] of Object.entries(graph)) {
+          const sorted = sortWorkspacesByDependencies(order.map(name => info(name, graph[name]))).map(
+            item => item.package.name
+          );
+          for (const [name, deps] of Object.entries(graph)) {
             for (const dep of deps) {
               assert(sorted.indexOf(dep) < sorted.indexOf(name), `${order} => ${sorted}: ${dep} should before ${name}`);
             }
@@ -97,8 +106,8 @@ describe('test/install-workspaces-edge.test.js', () => {
 
     it('should keep original order without dependencies and on cycles', () => {
       const names = infos => sortWorkspacesByDependencies(infos).map(item => item.package.name);
-      assert.deepEqual(names([ info('b'), info('a'), info('c') ]), [ 'b', 'a', 'c' ]);
-      assert.deepEqual(names([ info('x'), info('a', [ 'b' ]), info('b', [ 'a' ]) ]), [ 'x', 'a', 'b' ]);
+      assert.deepEqual(names([info('b'), info('a'), info('c')]), ['b', 'a', 'c']);
+      assert.deepEqual(names([info('x'), info('a', ['b']), info('b', ['a'])]), ['x', 'a', 'b']);
     });
   });
 
@@ -121,11 +130,14 @@ describe('test/install-workspaces-edge.test.js', () => {
       'packages/b': { name: 'pkg-b' },
       'packages/c': { name: 'pkg-c' },
     });
-    await run(helper.npminstall, [ '-d' ])
+    await run(helper.npminstall, ['-d'])
       .expect('code', 0)
       .expect('stdout', /pkg-b@\* is skipped because it resolves to the local workspace:/)
       .end();
-    assert.equal(await fs.realpath(path.join(tmp, 'node_modules/pkg-b')), await fs.realpath(path.join(tmp, 'packages/b')));
+    assert.equal(
+      await fs.realpath(path.join(tmp, 'node_modules/pkg-b')),
+      await fs.realpath(path.join(tmp, 'packages/b'))
+    );
   });
 
   it('should fail when a workspace: dependency has no matching workspace', async () => {
@@ -149,9 +161,16 @@ describe('test/install-workspaces-edge.test.js', () => {
 
   describe('peerDependencies', () => {
     async function peerWorkspace(rootDependencies) {
-      await writeJSON(path.join(tmp, 'vendor/c/package.json'), { name: 'c', version: '1.0.0', peerDependencies: { p: '^1.0.0' } });
+      await writeJSON(path.join(tmp, 'vendor/c/package.json'), {
+        name: 'c',
+        version: '1.0.0',
+        peerDependencies: { p: '^1.0.0' },
+      });
       await writeJSON(path.join(tmp, 'vendor/p/package.json'), { name: 'p', version: '1.0.0' });
-      await workspace({ 'packages/a': { name: 'pkg-a', dependencies: { c: 'file:../../vendor/c' } } }, { dependencies: rootDependencies });
+      await workspace(
+        { 'packages/a': { name: 'pkg-a', dependencies: { c: 'file:../../vendor/c' } } },
+        { dependencies: rootDependencies }
+      );
     }
 
     it('should not warn when the peer is provided by workspace root', async () => {
@@ -179,9 +198,9 @@ describe('test/install-workspaces-edge.test.js', () => {
         'packages/x': { name: 'pkg-x', dependencies: { pedding: '1.1.0' } },
         'packages/y': { name: 'pkg-y' },
       });
-      await run(helper.npminstall, [ '--dedup' ]).expect('code', 0).end();
+      await run(helper.npminstall, ['--dedup']).expect('code', 0).end();
       assert(await exists(rootLink('pedding')));
-      await run(helper.npmuninstall, [ 'pedding', '-w', 'pkg-x' ]).expect('code', 0).end();
+      await run(helper.npmuninstall, ['pedding', '-w', 'pkg-x']).expect('code', 0).end();
       assert(!(await exists(rootLink('pedding'))));
     });
 
@@ -190,8 +209,8 @@ describe('test/install-workspaces-edge.test.js', () => {
         'packages/x': { name: 'pkg-x', dependencies: { pedding: '1.1.0' } },
         'packages/y': { name: 'pkg-y', dependencies: { pedding: '1.1.0' } },
       });
-      await run(helper.npminstall, [ '--dedup' ]).expect('code', 0).end();
-      await run(helper.npmuninstall, [ 'pedding', '-w', 'pkg-x' ]).expect('code', 0).end();
+      await run(helper.npminstall, ['--dedup']).expect('code', 0).end();
+      await run(helper.npmuninstall, ['pedding', '-w', 'pkg-x']).expect('code', 0).end();
       assert(await exists(rootLink('pedding')));
     });
 
@@ -200,15 +219,15 @@ describe('test/install-workspaces-edge.test.js', () => {
         'packages/x': { name: 'pkg-x', dependencies: { ms: '2.1.3' } },
         'packages/y': { name: 'pkg-y', dependencies: { debug: '4.4.3' } },
       });
-      await run(helper.npminstall, [ '--dedup' ]).expect('code', 0).end();
-      await run(helper.npmuninstall, [ 'ms', '-w', 'pkg-x' ]).expect('code', 0).end();
+      await run(helper.npminstall, ['--dedup']).expect('code', 0).end();
+      await run(helper.npmuninstall, ['ms', '-w', 'pkg-x']).expect('code', 0).end();
       assert(await exists(rootLink('ms')));
     });
   });
 
   it('should fail when the lockfile can not be loaded', async () => {
     await writeJSON(path.join(tmp, 'package.json'), { name: 'r', version: '1.0.0', dependencies: { ms: '2.1.3' } });
-    await run(helper.npminstall, [ `--lockfile-path=${path.join(tmp, 'missing-lock.json')}` ])
+    await run(helper.npminstall, [`--lockfile-path=${path.join(tmp, 'missing-lock.json')}`])
       .expect('code', 1)
       .expect('stderr', /load lockfile from .*missing-lock\.json error/)
       .end();
