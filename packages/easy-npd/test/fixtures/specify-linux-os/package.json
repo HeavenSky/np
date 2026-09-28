@@ -1,0 +1,10 @@
+{
+  "name": "test-os-linux",
+  "dependencies": {
+    "test-os-linux": "*"
+  },
+  "scripts": {
+    "postinstall": "node index.js"
+  },
+  "__npminstall_done": false
+}

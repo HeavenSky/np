@@ -1,0 +1,9 @@
+{
+  "name": "optional-dep-posinstall",
+  "optionalDependencies": {
+    "httpsync": "*"
+  },
+  "dependencies": {
+    "shameimaru": "^1.0.2"
+  }
+}
