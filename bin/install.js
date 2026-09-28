@@ -52,6 +52,7 @@ Object.assign(argv, parseArgs(originalArgv, {
      * 5. you're not supposed to install extra dependencies along with a lockfile.
      */
     'lockfile-path',
+    'public-hoist-pattern',
   ],
   boolean: [
     'version',
@@ -81,8 +82,6 @@ Object.assign(argv, parseArgs(originalArgv, {
     'cache-strict',
     'fix-bug-versions',
     'prune',
-    // don't link latest version to <root>/node_modules/.store/node_modules
-    'disable-fallback-store',
     'save-dependencies-tree',
     'force-link-latest',
     'workspaces',
@@ -161,6 +160,7 @@ Options:
   --prune: prune unnecessary files from ./node_modules, such as markdown, typescript source files, and so on.
   --dependencies-tree: install with dependencies tree to restore the last install.
   --force-link-latest: force link latest version package to module root path.
+  --public-hoist-pattern: regexp of package names to link into <root>/node_modules, fallback to 'np-public-hoist-pattern' in .npmrc, default is none.
   --offline: offline mode. If a package won't be found locally, the installation will fail.
 `
   );
@@ -313,7 +313,7 @@ debug('argv: %j, env: %j', argv, env);
     flatten,
     proxy,
     prune,
-    disableFallbackStore: argv['disable-fallback-store'],
+    publicHoistPattern: argv['public-hoist-pattern'] || globalConfig.npmrc['np-public-hoist-pattern'],
     workspacesMap,
     // don't enable workspace on global install
     enableWorkspace,

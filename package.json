@@ -9,10 +9,10 @@
     "node-gyp-bin"
   ],
   "bin": {
-    "npminstall": "bin/install.js",
-    "npmlink": "bin/link.js",
-    "npmuninstall": "bin/uninstall.js",
-    "npmupdate": "bin/update.js"
+    "np8": "bin/install.js",
+    "np8-link": "bin/link.js",
+    "np8-uninstall": "bin/uninstall.js",
+    "np8-update": "bin/update.js"
   },
   "scripts": {
     "test": "npm run lint && egg-bin test -t 2000000 -p",
