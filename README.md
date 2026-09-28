@@ -37,15 +37,20 @@ npm i -g github:HeavenSky/np#np
 | `--dedup` | 无 | 把每个包的最新版本链接到 `<root>/node_modules`, 即 npminstall@6 的扁平效果; 优先级高于 `--public-hoist-pattern` |
 | 根目录提升 | 固定提升名称匹配 `/(eslint\|prettier\|babel)/i` 的包 | 默认不提升; 用 `--public-hoist-pattern=<regexp>` 或 `.npmrc` 的 `np-public-hoist-pattern` 指定 |
 | `--disable-fallback-store` | 可关闭 `.store/node_modules` 回退链接 | 移除, 回退链接始终建立 |
-| 缓存目录 | `manifests/` 与按包名拆分的多级 tarball 目录 | `np-manifests/`, `np-tgz/<name>/`, `np-tmp/<YYYYMMDD>/`; 不再自动清理过期临时目录 |
+| 缓存目录 | `~/.npminstall_tarball` 下的 `manifests/` 与按包名拆分的多级 tarball 目录 | `~/.np_tarball` 下的 `np-manifests/`, `np-tgz/<name>/`, `np-tmp/<YYYYMMDD>/`; 不再自动清理过期临时目录 |
+| 缓存目录环境变量 | `npminstall_cache` | `np_cache`; `npm_config_cache` 两边都认 |
+| `package.json` 配置 | `config.npminstall` | `config.np` |
+| 安装完成标记 | 包内 `package.json` 的 `__npminstall_done` | `__np_done`; 由上游装出的 `node_modules` 会被视为未完成, 切换时先删除 `node_modules` |
 | registry token | 附加到所有请求 | 只附加到与 registry 同 host 的请求 |
 
 ## node_modules 布局
 
 - 包实体位于 `node_modules/.store/<name>@<version>/node_modules/<name>`, 依赖以同级符号链接放在同一 `node_modules` 下.
 - 每个包的最新版本链接到 `node_modules/.store/node_modules`, 供 peerDependencies 回退解析.
-- 根目录只放直接依赖与被提升的包; 已存在的链接不覆盖, 需要更新时加 `--force-link-latest` 或删除 `node_modules` 后重装.
-- workspace 模式下开启 `--dedup` 时, 各 workspace 包按安装顺序向 workspace 根提升, 先装者生效, 根目录中的传递依赖版本取决于安装顺序.
+- 根目录只放直接依赖与被提升的包.
+- 被提升的包取本次安装涉及的全部依赖树(workspace 模式下含所有被安装的 workspace 包)中的最高版本, 与安装顺序无关; 重装时指向 `.store` 的旧链接会被更新.
+- 根目录 `package.json` 声明的依赖保持声明版本, workspace 包自身的链接不被覆盖; 其余不指向 `.store` 的目录或链接只在加 `--force-link-latest` 且版本更高时覆盖.
+- 本次安装未涉及的包名保留上次的链接.
 
 ## resolutions
 
