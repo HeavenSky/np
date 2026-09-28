@@ -9,10 +9,10 @@
     "node-gyp-bin"
   ],
   "bin": {
-    "np6": "bin/install.js",
-    "np6-link": "bin/link.js",
-    "np6-uninstall": "bin/uninstall.js",
-    "np6-update": "bin/update.js"
+    "npd": "bin/install.js",
+    "npd-link": "bin/link.js",
+    "npd-uninstall": "bin/uninstall.js",
+    "npd-update": "bin/update.js"
   },
   "scripts": {
     "contributor": "git-contributor",
@@ -64,13 +64,14 @@
     "oxfmt": "^0.70.0",
     "oxlint": "^1.85.0"
   },
-  "homepage": "https://github.com/cnpm/npminstall",
+  "homepage": "https://github.com/HeavenSky/np/tree/main/packages/easy-npd#readme",
   "repository": {
     "type": "git",
-    "url": "git://github.com/cnpm/npminstall.git"
+    "url": "git+https://github.com/HeavenSky/np.git",
+    "directory": "packages/easy-npd"
   },
   "bugs": {
-    "url": "https://github.com/cnpm/npminstall/issues"
+    "url": "https://github.com/HeavenSky/np/issues"
   },
   "publishConfig": {
     "tag": "latest-6"

@@ -5,7 +5,7 @@ const utils = require('./utils');
 module.exports = postinstall;
 
 // @see https://docs.npmjs.com/misc/scripts
-// npminstall will collect all install & postinstall scripts,
+// npd will collect all install & postinstall scripts,
 // and run these scripts until all dependencies installed
 // node-gyp rebuild don't dependent on other packages, so we can run it immediately
 async function postinstall(pkg, root, optional, displayName, options) {
@@ -17,14 +17,14 @@ async function postinstall(pkg, root, optional, displayName, options) {
   // npm will default the install command to compile using node-gyp.
   if (!scripts.install && (await utils.exists(path.join(root, 'binding.gyp')))) {
     options.console.warn(
-      '[npminstall:runscript] %s found binding.gyp file, auto run "node-gyp rebuild", root: %j',
+      '[npd:runscript] %s found binding.gyp file, auto run "node-gyp rebuild", root: %j',
       chalk.gray(displayName), root
     );
     const cmd = 'node-gyp rebuild';
     try {
       await utils.runScript(root, cmd, options);
     } catch (err) {
-      options.console.warn('[npminstall:runscript:error] %s has binding.gyp file, run %j error: %s',
+      options.console.warn('[npd:runscript:error] %s has binding.gyp file, run %j error: %s',
         chalk.red(displayName), cmd, err);
       throw err;
     }

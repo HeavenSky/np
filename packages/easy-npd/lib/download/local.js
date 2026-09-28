@@ -1,6 +1,6 @@
 'use strict';
 
-const debug = require('debug')('npminstall:download:local');
+const debug = require('debug')('npd:download:local');
 const { randomUUID } = require('crypto');
 const fs = require('fs/promises');
 const { createReadStream } = require('fs');
@@ -45,7 +45,7 @@ async function localFolder(filepath, pkg, options) {
     }
   } catch (err) {
     // fallback to copy
-    options.console.warn(`[npminstall:download:local] install ${pkg.displayName} from local folder ${filepath} with npm pack failed(${err.message}), use copy`);
+    options.console.warn(`[npd:download:local] install ${pkg.displayName} from local folder ${filepath} with npm pack failed(${err.message}), use copy`);
     return await utils.copyInstall(filepath, options);
   }
 }
@@ -64,7 +64,7 @@ async function localTarball(filepath, pkg, options) {
     try {
       await utils.rimraf(ungzipDir);
     } catch (err) {
-      options.console.warn(chalk.yellow(`[npminstall:download:local] ${pkg.displayName} rmdir local ungzip dir: ${ungzipDir} error: ${err}, ignore it`));
+      options.console.warn(chalk.yellow(`[npd:download:local] ${pkg.displayName} rmdir local ungzip dir: ${ungzipDir} error: ${err}, ignore it`));
     }
   }
 }

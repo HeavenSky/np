@@ -2,7 +2,7 @@
 
 'use strict';
 
-const debug = require('debug')('npminstall:bin:uninstall');
+const debug = require('debug')('npd:bin:uninstall');
 const npa = require('npm-package-arg');
 const path = require('path');
 const fs = require('fs/promises');
@@ -110,9 +110,9 @@ function help() {
   console.log(`
 Usage:
 
-  npmuninstall <pkg>
-  npmuninstall <pkg>@<version>
-  npmuninstall <pkg>@<version> [<pkg>@<version>]
+  npd-uninstall <pkg>
+  npd-uninstall <pkg>@<version>
+  npd-uninstall <pkg>@<version> [<pkg>@<version>]
 
 Options:
 

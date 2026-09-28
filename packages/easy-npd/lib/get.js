@@ -1,4 +1,4 @@
-const debug = require('debug')('npminstall:get');
+const debug = require('debug')('npd:get');
 const urllib = require('urllib');
 const destroy = require('destroy');
 const CacheableLookup = require('cacheable-lookup');
@@ -8,7 +8,7 @@ const urlParser = require('url');
 
 module.exports = get;
 
-const USER_AGENT = 'npminstall/' + require('../package.json').version + ' ' + urllib.USER_AGENT;
+const USER_AGENT = 'easy-npd/' + require('../package.json').version + ' ' + urllib.USER_AGENT;
 const MAX_RETRY = 5;
 const cacheable = new CacheableLookup();
 const httpclient = new urllib.HttpClient({
@@ -42,7 +42,7 @@ async function get(url, options, globalOptions) {
         destroy(result.res);
       } catch (err) {
         const logger = globalOptions && globalOptions.console || console;
-        logger.warn('[npminstall:get] ignore destroy response stream error: %s', err);
+        logger.warn('[npd:get] ignore destroy response stream error: %s', err);
       }
     }
     let message = `GET ${url} response ${result.status} status`;
@@ -68,7 +68,7 @@ async function _get(url, options, retry, globalOptions) {
     if (retry > 0) {
       const delay = 100 * (MAX_RETRY - retry);
       const logger = globalOptions && globalOptions.console || console;
-      logger.warn('[npminstall:get] retry GET %s after %sms, retry left %s, %s: %s, status: %s, headers: %j',
+      logger.warn('[npd:get] retry GET %s after %sms, retry left %s, %s: %s, status: %s, headers: %j',
         url, delay, retry, err.name, err.message, err.status, err.headers);
       await utils.sleep(delay);
       return await _get(url, options, retry, globalOptions);

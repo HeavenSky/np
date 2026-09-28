@@ -10,7 +10,7 @@ describe('test/npm_config_cache_env.test.js', () => {
   const [ tmp, cleanup ] = helper.tmp();
   const env = Object.assign({}, process.env, { HOME: tmp });
   delete env.npm_config_cache;
-  delete env.npminstall_cache;
+  delete env.npd_cache;
 
   beforeEach(async () => {
     await cleanup();
@@ -33,7 +33,7 @@ describe('test/npm_config_cache_env.test.js', () => {
       .debug()
       .expect('code', 0)
       .end();
-    assert.equal(await readScriptCache(), path.join(tmp, '.npminstall_tarball'));
+    assert.equal(await readScriptCache(), path.join(tmp, '.npd_tarball'));
   });
 
   it('should still set npm_config_cache with --no-cache', async () => {
@@ -41,6 +41,6 @@ describe('test/npm_config_cache_env.test.js', () => {
       .debug()
       .expect('code', 0)
       .end();
-    assert.equal(await readScriptCache(), path.join(tmp, '.npminstall_tarball'));
+    assert.equal(await readScriptCache(), path.join(tmp, '.npd_tarball'));
   });
 });

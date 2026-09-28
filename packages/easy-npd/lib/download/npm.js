@@ -1,6 +1,6 @@
 'use strict';
 
-const debug = require('debug')('npminstall:download:npm');
+const debug = require('debug')('npd:download:npm');
 const bytes = require('bytes');
 const { randomUUID } = require('crypto');
 const { createWriteStream, createReadStream, rmSync } = require('fs');
@@ -170,7 +170,7 @@ async function _getCacheInfo(fullname, globalOptions) {
   try {
     info.cache = JSON.parse(cacheContent);
   } catch (_) {
-    globalOptions.console.warn('[npminstall:download:npm] Ignore invalid cache file %s', info.cacheFile);
+    globalOptions.console.warn('[npd:download:npm] Ignore invalid cache file %s', info.cacheFile);
   }
   return info;
 }
@@ -208,7 +208,7 @@ async function _fetchFullPackageMetaWithCache(pkgUrl, globalOptions, cacheFile, 
     result = await _fetchFullPackageMeta(pkgUrl, globalOptions, etag);
   } catch (err) {
     if (cache) {
-      globalOptions.console.warn('[npminstall:download:npm] Request %s error, use cache instead', pkgUrl);
+      globalOptions.console.warn('[npd:download:npm] Request %s error, use cache instead', pkgUrl);
       return cache.manifests;
     }
     throw err;
@@ -413,7 +413,7 @@ async function download(pkg, options) {
           if (await utils.exists(versioningFile)) {
             let content = await fs.readFile(versioningFile, 'utf-8');
             content = content.replace('if (protocol === \'http:\') {',
-              'if (false && protocol === \'http:\') { // hack by npminstall');
+              'if (false && protocol === \'http:\') { // hack by npd');
             await fs.writeFile(versioningFile, content);
           }
         }
@@ -455,7 +455,7 @@ async function download(pkg, options) {
         if (await utils.exists(downloadFile)) {
           let content = await fs.readFile(downloadFile, 'utf-8');
           // return version ? prepend('desktop/' + version) : prepend('desktop');
-          const afterContent = 'return "' + binaryMirror.host + '/" + version + "/' + targetPlatform + '/cypress.zip"; // hack by npminstall\n';
+          const afterContent = 'return "' + binaryMirror.host + '/" + version + "/' + targetPlatform + '/cypress.zip"; // hack by npd\n';
           content = content
             .replace('return version ? prepend(\`desktop/${version}\`) : prepend(\'desktop\')', afterContent)
             .replace('return version ? prepend(\'desktop/\' + version) : prepend(\'desktop\');', afterContent);
@@ -475,7 +475,7 @@ async function download(pkg, options) {
     if (await utils.exists(versioningFile)) {
       let content = await fs.readFile(versioningFile, 'utf-8');
       content = content.replace('if (protocol === \'http:\') {',
-        'if (false && protocol === \'http:\') { // hack by npminstall');
+        'if (false && protocol === \'http:\') { // hack by npd');
       await fs.writeFile(versioningFile, content);
     }
   }
@@ -511,7 +511,7 @@ async function getTarballStream(tarballUrl, pkg, options) {
         return stream;
       }
     } catch (err) {
-      options.console.warn('[npminstall:download:npm] highSpeedStore.get %s error: %s', tarballUrl, err);
+      options.console.warn('[npd:download:npm] highSpeedStore.get %s error: %s', tarballUrl, err);
       options.console.warn(err.stack);
     }
   }
@@ -530,7 +530,7 @@ async function getTarballStream(tarballUrl, pkg, options) {
       try {
         destroy(result.res);
       } catch (err) {
-        options.console.warn('[npminstall:download:npm] ignore destroy response stream error: %s', err);
+        options.console.warn('[npd:download:npm] ignore destroy response stream error: %s', err);
       }
       throw new Error(`Download ${tarballUrl} status: ${result.status} error, should be 200`);
     }

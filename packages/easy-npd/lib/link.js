@@ -1,6 +1,6 @@
 'use strict';
 
-const debug = require('debug')('npminstall:link');
+const debug = require('debug')('npd:link');
 const utils = require('./utils');
 const path = require('path');
 const {

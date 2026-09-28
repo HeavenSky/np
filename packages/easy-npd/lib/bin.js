@@ -1,7 +1,7 @@
 'use strict';
 
 const chalk = require('chalk');
-const debug = require('debug')('npminstall:bin');
+const debug = require('debug')('npd:bin');
 const path = require('path');
 const cmdShim = require('cmd-shim-hotfix');
 const normalize = require('npm-normalize-package-bin');

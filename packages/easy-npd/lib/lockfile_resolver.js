@@ -7,7 +7,7 @@ const dependencies = require('./dependencies');
 const NODE_MODULES_DIR = 'node_modules/';
 
 /**
- * The lockfileConverter converts a npm package-lockfile.json to npminstall .dependencies-tree.json.
+ * The lockfileConverter converts a npm package-lockfile.json to npd .dependencies-tree.json.
  * Only lockfileVersion >= 2 is supported.
  * The `.dependencies-tree.json` does not recognize a npm-workspaces package, so we don't need to handle it neither for now.
  * @param {Object} lockfile package-lock.json data

@@ -1,6 +1,6 @@
 'use strict';
 
-const debug = require('debug')('npminstall:install');
+const debug = require('debug')('npd:install');
 const path = require('path');
 const chalk = require('chalk');
 const semver = require('semver');
@@ -215,7 +215,7 @@ async function _install(parentDir, pkg, ancestors, options, context) {
 
     await preinstall(realPkg, realPkgDir, displayName, options);
     // link bundleDependencies' bin
-    // npminstall fsevents
+    // npd fsevents
     const bundledDependencies = await getBundleDependencies(realPkg, realPkgDir);
     await Promise.all(bundledDependencies.map(name => bundleBin(name, realPkgDir, options)));
 

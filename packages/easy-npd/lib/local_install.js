@@ -2,7 +2,7 @@
  * impl npm install [pkg1, pkg2, ...]
  */
 
-const debug = require('debug')('npminstall:local_install');
+const debug = require('debug')('npd:local_install');
 const chalk = require('chalk');
 const path = require('path');
 const os = require('os');
@@ -41,7 +41,7 @@ const Context = require('./context');
  *  - {Array<Object>} [pkgs] - optional packages to install, default is `[]`
  *  - {Boolean} [production] - production mode install, default is `false`
  *  - {Object} [env] - postinstall and preinstall scripts custom env.
- *  - {String} [cacheDir] - tarball cache store dir, default is `$HOME/.npminstall_tarball`.
+ *  - {String} [cacheDir] - tarball cache store dir, default is `$HOME/.npd_tarball`.
  *  	if `production` mode enable, `cacheDir` will be disable.
  *  - {Object} [binaryMirrors] - binary mirror config, default is `{}`
  *  - {Boolean} [ignoreScripts] - ignore pre / post install scripts, default is `false`
@@ -408,7 +408,7 @@ async function runPostInstallTasks(options) {
         try {
           await utils.runScript(root, installScript, options);
         } catch (err) {
-          options.console.warn('[npminstall:runscript:error] %s scripts.install run %j error: %s',
+          options.console.warn('[npd:runscript:error] %s scripts.install run %j error: %s',
             chalk.red(displayName), installScript, err);
           throw err;
         }
@@ -431,7 +431,7 @@ async function runPostInstallTasks(options) {
         try {
           await utils.runScript(root, postinstallScript, options);
         } catch (err) {
-          options.console.warn('[npminstall:runscript:error] %s scripts.postinstall run %j error: %s',
+          options.console.warn('[npd:runscript:error] %s scripts.postinstall run %j error: %s',
             chalk.red(displayName), postinstallScript, err);
           throw err;
         }

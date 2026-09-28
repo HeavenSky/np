@@ -1,6 +1,6 @@
 'use strict';
 
-require('debug').enable('npminstall:*');
+require('debug').enable('npd:*');
 const path = require('path');
 const npminstall = require('./npminstall');
 
@@ -19,7 +19,7 @@ const npminstall = require('./npminstall');
     // registry, default is https://registry.npmjs.com
     registry: 'https://registry.npmmirror.com',
     // debug: false,
-    // storeDir: root + '.npminstall',
+    // storeDir: root + '.npd',
   });
 })().catch(err => {
   console.error(err);

@@ -1,6 +1,6 @@
 'use strict';
 
-const debug = require('debug')('npminstall:format_install_options');
+const debug = require('debug')('npd:format_install_options');
 const os = require('os');
 const { randomUUID } = require('crypto');
 const awaitEvent = require('await-event');
@@ -84,7 +84,7 @@ module.exports = function formatInstallOptions(options) {
   options.registryPackages = 0;
   options.gitPackages = 0;
   options.binaryMirrors = options.binaryMirrors || {};
-  const defaultCacheDir = path.join(os.homedir(), '.npminstall_tarball');
+  const defaultCacheDir = path.join(os.homedir(), '.npd_tarball');
   if (options.cacheStrict) {
     options.cacheDir = options.cacheDir || defaultCacheDir;
   } else {

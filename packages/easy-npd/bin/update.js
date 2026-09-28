@@ -10,7 +10,7 @@ function help(root) {
   console.log(`
 Usage:
 
-  npmupdate [--root=${root}]
+  npd-update [--root=${root}]
 
 Remove node_modules, then reinstall.
 
@@ -39,12 +39,12 @@ Options:
   const root = argv.root || process.cwd();
   if (argv.help) return help(root);
   const nodeModules = path.join(root, 'node_modules');
-  console.log('[npmupdate] removing %s', nodeModules);
+  console.log('[npd-update] removing %s', nodeModules);
   await rimraf(nodeModules);
-  console.log('[npmupdate] reinstall on %s', root);
+  console.log('[npd-update] reinstall on %s', root);
 
   // make sure install ignore all package names
-  process.env.NPMINSTALL_BY_UPDATE = 'true';
+  process.env.NPD_BY_UPDATE = 'true';
   require('./install');
 })().catch(err => {
   console.error(err);

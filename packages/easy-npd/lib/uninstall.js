@@ -23,7 +23,7 @@ module.exports = async options => {
 
 async function uninstall(pkg, options) {
   const storeDir = options.global
-    ? path.join(options.targetDir, 'node_modules', `.${pkg.name}_npminstall/node_modules`)
+    ? path.join(options.targetDir, 'node_modules', `.${pkg.name}_npd/node_modules`)
     : path.join(options.targetDir, 'node_modules');
 
   const pkgRoot = path.join(options.targetDir, 'node_modules', pkg.name);

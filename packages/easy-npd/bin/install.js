@@ -2,7 +2,7 @@
 
 'use strict';
 
-const debug = require('debug')('npminstall:bin:install');
+const debug = require('debug')('npd:bin:install');
 const chalk = require('chalk');
 const path = require('path');
 const util = require('util');
@@ -44,7 +44,7 @@ Object.assign(argv, parseArgs(originalArgv, {
      * set package-lock.json path
      *
      * 1. only support package lock v2 and v3.
-     * 2. npminstall doesn't inspect <cwd>/package-lock.json by default.
+     * 2. npd doesn't inspect <cwd>/package-lock.json by default.
      * 3. because arborist doesn't support client/build/isomorphic dependencies,
      *    these kinds of dependencies will all be ignored.
      * 4. this option doesn't do extra check for the equivalence of package-lock.json and package.json
@@ -102,7 +102,7 @@ Object.assign(argv, parseArgs(originalArgv, {
 );
 
 if (argv.version) {
-  console.log(`npminstall v${require('../package.json').version}`);
+  console.log(`npd v${require('../package.json').version}`);
   process.exit(0);
 }
 
@@ -110,19 +110,19 @@ if (argv.help) {
   console.log(`
 Usage:
 
-  npminstall
-  npminstall <pkg>
-  npminstall <pkg>@<tag>
-  npminstall <pkg>@<version>
-  npminstall <pkg>@<version range>
-  npminstall <folder>
-  npminstall <tarball file>
-  npminstall <tarball url>
-  npminstall <git:// url>
-  npminstall <github username>/<github project>
-  npminstall --lockfile-path=</path/to/package-lock.json>
+  npd
+  npd <pkg>
+  npd <pkg>@<tag>
+  npd <pkg>@<version>
+  npd <pkg>@<version range>
+  npd <folder>
+  npd <tarball file>
+  npd <tarball url>
+  npd <git:// url>
+  npd <github username>/<github project>
+  npd --lockfile-path=</path/to/package-lock.json>
 
-Can specify one or more: npminstall ./foo.tgz bar@stable /some/folder
+Can specify one or more: npd ./foo.tgz bar@stable /some/folder
 If no argument is supplied, installs dependencies from ./package.json.
 
 Options:
@@ -162,7 +162,7 @@ Options:
 
 const pkgs = [];
 
-if (process.env.NPMINSTALL_BY_UPDATE) {
+if (process.env.NPD_BY_UPDATE) {
   // ignore all package names on update
   argv._ = [];
 }
@@ -187,7 +187,7 @@ for (const name of argv._) {
 
 let root = argv.root || process.cwd();
 if (Array.isArray(root)) {
-  // use last one, e.g.: $ npminstall --root=abc --root=def
+  // use last one, e.g.: $ npd --root=abc --root=def
   root = root[root.length - 1];
 }
 const production = argv.production || process.env.NODE_ENV === 'production';
@@ -199,8 +199,8 @@ if (production) {
 if (cacheDir === null && process.env.npm_config_cache) {
   cacheDir = process.env.npm_config_cache;
 }
-if (process.env.npminstall_cache) {
-  cacheDir = process.env.npminstall_cache;
+if (process.env.npd_cache) {
+  cacheDir = process.env.npd_cache;
 }
 
 let forbiddenLicenses = argv['forbidden-licenses'];
@@ -213,7 +213,7 @@ const inChina = argv.china || !!process.env.npm_china;
 // if exists, override default china mirror url
 const customChinaMirrorUrl = argv['custom-china-mirror-url'];
 
-// example: npminstall --registry xx --registry xxxx
+// example: npd --registry xx --registry xxxx
 let registry = (Array.isArray(argv.registry) ? argv.registry[0] : argv.registry) || process.env.npm_registry;
 if (inChina) {
   registry = registry || globalConfig.chineseRegistry;
@@ -336,7 +336,7 @@ debug('argv: %j, env: %j', argv, env);
       const content = await fs.readFile(dependenciesTree);
       config.dependenciesTree = JSON.parse(content);
     } catch (err) {
-      console.warn(chalk.yellow('npminstall WARN load dependencies tree %s error: %s'), dependenciesTree, err.message);
+      console.warn(chalk.yellow('npd WARN load dependencies tree %s error: %s'), dependenciesTree, err.message);
     }
   }
   if (argv['save-dependencies-tree']) {
@@ -363,14 +363,14 @@ debug('argv: %j, env: %j', argv, env);
           const dirs = await fs.readdir(nodeModulesDir);
           // ignore [ '.bin', 'node' ], it will install first by https://github.com/cnpm/nodeinstall
           if (!(dirs.length === 2 && dirs.indexOf('.bin') >= 0 && dirs.indexOf('node') >= 0)) {
-            console.error(chalk.yellow(`npminstall WARN node_modules exists: ${nodeModulesDir}, contains ${dirs.length} dirs`));
+            console.error(chalk.yellow(`npd WARN node_modules exists: ${nodeModulesDir}, contains ${dirs.length} dirs`));
           }
         }
       }
       const pkgFile = path.join(root, 'package.json');
       const exists = await utils.exists(pkgFile);
       if (!exists) {
-        console.warn(chalk.yellow(`npminstall WARN package.json not exists: ${pkgFile}`));
+        console.warn(chalk.yellow(`npd WARN package.json not exists: ${pkgFile}`));
       }
     }
     await installLocal(config, context);
@@ -399,13 +399,13 @@ debug('argv: %j, env: %j', argv, env);
 
   process.on('exit', code => {
     if (code !== 0) {
-      writeFileSync(path.join(root, 'npminstall-debug.log'), util.inspect(config, { depth: 2 }));
+      writeFileSync(path.join(root, 'npd-debug.log'), util.inspect(config, { depth: 2 }));
     }
   });
 })().catch(err => {
   console.error(chalk.red(err.stack));
-  console.error(chalk.yellow('npminstall version: %s'), require('../package.json').version);
-  console.error(chalk.yellow('npminstall args: %s'), process.argv.join(' '));
+  console.error(chalk.yellow('npd version: %s'), require('../package.json').version);
+  console.error(chalk.yellow('npd args: %s'), process.argv.join(' '));
   process.exit(1);
 });
 

@@ -11,7 +11,7 @@ async function prepublish(pkg, root, options) {
   const scripts = pkg.scripts || {};
   if (scripts.prepublish) {
     options.console.warn(
-      '[npminstall:runscript] %s %s %j, root: %j',
+      '[npd:runscript] %s %s %j, root: %j',
       chalk.yellow('scripts.prepublish'),
       chalk.gray(`${pkg.name}@${pkg.version}`),
       scripts.prepublish,

@@ -20,7 +20,7 @@ describe('test/get.test.js', () => {
   it('should set auth info into header', async () => {
     const logger = {
       warn(msg) {
-        assert(msg.includes('[npminstall:get] retry GET'));
+        assert(msg.includes('[npd:get] retry GET'));
       },
     };
     const options = { dataType: 'json' };

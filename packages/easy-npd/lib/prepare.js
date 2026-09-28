@@ -11,7 +11,7 @@ async function prepare(pkg, root, options) {
   const scripts = pkg.scripts || {};
   if (scripts.prepare) {
     options.console.warn(
-      '[npminstall:runscript] %s %s %j, root: %j',
+      '[npd:runscript] %s %s %j, root: %j',
       chalk.yellow('scripts.prepare'),
       chalk.gray(`${pkg.name}@${pkg.version}`),
       scripts.prepare,

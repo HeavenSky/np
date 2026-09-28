@@ -6,5 +6,5 @@
   "scripts": {
     "postinstall": "node index.js"
   },
-  "__npminstall_done": false
+  "__npd_done": false
 }

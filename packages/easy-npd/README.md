@@ -1,6 +1,6 @@
 # easy-npd
 
-[cnpm/npminstall](https://github.com/cnpm/npminstall) 6.8.0 的 fork, npm 包名 `easy-npd`, 提供 `np6` 系列命令. 使用 `np6` 命令, 或需要判断它与上游 6.8.0 的行为差异时读本页; 版本变更见 [CHANGELOG.md](./CHANGELOG.md).
+[cnpm/npminstall](https://github.com/cnpm/npminstall) 6.8.0 的 fork, npm 包名 `easy-npd`, 提供 `npd` 系列命令. 使用 `npd` 命令, 或需要判断它与上游 6.8.0 的行为差异时读本页; 版本变更见 [CHANGELOG.md](./CHANGELOG.md).
 
 ## 运行要求
 
@@ -19,19 +19,22 @@ npm i -g easy-npd
 
 | 命令            | 上游对应       |
 | --------------- | -------------- |
-| `np6`           | `npminstall`   |
-| `np6-link`      | `npmlink`      |
-| `np6-uninstall` | `npmuninstall` |
-| `np6-update`    | `npmupdate`    |
+| `npd`           | `npminstall`   |
+| `npd-link`      | `npmlink`      |
+| `npd-uninstall` | `npmuninstall` |
+| `npd-update`    | `npmupdate`    |
 
-全部参数见 `np6 --help`, 其余三个命令同样支持 `--help`.
+全部参数见 `npd --help`, 其余三个命令同样支持 `--help`.
 
 ## 与上游 6.8.0 的差异
 
 | 项 | 上游 6.8.0 | 本补丁版 |
 | --- | --- | --- |
-| 包名与命令名 | 包名 `npminstall`; 命令 `npminstall`, `npmlink`, `npmuninstall`, `npmupdate` | 包名 `easy-npd`; 命令 `np6`, `np6-link`, `np6-uninstall`, `np6-update` |
-| 缓存目录布局 | `~/.npminstall_tarball` 下的 `manifests/<h>/<h>/<h>/`, 按包名拆分的多级 tarball 目录, `.tmp/YYYY/MM/DD`; 自动清理过期临时目录 | 同一根目录下的 `np-manifests/<name>/<hash>.json`, `np-tgz/<name>/`, `np-tmp/<YYYYMMDD>/`; 不再自动清理过期临时目录, 旧布局的缓存不再读取 |
+| 包名与命令名 | 包名 `npminstall`; 命令 `npminstall`, `npmlink`, `npmuninstall`, `npmupdate` | 包名 `easy-npd`; 命令 `npd`, `npd-link`, `npd-uninstall`, `npd-update` |
+| 缓存目录布局 | `~/.npminstall_tarball` 下的 `manifests/<h>/<h>/<h>/`, 按包名拆分的多级 tarball 目录, `.tmp/YYYY/MM/DD`; 自动清理过期临时目录 | `~/.npd_tarball` 下的 `np-manifests/<name>/<hash>.json`, `np-tgz/<name>/`, `np-tmp/<YYYYMMDD>/`; 不再自动清理过期临时目录, 旧布局的缓存不再读取 |
+| 缓存目录环境变量 | `npminstall_cache` | `npd_cache`; `npm_config_cache` 两边都认 |
+| User-Agent, 日志前缀, debug 名空间 | `npminstall` | User-Agent 为 `easy-npd/<version>`, 日志前缀与 debug 名空间为 `npd` |
+| 安装完成标记 | 包内 `package.json` 的 `__npminstall_done` | `__npd_done`; 由上游装出的 `node_modules` 会被视为未完成, 切换时先删除 `node_modules` |
 | 根目录提升链接 | 已存在即跳过, 依赖变化后重装不会更新; `--force-link-latest` 才用更高版本覆盖 | 始终链接最高版本: 更高版本覆盖已有链接; 完整安装(不带包名)时上次的提升链接替换为本次依赖树中的最高版本, 可能降级; 根 `package.json` 声明的包不覆盖 |
 | `--force-link-latest` | 见上 | 移除 |
 | `--disable-dedupe`, `config.npminstall.disableDedupe` | 关闭根目录扁平链接 | 移除 |
@@ -41,7 +44,7 @@ npm i -g easy-npd
 | `--tarball-url-mapping` | 声称也改写重定向地址, 但 urllib 3 不支持 `formatRedirectUrl` | 只改写首个请求地址 |
 | `--lockfile-path` 加载失败 | 告警后联网解析, 退出码 0 | 报错退出 |
 | 在 `npm run` / `npx` 下安装需要 prepare 的 git 依赖 | 继承 `npm_config_allow_scripts`, 被 npm 12 以 `EALLOWSCRIPTS` 拒绝 | 正常安装; 失败时错误信息附带子进程 stderr |
-| `np6-uninstall` | 可能在 `package.json` 写回前返回 | 写回完成后返回 |
+| `npd-uninstall` | 可能在 `package.json` 写回前返回 | 写回完成后返回 |
 | 依赖 | node-gyp 9, tar 6 | node-gyp 10, tar 7 |
 | 开发工具 | eslint, egg-bin | oxlint, oxfmt, mocha 11, c8 |
 

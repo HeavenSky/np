@@ -5,7 +5,7 @@
 | 包 | 目录 | 上游 | 命令 | 适用场景 |
 | --- | --- | --- | --- | --- |
 | [`easy-np`](./packages/easy-np/README.md) | `packages/easy-np` | npminstall 8.0.1 | `np`, `np-link`, `np-uninstall`, `np-update` | `.store` 布局, 支持 npm workspaces |
-| [`easy-npd`](./packages/easy-npd/README.md) | `packages/easy-npd` | npminstall 6.8.0 | `np6`, `np6-link`, `np6-uninstall`, `np6-update` | `_name@version@name` 扁平布局, 根目录链接每个包的最高版本, 无 workspace |
+| [`easy-npd`](./packages/easy-npd/README.md) | `packages/easy-npd` | npminstall 6.8.0 | `npd`, `npd-link`, `npd-uninstall`, `npd-update` | `_name@version@name` 扁平布局, 根目录链接每个包的最高版本, 无 workspace |
 
 两个包的命令名互不冲突, 可以同时全局安装.
 

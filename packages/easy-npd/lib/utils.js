@@ -1,6 +1,6 @@
 'use strict';
 
-const debug = require('debug')('npminstall:utils');
+const debug = require('debug')('npd:utils');
 const fs = require('fs/promises');
 const { accessSync } = require('fs');
 const path = require('path');
@@ -81,7 +81,7 @@ exports.readPackageJSON = async root => {
   return pkg;
 };
 
-const INSTALL_DONE_KEY = '__npminstall_done';
+const INSTALL_DONE_KEY = '__npd_done';
 
 // 设置 pkg 安装完成的标记
 exports.setInstallDone = async pkgRoot => {
@@ -232,12 +232,12 @@ exports.runScript = async (pkgDir, script, options) => {
     process.env.PATH,
   ].join(path.delimiter);
 
-  // replace `npm install xxx` to `npminstall xxx`
+  // replace `npm install xxx` to `npd xxx`
   const NPM_INSTALL_RE = /^npm (i|install) /;
   if (NPM_INSTALL_RE.test(script)) {
-    const npminstall = path.join(__dirname, '../bin/install.js');
-    const newScript = script.replace(NPM_INSTALL_RE, `${process.execPath} ${npminstall} `);
-    options.console.info('[npminstall:runScript] replace %j to %j', script, newScript);
+    const npd = path.join(__dirname, '../bin/install.js');
+    const newScript = script.replace(NPM_INSTALL_RE, `${process.execPath} ${npd} `);
+    options.console.info('[npd:runScript] replace %j to %j', script, newScript);
     script = newScript;
   }
 
@@ -256,7 +256,7 @@ exports.runScript = async (pkgDir, script, options) => {
     });
   } catch (err) {
     if (ignoreError) {
-      options.console.info('[npminstall:runScript] ignore runscript error: %s', err);
+      options.console.info('[npd:runScript] ignore runscript error: %s', err);
     } else {
       throw err;
     }
@@ -469,7 +469,7 @@ async function getRemotePackage(name, registry, globalOptions) {
     }
   }
 
-  if (!pkg || process.env.NPMINSTALL_TEST_LOCAL_PKG) {
+  if (!pkg || process.env.NPD_TEST_LOCAL_PKG) {
     console.warn('Get /%s/latest from %s error: %s', name, registry, lastErr && lastErr.stack);
     pkg = require(name + '/package.json');
   }

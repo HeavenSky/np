@@ -10,7 +10,7 @@ const config = {
   },
   chineseMirrorUrl: 'https://npmmirror.com/mirrors',
   chineseRegistry: 'https://registry.npmmirror.com',
-  userAgent: `npminstall/${pkg.version} npm/? node/${process.version} ${process.platform} ${process.arch}`,
+  userAgent: `easy-npd/${pkg.version} npm/? node/${process.version} ${process.platform} ${process.arch}`,
 };
 
 module.exports = config;

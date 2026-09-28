@@ -6,7 +6,8 @@ easy-npd 基于 npminstall 6.8.0, 首个版本. 与上游行为差异的对照�
 
 ### 命名
 
-- 包名 `easy-npd`; 命令改为 `np6`, `np6-link`, `np6-uninstall`, `np6-update`; 日志前缀, 缓存根目录 `~/.npminstall_tarball`, 缓存环境变量 `npminstall_cache` 与配置键 `config.npminstall` 保持不变.
+- 包名 `easy-npd`; 命令 `npd`, `npd-link`, `npd-uninstall`, `npd-update`; User-Agent 为 `easy-npd/<version>`, 日志前缀与 debug 名空间为 `npd`.
+- 默认缓存目录 `~/.npd_tarball`, 缓存环境变量 `npd_cache`, 安装完成标记 `__npd_done`, 全局安装的 store 目录 `.<name>_npd`; 由 npminstall 装出的 `node_modules` 需删除后重装.
 
 ### 新功能
 
@@ -18,7 +19,7 @@ easy-npd 基于 npminstall 6.8.0, 首个版本. 与上游行为差异的对照�
 
 - `--lockfile-path` 加载失败时报错退出, 不再静默回退为联网解析.
 - 在 `npm run` / `npx` 下安装需要 prepare 的 git 依赖时, 不再因继承 `npm_config_allow_scripts` 被 npm 12 以 `EALLOWSCRIPTS` 拒绝; git 依赖安装失败时报错附带子进程 stderr.
-- `np6-uninstall` 等待 `package.json` 写回完成后再返回.
+- `npd-uninstall` 等待 `package.json` 写回完成后再返回.
 
 ### 移除
 
