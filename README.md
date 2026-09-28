@@ -90,6 +90,11 @@ npm i -g github:HeavenSky/np#np
 - pacote 15 内嵌的 tar 6: 只在安装 git 依赖时由 pacote 调用; np 自身解压 tarball 使用顶层 tar 7.
 - pacote `addGitSha` DoS 与 sigstore 签名约束失效: 只涉及 git 依赖与签名校验, np 不启用签名校验.
 
+## 待办规划
+
+- [ ] `--lockfile-path` 支持 workspace: 修正 `lib/lockfile_resolver.js` 对 workspace 路径的查找, 依赖树的键带上 workspace 路径, 使各 workspace 按 lockfile 还原各自版本, 与 `npm ci` 一致; 目前在 workspace 下直接报错.
+- [ ] 回收 `.store` 中无用的包实体: 卸载与重装后不再被任何链接引用的 `.store/<name>@<version>` 目前不会删除, 需要一个基于引用扫描的清理命令或安装后自动回收.
+
 ## License
 
 MIT, 版权归属见 [LICENSE.txt](./LICENSE.txt).
