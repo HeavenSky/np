@@ -13,7 +13,7 @@ describe('test/uninstallGlobal.test.js', () => {
     await coffee.fork(helper.npminstall, [
       `--prefix=${tmp}`,
       '-g',
-      'mocha',
+      'mocha@11',
     ])
       .debug()
       .expect('stdout', /All packages installed/)
