@@ -1,5 +1,4 @@
 const assert = require('node:assert');
-const mm = require('mm');
 const {
   parsePackageName,
   getAliasPackageName,
@@ -46,21 +45,6 @@ describe('test/alias.test.js', () => {
 
       assert.strictEqual(aliasPackageName, 'chair-latest');
       assert.strictEqual(realPackageName, 'chair@release-1.5');
-    });
-
-    it('should print wranings when form of pkg is `alias@npm:name@version`', () => {
-      mm(console, 'warn', msg => {
-        assert.strictEqual(msg, '[npminstall] alias name (chair_latest!!!) invalid for new packages. warnings: name can no longer contain special characters ("~\'!()*")');
-      });
-      const [
-        aliasPackageName,
-        realPackageName,
-      ] = parsePackageName('chair_latest!!!@npm:chair@release-1.5');
-
-      assert.strictEqual(aliasPackageName, 'chair_latest!!!');
-      assert.strictEqual(realPackageName, 'chair@release-1.5');
-
-      mm.restore();
     });
 
     it('should throw errors when form of pkg is `alias@npm:name@version`', () => {

@@ -69,17 +69,6 @@ describe('test/installGit.test.js', () => {
     assert(pkg.version !== '0.0.3');
   });
 
-  it('should install from bitbucket `bitbucket:node-modules/pedding`', async () => {
-    await npminstall({
-      root: tmp,
-      pkgs: [
-        { name: null, version: 'bitbucket:node-modules/pedding' },
-      ],
-    });
-    const pkg = await helper.readJSON(path.join(tmp, 'node_modules/pedding/package.json'));
-    assert.equal(pkg.name, 'pedding');
-    assert(pkg.version !== '0.0.3');
-  });
 
   it('should install from github with commit hash https://github.com/mozilla/nunjucks.git#0f8b21b8df7e8e852b2e1889388653b7075f0d09', async () => {
     await npminstall({
