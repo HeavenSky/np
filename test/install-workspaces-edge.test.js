@@ -106,6 +106,35 @@ describe('test/install-workspaces-edge.test.js', () => {
     assert(order.indexOf('pkg-a') < order.indexOf('pkg-d'), order.join(','));
   });
 
+  it('should link workspace: protocol dependencies to local workspaces', async () => {
+    await workspace({
+      'packages/a': { name: 'pkg-a', dependencies: { 'pkg-b': 'workspace:*', 'pkg-c': 'workspace:^1.0.0' } },
+      'packages/b': { name: 'pkg-b' },
+      'packages/c': { name: 'pkg-c' },
+    });
+    await run(helper.npminstall).expect('code', 0).end();
+    assert.equal(await fs.realpath(path.join(tmp, 'node_modules/pkg-b')), await fs.realpath(path.join(tmp, 'packages/b')));
+  });
+
+  it('should fail when a workspace: dependency has no matching workspace', async () => {
+    await workspace({ 'packages/a': { name: 'pkg-a', dependencies: { 'pkg-missing': 'workspace:*' } } });
+    await run(helper.npminstall)
+      .expect('code', 1)
+      .expect('stderr', /pkg-missing uses the workspace: protocol but no workspace named pkg-missing was found/)
+      .end();
+  });
+
+  it('should warn when a local workspace does not satisfy the declared range', async () => {
+    await workspace({
+      'packages/a': { name: 'pkg-a', dependencies: { 'pkg-b': '^2.0.0' } },
+      'packages/b': { name: 'pkg-b' },
+    });
+    await run(helper.npminstall)
+      .expect('code', 0)
+      .expect('stderr', /workspace package pkg-b@1\.0\.0 does not satisfy \^2\.0\.0 required by packages\/a/)
+      .end();
+  });
+
   it('should fail when the lockfile can not be loaded', async () => {
     await writeJSON(path.join(tmp, 'package.json'), { name: 'r', version: '1.0.0', dependencies: { ms: '2.1.3' } });
     await run(helper.npminstall, [ `--lockfile-path=${path.join(tmp, 'missing-lock.json')}` ])
