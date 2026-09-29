@@ -35,4 +35,4 @@ npm run test:npd
 
 ## 历史
 
-`packages/easy-np` 的历史延续自 `np` 分支, `packages/easy-npd` 的历史以合并提交的第二个父提交保留自 `npd` 分支. 查看迁入前的历史: `git log np -- <路径>` 或 `git log npd -- <路径>`, 路径为包内相对路径.
+`main` 是唯一的分支. `packages/easy-np` 的迁入前历史在 `main` 的第一父提交链上, 由 `6339a73`(`chore: move easy-np into packages/easy-np`)整体移入子目录; `packages/easy-npd` 的迁入前历史是合并提交 `775ef57`(`chore: merge easy-npd into packages/easy-npd`)的第二个父提交. 查看迁入前的历史: `git log 6339a73^ -- <路径>` 或 `git log 775ef57^2 -- <路径>`, 路径为包内相对路径.
