@@ -427,6 +427,8 @@ async function download(pkg, options) {
       );
       // 缓存中的 tgz 校验或解压失败时删除, 否则之后每次重试都读到同一个损坏文件
       if (stream && stream.tarballFile) {
+        // Windows 上删除仍被打开的文件会留下待删除状态, 之后访问该路径都报 EPERM, 必须先关闭读取流
+        await closeStream(stream);
         await fs.rm(stream.tarballFile, { force: true });
       }
       // retry download on any error
@@ -819,6 +821,16 @@ module.exports.useBinarySource = async (ungzipDir, source, options) => {
   }
   await utils.addMetaToJSONFile(path.join(ungzipDir, 'package.json'), pkgMeta);
 };
+
+function closeStream(stream) {
+  return new Promise(resolve => {
+    if (stream.closed) return resolve();
+    stream.once('close', resolve);
+    stream.destroy();
+    // 已关闭的流不会再触发 close, 兜底避免挂起
+    setTimeout(resolve, 1000).unref();
+  });
+}
 
 function offlineError(message) {
   const err = new Error(message);
