@@ -5,6 +5,8 @@ const npa = require('npm-package-arg');
 const ms = require('ms');
 const { LOCAL_TYPES } = require('./npa_types');
 const utils = require('./utils');
+const { MIRROR_ATTEMPTS } = require('./get');
+const { useBinarySource } = require('./download/npm');
 
 // scripts that should run in root package and linked package
 exports.DEFAULT_ROOT_SCRIPTS = [
@@ -46,6 +48,10 @@ exports.runLifecycleScripts = async function runLifecycleScripts(pkg, root, orig
     runInForeground = true;
   }
 
+  // 依赖的安装脚本会自行下载二进制, 失败时切换二进制镜像与官方地址重试
+  const mirrorState = scriptList === exports.DEFAULT_DEP_SCRIPTS && globalOptions.mirror;
+  const binarySource = { current: mirrorState && mirrorState.binaryOrder[0] };
+
   for (const script of scriptList) {
     const cmd = scripts[script];
     if (!cmd) {
@@ -55,7 +61,7 @@ exports.runLifecycleScripts = async function runLifecycleScripts(pkg, root, orig
     if (runInForeground) console.info('> %s %s %s %s> %s', displayName, script, root, os.EOL, cmd);
     const startTime = Date.now();
     try {
-      await utils.runScript(root, cmd, globalOptions, runInForeground);
+      await runScriptWithMirrors(root, cmd, displayName, script, binarySource, globalOptions, runInForeground);
     } catch (error) {
       globalOptions.console.warn(
         '[np:runscript:error] %s run %s %s error: %s',
@@ -84,3 +90,31 @@ exports.runLifecycleScripts = async function runLifecycleScripts(pkg, root, orig
     }
   }
 };
+
+async function runScriptWithMirrors(root, cmd, displayName, script, binarySource, globalOptions, runInForeground) {
+  const mirrorState = binarySource.current && globalOptions.mirror;
+  if (!mirrorState) {
+    return await utils.runScript(root, cmd, globalOptions, runInForeground);
+  }
+  for (let attempt = 1; ; attempt++) {
+    const env = { ...globalOptions.env };
+    for (const key in mirrorState.binaryEnvs) delete env[key];
+    if (binarySource.current === 'mirror') Object.assign(env, mirrorState.binaryEnvs);
+    try {
+      return await utils.runScript(root, cmd, { ...globalOptions, env }, runInForeground);
+    } catch (err) {
+      if (attempt >= MIRROR_ATTEMPTS) throw err;
+      binarySource.current = mirrorState.binaryOrder.find(name => name !== binarySource.current);
+      globalOptions.console.warn(
+        chalk.yellow('[np:runscript] %s %s failed, retry with %s binary source (%s/%s): %s'),
+        displayName,
+        script,
+        binarySource.current,
+        attempt + 1,
+        MIRROR_ATTEMPTS,
+        err.message
+      );
+      await useBinarySource(root, binarySource.current, globalOptions);
+    }
+  }
+}
