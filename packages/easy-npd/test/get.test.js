@@ -36,4 +36,15 @@ describe('test/get.test.js', () => {
       assert(err.res.requestUrls.length > 0);
     }
   });
+
+  for (const url of [
+    'https://other-mock.org/mock',
+    'https://other-mock.org/mock?from=//registry-mock.org/',
+  ]) {
+    it(`should not send auth info to other host even with always-auth: ${url}`, async () => {
+      const options = { dataType: 'json', retry: 0 };
+      await assert.rejects(get(url, options, { console: { warn() {} } }));
+      assert.equal(options.headers.Authorization, undefined);
+    });
+  }
 });

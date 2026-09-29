@@ -25,9 +25,9 @@ async function get(url, options, globalOptions) {
   // need auth
   const registryUrl = cnpmConfig.get('registry');
   const registryUri = registryUrl && registryUrl.replace(urlParser.parse(registryUrl).protocol, '') || '';
-  const authed = registryUri && url.indexOf(registryUri) !== -1;
   const hasUserSettings = typeof cnpmConfig.get(registryUri + ':username') === 'string' && typeof cnpmConfig.get(registryUri + ':_password') === 'string';
-  if (hasUserSettings && (authed || cnpmConfig.get(registryUri + ':always-auth') || cnpmConfig.get('always-auth'))) {
+  // 凭据只发给与 registry 同 host 的请求, always-auth 也不例外; 放宽会把凭据泄露给备用 registry, tarball CDN 与二进制镜像
+  if (hasUserSettings && isSameHost(url, registryUrl)) {
     const authToken = (`${cnpmConfig.get(registryUri + ':username')}:${Buffer.from(cnpmConfig.get(registryUri + ':_password'), 'base64').toString()}`);
     options.headers.Authorization = `Basic ${Buffer.from(authToken).toString('base64')}`;
   }
@@ -54,6 +54,14 @@ async function get(url, options, globalOptions) {
     throw err;
   }
   return result;
+}
+
+function isSameHost(url, registry) {
+  try {
+    return new URL(url).host === new URL(registry).host;
+  } catch {
+    return false;
+  }
 }
 
 async function _get(url, options, retry, globalOptions) {
