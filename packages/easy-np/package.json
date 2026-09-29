@@ -25,6 +25,7 @@
   },
   "bin": {
     "np": "bin/install.js",
+    "np-fetch": "bin/fetch.js",
     "np-link": "bin/link.js",
     "np-uninstall": "bin/uninstall.js",
     "np-update": "bin/update.js"

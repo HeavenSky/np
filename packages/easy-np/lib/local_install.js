@@ -277,9 +277,10 @@ async function needInstall(parentDir, childPkg, options) {
   // always install if not install from package.json
   if (!options.installRoot) return true;
 
-  const pkg = await utils.readJSON(path.join(parentDir, 'node_modules', childPkg.name, 'package.json'));
+  const pkgDir = path.join(parentDir, 'node_modules', childPkg.name);
+  const pkg = await utils.readJSON(path.join(pkgDir, 'package.json'));
   try {
-    if (pkg.name && pkg.version && childPkg.version) {
+    if (pkg.name && pkg.version && childPkg.version && !(await utils.isInstallUnfinished(pkgDir))) {
       if (semver.validRange(childPkg.version, true) && utils.fastSemverSatisfies(pkg.version, childPkg.version)) {
         return false;
       }

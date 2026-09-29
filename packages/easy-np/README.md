@@ -1,6 +1,6 @@
 # easy-np
 
-[cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1 的 fork, 提供 `np`, `np-link`, `np-uninstall`, `np-update` 四个命令, 分别对应上游的 `npminstall`, `npmlink`, `npmuninstall`, `npmupdate`. 使用 `np` 或需要判断它与上游的行为差异时读本页; 未提到的用法同上游 [README](https://github.com/cnpm/npminstall/blob/master/README.md), 相对上游的全部变更见 [CHANGELOG.md](./CHANGELOG.md).
+[cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1 的 fork, 提供 `np`, `np-link`, `np-uninstall`, `np-update`, 分别对应上游的 `npminstall`, `npmlink`, `npmuninstall`, `npmupdate`, 另有上游没有的 `np-fetch`. 使用 `np` 或需要判断它与上游的行为差异时读本页; 未提到的用法同上游 [README](https://github.com/cnpm/npminstall/blob/master/README.md), 相对上游的全部变更见 [CHANGELOG.md](./CHANGELOG.md).
 
 ## 安装
 
@@ -39,6 +39,8 @@ npm i -g easy-np
 | `np-uninstall` 后的提升链接                | 保留, 被卸载的包仍可被 require                                                                          | 移除不再被任何 `package.json` 声明, 也不被 `.store` 中其他包依赖的提升链接                                                                 |
 
 ## 安装范围
+
+`np-fetch <pkg> [<pkg> ...]`(等同 `np --fetch-only`)只下载, 校验并解压列出的包, 链接到 `node_modules/<name>`; 不安装依赖, 不执行生命周期脚本, 不链接 bin, 不修改 `package.json`, 不支持 git 包与 `-g`. 这些包标记为未完成, 之后的完整 `np` 会重新处理并补齐依赖.
 
 | 命令              | 安装内容                                                                           |
 | ----------------- | ---------------------------------------------------------------------------------- |

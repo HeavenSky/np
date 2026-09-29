@@ -9,7 +9,7 @@ const fs = require('node:fs/promises');
 const { writeFileSync } = require('node:fs');
 const chalk = require('chalk');
 const parseArgs = require('minimist');
-const { installLocal, installGlobal, validatePendingPeerDependencies } = require('..');
+const { installLocal, installGlobal, validatePendingPeerDependencies, fetchOnly } = require('..');
 const npa = require('../lib/npa');
 const utils = require('../lib/utils');
 const globalConfig = require('../lib/config');
@@ -81,6 +81,7 @@ Object.assign(
       'fix-bug-versions',
       // --prune 已移除: 按固定名单跳过解压文件会误删 tsconfig.json 等运行时文件
       'save-dependencies-tree',
+      'fetch-only',
       // --force-link-latest 已移除: 提升到根目录时始终链接最高版本
       'dedup',
       'workspaces',
@@ -108,6 +109,29 @@ Object.assign(
 
 if (argv.version) {
   console.log(`np v${require('../package.json').version}`);
+  process.exit(0);
+}
+
+if (argv.help && argv['fetch-only']) {
+  console.log(`
+Usage:
+
+  np-fetch <pkg> [<pkg> ...]
+
+Only download, verify and extract the listed packages, then link them to node_modules/<name>.
+Dependencies are not installed, no lifecycle scripts run, no bin links are created and package.json is not changed.
+A later full np install processes these packages again and installs their dependencies.
+git packages are not supported, fetching them runs their prepare script.
+
+Options:
+
+  -r, --registry: specify custom registry
+  --root: install root directory, default is current working directory
+  --no-cache: don't use the tarball disk cache
+  -c, --china: specify in china, will automatically using chinese npm registry
+  -v, --version: show version
+  -h, --help: show help
+`);
   process.exit(0);
 }
 
@@ -166,6 +190,7 @@ Options:
   --cache-strict: use disk cache even on production env.
   --fix-bug-versions: automatically fix bug version of packages.
   --dependencies-tree: install with dependencies tree to restore the last install.
+  --fetch-only: same as np-fetch, only download and extract the listed packages without their dependencies and scripts
   --public-hoist-pattern: regexp of package names to link into <root>/node_modules with their latest version, fallback to config.np.publicHoistPattern in package.json, default is none.
   --dedup: link every package's latest version into <root>/node_modules like npminstall@6, overrides --public-hoist-pattern.
   --offline: offline mode. If a package won't be found locally, the installation will fail.
@@ -398,6 +423,14 @@ debug('argv: %j, env: %j', argv, env);
 
   if (config.offline) {
     console.warn(chalk.yellow('np WARN running on offline mode'));
+  }
+
+  if (argv['fetch-only']) {
+    if (argv.global || pkgs.length === 0 || installOnAllWorkspaces || installWorkspaceNames.length > 0) {
+      throw new Error('np-fetch needs at least one package and does not support -g, -w or --workspaces');
+    }
+    await fetchOnly(config, context);
+    return;
   }
 
   // -g install to npm's global prefix

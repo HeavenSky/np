@@ -13,6 +13,7 @@ easy-np 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1, 上�
 
 ### 新功能
 
+- `np-fetch` / `np --fetch-only`: 只下载解压列出的包, 不安装依赖, 不执行脚本, 不链接 bin, 不修改 `package.json`.
 - `--dedup`: 把依赖树中每个包的最高版本链接到根 `node_modules`, 即 npminstall@6 的扁平效果.
 - `--public-hoist-pattern=<regexp>` 与 `config.np.publicHoistPattern` 指定根目录提升规则, 默认不提升.
 - 提升到根目录的包始终取本次安装涉及的全部依赖树中的最高版本, 与 workspace 安装顺序无关; `package.json` 声明的依赖保持声明版本; 部分安装(`np <pkg>`, `-w`, `--workspaces`)只升级不降级.
@@ -22,6 +23,7 @@ easy-np 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1, 上�
 
 ### 修复
 
+- 根目录已存在但完成标记为 false 的包(`np-fetch` 解压或上次安装失败留下)不再因版本满足而跳过, 完整安装会重新处理并补齐依赖.
 - registry token 只发送给与 registry 同 host 的请求, 不再泄露给备用 registry 与 tarball CDN.
 - workspace 按依赖关系拓扑排序安装与执行生命周期脚本.
 - 在 workspace 仓库执行 `np -g` 不再删除本地 `node_modules` 下与 workspace 同名的目录.
