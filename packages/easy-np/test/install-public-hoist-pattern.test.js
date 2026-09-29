@@ -19,19 +19,19 @@ describe('test/install-public-hoist-pattern.test.js', () => {
 
   it('should not hoist transitive deps by default', async () => {
     await coffee.fork(helper.npminstall, ['--ignore-scripts'], { cwd, env }).debug().expect('code', 0).end();
-    assertFile(rootModule('eslint-config-egg'));
-    assertFile.fail(rootModule('eslint-plugin-eggache'));
-    assertFile.fail(rootModule('ajv'));
+    assertFile(rootModule('http-errors'));
+    assertFile.fail(rootModule('depd'));
+    assertFile.fail(rootModule('statuses'));
   });
 
   it('should hoist packages matched by --public-hoist-pattern', async () => {
     await coffee
-      .fork(helper.npminstall, ['--public-hoist-pattern=eslint'], { cwd, env })
+      .fork(helper.npminstall, ['--public-hoist-pattern=^depd$'], { cwd, env })
       .debug()
       .expect('code', 0)
       .end();
-    assertFile(rootModule('eslint-plugin-eggache'));
-    assertFile.fail(rootModule('ajv'));
+    assertFile(rootModule('depd'));
+    assertFile.fail(rootModule('statuses'));
   });
 
   it('should hoist all packages with --dedup', async () => {
@@ -40,8 +40,8 @@ describe('test/install-public-hoist-pattern.test.js', () => {
       .debug()
       .expect('code', 0)
       .end();
-    assertFile(rootModule('eslint-plugin-eggache'));
-    assertFile(rootModule('ajv'));
+    assertFile(rootModule('depd'));
+    assertFile(rootModule('statuses'));
   });
 
   describe('config.np.publicHoistPattern in package.json', () => {

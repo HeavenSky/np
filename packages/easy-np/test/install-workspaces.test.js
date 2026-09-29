@@ -30,14 +30,14 @@ describe('test/install-workpsaces.test.js', () => {
     let pkg = await helper.readJSON(path.join(root, 'node_modules/aa/package.json'));
     assert.equal(pkg.name, 'aa');
     // add peerDependencies to store
-    assertFile(path.join(root, 'packages/a/node_modules/egg/package.json'));
-    assertFile(path.join(root, 'packages/a/node_modules/egg-mock/package.json'));
-    pkg = await helper.readJSON(path.join(root, 'packages/a/node_modules/egg-mock/package.json'));
-    assert.equal(pkg.name, 'egg-mock');
-    assertFile(path.join(root, `node_modules/.store/egg-mock@${pkg.version}/node_modules/egg/package.json`));
+    assertFile(path.join(root, 'packages/a/node_modules/react/package.json'));
+    assertFile(path.join(root, 'packages/a/node_modules/react-dom/package.json'));
+    pkg = await helper.readJSON(path.join(root, 'packages/a/node_modules/react-dom/package.json'));
+    assert.equal(pkg.name, 'react-dom');
+    assertFile(path.join(root, `node_modules/.store/react-dom@${pkg.version}/node_modules/react/package.json`));
     // should link workspace package deps to workspace root node_modules
-    assertFile(path.join(root, 'node_modules/egg-mock/package.json'));
-    assertFile(path.join(root, 'node_modules/egg/package.json'));
+    assertFile(path.join(root, 'node_modules/react-dom/package.json'));
+    assertFile(path.join(root, 'node_modules/react/package.json'));
     assertFile(path.join(root, 'node_modules/abbrev/package.json'));
     pkg = await helper.readJSON(path.join(root, 'node_modules/aa/node_modules/abbrev/package.json'));
     assert.equal(pkg.name, 'abbrev');
@@ -66,8 +66,8 @@ describe('test/install-workpsaces.test.js', () => {
     assertFile.fail(path.join(root, 'node_modules/@cnpm/foo/node_modules/foo/package.json'));
 
     // workspace 直接依赖链接到根目录, 传递依赖默认不提升
-    assertFile(path.join(root, 'node_modules/eslint-config-egg/package.json'));
-    assertFile.fail(path.join(root, 'node_modules/eslint-plugin-eggache/package.json'));
+    assertFile(path.join(root, 'node_modules/http-errors/package.json'));
+    assertFile.fail(path.join(root, 'node_modules/depd/package.json'));
   });
 
   it('should install new package on one workspace', async () => {
@@ -208,28 +208,32 @@ describe('test/install-workpsaces.test.js', () => {
 
   // https://docs.npmjs.com/cli/v8/commands/npm-install#workspace
   it('should install workspace-package on path to a parent workspace directory', async () => {
-    await coffee.fork(helper.npminstall, ['egg', '--workspace', 'core'], { cwd: root }).debug().expect('code', 0).end();
-    let pkgFile = path.join(root, 'core/bar/node_modules/egg/package.json');
-    assertFile(pkgFile);
-    let pkg = await helper.readJSON(path.join(root, 'core/bar/package.json'));
-    assert.equal(typeof pkg.dependencies.egg, 'string');
-    pkgFile = path.join(root, 'core/foo/node_modules/egg/package.json');
-    assertFile(pkgFile);
-    pkg = await helper.readJSON(path.join(root, 'core/foo/package.json'));
-    assert.equal(typeof pkg.dependencies.egg, 'string');
-    pkgFile = path.join(root, 'core/scoped/node_modules/egg/package.json');
-    assertFile(pkgFile);
-    pkg = await helper.readJSON(path.join(root, 'core/scoped/package.json'));
-    assert.equal(typeof pkg.dependencies.egg, 'string');
-    // uninstall should work
     await coffee
-      .fork(helper.npmuninstall, ['egg', '--save', '--workspace', 'core'], { cwd: root })
+      .fork(helper.npminstall, ['is-number', '--workspace', 'core'], { cwd: root })
       .debug()
       .expect('code', 0)
       .end();
-    assertFile.fail(path.join(root, 'core/foo/node_modules/egg/package.json'));
+    let pkgFile = path.join(root, 'core/bar/node_modules/is-number/package.json');
+    assertFile(pkgFile);
+    let pkg = await helper.readJSON(path.join(root, 'core/bar/package.json'));
+    assert.equal(typeof pkg.dependencies['is-number'], 'string');
+    pkgFile = path.join(root, 'core/foo/node_modules/is-number/package.json');
+    assertFile(pkgFile);
+    pkg = await helper.readJSON(path.join(root, 'core/foo/package.json'));
+    assert.equal(typeof pkg.dependencies['is-number'], 'string');
+    pkgFile = path.join(root, 'core/scoped/node_modules/is-number/package.json');
+    assertFile(pkgFile);
+    pkg = await helper.readJSON(path.join(root, 'core/scoped/package.json'));
+    assert.equal(typeof pkg.dependencies['is-number'], 'string');
+    // uninstall should work
+    await coffee
+      .fork(helper.npmuninstall, ['is-number', '--save', '--workspace', 'core'], { cwd: root })
+      .debug()
+      .expect('code', 0)
+      .end();
+    assertFile.fail(path.join(root, 'core/foo/node_modules/is-number/package.json'));
     pkg = await helper.readJSON(path.join(root, 'core/bar/package.json'));
-    assert.equal(pkg.dependencies.egg, undefined);
+    assert.equal(pkg.dependencies['is-number'], undefined);
   });
 
   it('should throw error when workspace not exists', async () => {

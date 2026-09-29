@@ -1,9 +1,9 @@
 const path = require('node:path');
 
-const eggMock = path.dirname(require.resolve('egg-mock/package.json'));
-console.log('eggMock %s', eggMock);
+const reactDom = path.dirname(require.resolve('react-dom/package.json'));
+console.log('reactDom %s', reactDom);
 
-const egg = require.resolve('egg/package.json', { paths: [ eggMock ] });
-console.log('egg %s', egg);
+const react = require.resolve('react/package.json', { paths: [ reactDom ] });
+console.log('react %s', react);
 
 module.exports = 'packages/a';
