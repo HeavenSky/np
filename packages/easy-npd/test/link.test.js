@@ -26,7 +26,8 @@ describe('test/link.test.js', () => {
     await link(parentDir, pkg, realDir);
     const linkString = await fs.readlink(path.join(parentDir, 'node_modules', pkg.name));
     if (process.platform === 'win32') {
-      assert.equal(linkString, realDir + '\\');
+      // on Windows, `fs.readlink` no longer automatically adds a backslash to the end of the path for symbolic links of the junction type.
+      assert(linkString === realDir || linkString === realDir + '\\');
     } else {
       assert.equal(linkString, '../../realDir/linkfoo/1.0.0');
     }
