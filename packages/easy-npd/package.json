@@ -1,12 +1,13 @@
 {
   "name": "easy-npd",
   "version": "0.0.0",
-  "description": "Make npm install fast and handy.",
+  "description": "Fast npm installer forked from npminstall 6.8.0, with flat _name@version@name layout, latest-version hoisting and node 16 support",
   "main": "lib/index.js",
   "files": [
     "lib",
     "bin",
-    "node-gyp-bin"
+    "node-gyp-bin",
+    "CHANGELOG.md"
   ],
   "bin": {
     "npd": "bin/install.js",
@@ -15,14 +16,14 @@
     "npd-update": "bin/update.js"
   },
   "scripts": {
-    "contributor": "git-contributor",
     "test": "npm run lint && mocha 'test/*.test.js'",
     "test-cov": "c8 --reporter=text --reporter=lcov mocha 'test/*.test.js'",
     "test-local": "npm_china=true local=true mocha --full-trace 'test/*.test.js'",
     "lint": "oxlint",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
-    "ci": "npm run lint && npm run test-cov"
+    "ci": "npm run lint && npm run test-cov",
+    "prepublishOnly": "npm run lint"
   },
   "dependencies": {
     "@npmcli/arborist": "^6.1.3",
@@ -58,7 +59,6 @@
   "devDependencies": {
     "c8": "^9.1.0",
     "coffee": "5",
-    "git-contributor": "1",
     "mm": "3",
     "mocha": "^11.7.0",
     "oxfmt": "^0.70.0",
@@ -74,18 +74,19 @@
     "url": "https://github.com/HeavenSky/np/issues"
   },
   "publishConfig": {
-    "tag": "latest-6"
+    "registry": "https://registry.npmjs.org/"
   },
   "keywords": [
-    "npminstall",
+    "dedup",
+    "hoist",
+    "installer",
+    "npm",
     "npm install",
-    "yarn",
-    "pnpm",
-    "fastest npm install"
+    "npminstall"
   ],
   "engines": {
     "node": ">=16.14.0"
   },
-  "author": "fengmk2 <fengmk2@gmail.com> (https://github.com/fengmk2)",
+  "author": "HeavenSky",
   "license": "MIT"
 }
