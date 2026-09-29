@@ -82,8 +82,8 @@
   },
   "devDependencies": {
     "assert-file": "^1.0.0",
-    "coffee": "^5.5.0",
     "c8": "^9.1.0",
+    "coffee": "^5.5.0",
     "mm": "^3.2.1",
     "mocha": "^11.7.0",
     "oxfmt": "^0.70.0",

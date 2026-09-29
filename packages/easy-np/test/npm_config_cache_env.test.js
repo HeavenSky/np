@@ -19,7 +19,7 @@ describe('test/npm_config_cache_env.test.js', () => {
         version: '1.0.0',
         scripts: {
           postinstall:
-            'node -e "require(\'fs\').writeFileSync(\'.tmp_npm_config_cache\', process.env.npm_config_cache || \'\')"',
+            "node -e \"require('fs').writeFileSync('.tmp_npm_config_cache', process.env.npm_config_cache || '')\"",
         },
       })
     );
