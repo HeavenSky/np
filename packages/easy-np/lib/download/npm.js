@@ -178,7 +178,7 @@ async function _getCacheInfo(fullname, globalOptions) {
   const cacheContent = await fs.readFile(info.cacheFile);
   try {
     info.cache = JSON.parse(cacheContent);
-  } catch (_) {
+  } catch {
     globalOptions.console.warn('[np:download:npm] Ignore invalid cache file %s', info.cacheFile);
   }
   return info;

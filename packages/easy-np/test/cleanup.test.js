@@ -17,7 +17,7 @@ describe('test/cleanup.test.js', () => {
         root: tmp,
         pkgs: [{ name: 'install-error', version: 'latest' }],
       });
-    } catch (err) {
+    } catch {
       throwError = true;
     }
     assert(throwError);
@@ -32,7 +32,7 @@ describe('test/cleanup.test.js', () => {
         root: tmp,
         pkgs: [{ name: 'install-error', version: 'latest' }],
       });
-    } catch (err) {
+    } catch {
       throwError = true;
     }
     assert.equal(throwError, true);
@@ -46,7 +46,7 @@ describe('test/cleanup.test.js', () => {
         root: tmp,
         pkgs,
       });
-    } catch (err) {
+    } catch {
       throwError = true;
     }
     assert.equal(throwError, true);
@@ -58,7 +58,7 @@ describe('test/cleanup.test.js', () => {
         root: tmp,
         pkgs,
       });
-    } catch (err) {
+    } catch {
       throwError = true;
     }
     assert.equal(throwError, true);

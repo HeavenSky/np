@@ -47,7 +47,7 @@ const { runLifecycleScripts } = require('./lifecycle_scripts');
  */
 module.exports = async (options, context = new Context()) => {
   options = formatInstallOptions(options);
-  options.spinner && options.spinner.start();
+  if (options.spinner) options.spinner.start();
   let traceTimer;
   let showTrace;
   if (options.trace) {
@@ -478,7 +478,7 @@ async function shouldOverrideLink(pkg, linkDir, options) {
     }
 
     return false;
-  } catch (e) {
+  } catch {
     return true;
   }
 }
@@ -570,13 +570,13 @@ function recordRecentlyUpdates(options) {
       const text = `  ${label}`;
       recentlyUpdatesText += `${text}\n`;
 
-      logToConsole && console.info(chalk.gray(text));
+      if (logToConsole) console.info(chalk.gray(text));
       const list = displays[key];
       for (const message of list) {
         const text = `    ${chalk.green('→')} ${message}`;
         recentlyUpdatesText += `${text}\n`;
 
-        logToConsole && console.info(text);
+        if (logToConsole) console.info(text);
       }
     }
     writeFileSync(recentlyUpdatesTextFile, recentlyUpdatesText);

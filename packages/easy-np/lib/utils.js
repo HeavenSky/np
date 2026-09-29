@@ -50,7 +50,7 @@ exports.pruneJSON = async (filepath, depName) => {
   const depMap = {};
   const depKeys = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
   for (const key of depKeys) {
-    pkg[key] && (depMap[key] = pkg[key]);
+    if (pkg[key]) depMap[key] = pkg[key];
   }
   for (const dep of Object.values(depMap)) {
     if (this.hasOwnProp(dep, depName)) {
@@ -155,7 +155,7 @@ exports.forceSymlink = async (src, dest, type) => {
     if (linkString === relative) {
       return relative;
     }
-  } catch (err) {
+  } catch {
     // ignore error, will always cleanup dest
   }
 

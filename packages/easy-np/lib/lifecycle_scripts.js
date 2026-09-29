@@ -52,7 +52,7 @@ exports.runLifecycleScripts = async function runLifecycleScripts(pkg, root, orig
       continue;
     }
 
-    runInForeground && console.info('> %s %s %s %s> %s', displayName, script, root, os.EOL, cmd);
+    if (runInForeground) console.info('> %s %s %s %s> %s', displayName, script, root, os.EOL, cmd);
     const startTime = Date.now();
     try {
       await utils.runScript(root, cmd, globalOptions, runInForeground);
@@ -78,7 +78,7 @@ exports.runLifecycleScripts = async function runLifecycleScripts(pkg, root, orig
       throw error;
     } finally {
       const ts = Date.now() - startTime;
-      runInForeground && console.info('> %s %s, finished in %s', displayName, script, ms(ts));
+      if (runInForeground) console.info('> %s %s, finished in %s', displayName, script, ms(ts));
       globalOptions.runscriptCount += 1;
       globalOptions.runscriptTime += ts;
     }
