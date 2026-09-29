@@ -2,7 +2,7 @@
 
 easy-np 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1, 上游历史版本见 [npminstall CHANGELOG](https://github.com/cnpm/npminstall/blob/master/CHANGELOG.md).
 
-## 0.0.0 (2026-09-28)
+## 0.0.0 (2026-09-29)
 
 首个版本, 相对 npminstall 8.0.1 的全部变更如下.
 

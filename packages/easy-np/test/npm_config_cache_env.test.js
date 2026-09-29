@@ -6,7 +6,7 @@ const helper = require('./helper');
 
 describe('test/npm_config_cache_env.test.js', () => {
   const [tmp, cleanup] = helper.tmp();
-  const env = Object.assign({}, process.env, { HOME: tmp });
+  const env = Object.assign({}, process.env, { HOME: tmp, USERPROFILE: tmp });
   delete env.npm_config_cache;
   delete env.np_cache;
 
