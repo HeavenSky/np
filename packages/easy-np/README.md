@@ -16,13 +16,27 @@ npm i -g easy-np
 
 全部参数见 `np --help`.
 
-## 主要差异
+## 与上游 8.0.1 的差异
 
-- `--dedup` 把每个包的最高版本链接到根 `node_modules`, 即 npminstall@6 的扁平效果.
-- 根目录默认不提升任何包; 用 `--public-hoist-pattern=<regexp>` 或 `package.json` 的 `config.np.publicHoistPattern` 指定, 命令行优先.
-- 缓存目录 `~/.np_tarball`, 环境变量 `np_cache`, 与 easy-npd 共用; 安装完成标记 `__np_done`, 由上游装出的 `node_modules` 需删除后重装.
-- registry token 只发给与 registry 同 host 的请求.
-- 移除 `--prune`, `--proxy`, `--force-link-latest`, `--disable-fallback-store` 等参数; 完整清单见 CHANGELOG.
+未列出的变更(workspace 修复, 依赖版本调整等)见 CHANGELOG.
+
+| 项                                         | 上游 8.0.1                                                                                              | 本 fork                                                                                                                                    |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--dedup`                                  | 无                                                                                                      | 把每个包的最新版本链接到 `<root>/node_modules`, 即 npminstall@6 的扁平效果; 优先级高于 `--public-hoist-pattern`                            |
+| 根目录提升                                 | 固定提升名称匹配 `/(eslint\|prettier\|babel)/i` 的包                                                    | 默认不提升; 用 `--public-hoist-pattern=<regexp>` 或 `package.json` 的 `config.np.publicHoistPattern` 指定, 命令行优先                      |
+| `--disable-fallback-store`                 | 可关闭 `.store/node_modules` 回退链接                                                                   | 移除, 回退链接始终建立                                                                                                                     |
+| `--force-link-latest`                      | 显式开启才用更高版本覆盖根目录已有链接                                                                  | 移除, 提升时始终链接最高版本                                                                                                               |
+| `--proxy`, `npm_proxy`, `npm_config_proxy` | 声明支持, 但 urllib 3/4 不认 `proxy` 参数, 实际直连                                                     | 移除                                                                                                                                       |
+| npm `strict-ssl`                           | 读取后作为 `rejectUnauthorized` 传给 `HttpClient.request`, urllib 3/4 均不认, 不生效                    | 不再读取, HTTPS 证书始终校验                                                                                                               |
+| `--tarball-url-mapping`                    | 声明也改写重定向地址, 但 urllib 3/4 不支持 `formatRedirectUrl`                                          | 只改写首个请求地址                                                                                                                         |
+| `np-uninstall --ignore-scripts`            | 声明但无作用                                                                                            | 移除                                                                                                                                       |
+| 缓存目录                                   | `~/.npminstall_tarball` 下的 `manifests/` 与按包名拆分的多级 tarball 目录                               | `~/.np_tarball` 下的 `np-manifests/<name>/<hash>.json`, `np-tgz/<name>/`, `np-tmp/<YYYYMMDD>/`; 不再自动清理过期临时目录; 与 easy-npd 共用 |
+| 缓存目录环境变量                           | `npminstall_cache`                                                                                      | `np_cache`; `npm_config_cache` 两边都认                                                                                                    |
+| `package.json` 配置                        | `config.npminstall` 的 `prune`, `env:production.prune`, `env:development.prune`, 只在不带包名安装时读取 | `config.np` 的 `publicHoistPattern`, `np` 与 `np <pkg>` 都读取; 移除 `prune` 与 `env:*`                                                    |
+| `--prune`                                  | 解压时按固定名单跳过文件                                                                                | 移除; 名单含 `tsconfig.json`, `LICENSE`, `images/` 等, 会静默破坏 `@tsconfig/*` 这类包                                                     |
+| 安装完成标记                               | 包内 `package.json` 的 `__npminstall_done`                                                              | `__np_done`; 由上游装出的 `node_modules` 会被视为未完成, 切换时先删除 `node_modules`                                                       |
+| registry token                             | 附加到所有请求                                                                                          | 只附加到与 registry 同 host 的请求                                                                                                         |
+| `np-uninstall` 后的提升链接                | 保留, 被卸载的包仍可被 require                                                                          | 移除不再被任何 `package.json` 声明, 也不被 `.store` 中其他包依赖的提升链接                                                                 |
 
 ## 安装范围
 
