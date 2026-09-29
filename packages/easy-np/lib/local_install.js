@@ -13,7 +13,7 @@ const ms = require('ms');
 const pMap = require('p-map');
 const semver = require('semver');
 const bytes = require('bytes');
-const moment = require('moment');
+const dayjs = require('dayjs');
 const utils = require('./utils');
 const installPackage = require('./install_package');
 const dependencies = require('./dependencies');
@@ -535,7 +535,7 @@ module.exports.validatePendingPeerDependencies = async context => {
 
 function recordRecentlyUpdates(options) {
   if (options.recentlyUpdates.size > 0) {
-    const since = moment(options.recentlyUpdateMinDateTime).format('YYYY-MM-DD');
+    const since = dayjs(options.recentlyUpdateMinDateTime).format('YYYY-MM-DD');
     const recentlyUpdatesTextFile = path.join(options.storeDir, '.recently_updates.txt');
     let recentlyUpdatesText = `Recently updated (since ${since})`;
     console.info(
@@ -547,15 +547,15 @@ function recordRecentlyUpdates(options) {
     const displays = {};
     for (const item of options.recentlyUpdates) {
       const name = item[0];
-      const publishDate = moment(item[1]);
+      const publishDate = dayjs(item[1]);
       const key = publishDate.format('YYYY-MM-DD');
       const list = displays[key] || [];
       list.push(`${name} ${chalk.gray(publishDate.format('(HH:mm:ss)'))}`);
       displays[key] = list;
     }
 
-    const today = moment().format('YYYY-MM-DD');
-    const yesterday = moment().add(-1, 'days').format('YYYY-MM-DD');
+    const today = dayjs().format('YYYY-MM-DD');
+    const yesterday = dayjs().add(-1, 'day').format('YYYY-MM-DD');
     const keys = Object.keys(displays).sort((a, b) => {
       return a > b ? -1 : 1;
     });
