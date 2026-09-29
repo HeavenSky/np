@@ -13,7 +13,15 @@
 npm i -g easy-npd
 ```
 
+作为依赖引用:
+
+```json
+{ "dependencies": { "easy-npd": "^0.0.0" } }
+```
+
 安装未发布的最新代码: 在本仓库的 `packages/easy-npd` 下执行 `npm pack`, 再 `npm i -g ./easy-npd-<version>.tgz`; npm 不支持从 git 仓库子目录安装.
+
+全局命令 `npd` 与 npm 包 [`npd`](https://www.npmjs.com/package/npd)("Node Packages Deployer", 提供 `npd` 与 `npdg`)的命令同名: 已全局安装其中一个时, 再全局安装另一个会报 `EEXIST: file already exists` 并拒绝安装, 加 `--force` 才会覆盖; 作为项目依赖安装时各自位于 `node_modules/.bin`, 互不影响.
 
 ## 命令
 
@@ -45,8 +53,17 @@ npm i -g easy-npd
 | `--lockfile-path` 加载失败 | 告警后联网解析, 退出码 0 | 报错退出 |
 | 在 `npm run` / `npx` 下安装需要 prepare 的 git 依赖 | 继承 `npm_config_allow_scripts`, 被 npm 12 以 `EALLOWSCRIPTS` 拒绝 | 正常安装; 失败时错误信息附带子进程 stderr |
 | `npd-uninstall` | 可能在 `package.json` 写回前返回 | 写回完成后返回 |
+| `npd-uninstall` 后被卸载包的依赖 | 根目录提升链接保留, 仍可被 require | 移除不再被根 `package.json` 声明, 也不被其他 `_name@version@name` 引用的提升链接 |
+| `.cnpmrc` 的 registry 用户名密码 | 按子串匹配 registry 地址附加, `always-auth` 时附加到所有请求 | 只附加到与 registry 同 host 的请求, `always-auth` 也不例外 |
 | 依赖 | node-gyp 9, tar 6 | node-gyp 10, tar 7 |
 | 开发工具 | eslint, egg-bin | oxlint, oxfmt, mocha 11, c8 |
+
+## 安装范围
+
+| 命令 | 安装内容 |
+| --- | --- |
+| `npd` | 根 `package.json` 的全部依赖, 并执行根包的生命周期脚本 |
+| `npd <pkg>` | 只安装 `<pkg>` 并写入 `package.json`(`--no-save` 不写入); 不刷新其余已声明依赖, 不执行根包生命周期脚本 |
 
 ## Use as Lib
 
@@ -251,21 +268,18 @@ npm i babel-preset-es2015 browserify chalk debug minimist mkdirp
     real	1m4.729s       user	0m55.589s      sys	0m23.135s
 ```
 
+## 已知安全风险
+
+为支持 Node 16 而保留的依赖, 以下公告未修复:
+
+- urllib 3 依赖的 undici 5: 公告集中在 WebSocket, fetch, Cookie 与 retry 拦截器, npd 不经过这些路径; 请求走私一类需要恶意 registry 或代理配合.
+- pacote 15 内嵌的 tar 6: 只在安装 git 依赖时由 pacote 调用; npd 自身解压 tarball 使用顶层 tar 7.
+- pacote `addGitSha` DoS 与 sigstore 签名约束失效: 只涉及 git 依赖与签名校验, npd 不启用签名校验.
+
+## 待办规划
+
+- [ ] 回收无用的包实体: 卸载与重装后不再被任何链接引用的 `node_modules/_name@version@name` 目录目前不会删除, 需要一个基于引用扫描的清理命令或安装后自动回收.
+
 ## License
 
-[MIT](LICENSE.txt)
-<!-- GITCONTRIBUTOR_START -->
-
-## Contributors
-
-|[<img src="https://avatars.githubusercontent.com/u/156269?v=4" width="100px;"/><br/><sub><b>fengmk2</b></sub>](https://github.com/fengmk2)<br/>|[<img src="https://avatars.githubusercontent.com/u/985607?v=4" width="100px;"/><br/><sub><b>dead-horse</b></sub>](https://github.com/dead-horse)<br/>|[<img src="https://avatars.githubusercontent.com/u/4635838?v=4" width="100px;"/><br/><sub><b>gemwuu</b></sub>](https://github.com/gemwuu)<br/>|[<img src="https://avatars.githubusercontent.com/u/6897780?v=4" width="100px;"/><br/><sub><b>killagu</b></sub>](https://github.com/killagu)<br/>|[<img src="https://avatars.githubusercontent.com/u/543405?v=4" width="100px;"/><br/><sub><b>ibigbug</b></sub>](https://github.com/ibigbug)<br/>|[<img src="https://avatars.githubusercontent.com/u/6828924?v=4" width="100px;"/><br/><sub><b>vagusX</b></sub>](https://github.com/vagusX)<br/>|
-| :---: | :---: | :---: | :---: | :---: | :---: |
-|[<img src="https://avatars.githubusercontent.com/u/507615?v=4" width="100px;"/><br/><sub><b>afc163</b></sub>](https://github.com/afc163)<br/>|[<img src="https://avatars.githubusercontent.com/u/465125?v=4" width="100px;"/><br/><sub><b>yesmeck</b></sub>](https://github.com/yesmeck)<br/>|[<img src="https://avatars.githubusercontent.com/u/360661?v=4" width="100px;"/><br/><sub><b>popomore</b></sub>](https://github.com/popomore)<br/>|[<img src="https://avatars.githubusercontent.com/u/319494?v=4" width="100px;"/><br/><sub><b>we11adam</b></sub>](https://github.com/we11adam)<br/>|[<img src="https://avatars.githubusercontent.com/u/7463687?v=4" width="100px;"/><br/><sub><b>whatwewant</b></sub>](https://github.com/whatwewant)<br/>|[<img src="https://avatars.githubusercontent.com/u/18736572?v=4" width="100px;"/><br/><sub><b>emma-owen</b></sub>](https://github.com/emma-owen)<br/>|
-|[<img src="https://avatars.githubusercontent.com/u/7336582?v=4" width="100px;"/><br/><sub><b>weihong1028</b></sub>](https://github.com/weihong1028)<br/>|[<img src="https://avatars.githubusercontent.com/u/49113249?v=4" width="100px;"/><br/><sub><b>HomyeeKing</b></sub>](https://github.com/HomyeeKing)<br/>|[<img src="https://avatars.githubusercontent.com/u/2972143?v=4" width="100px;"/><br/><sub><b>nightink</b></sub>](https://github.com/nightink)<br/>|[<img src="https://avatars.githubusercontent.com/u/2842176?v=4" width="100px;"/><br/><sub><b>XadillaX</b></sub>](https://github.com/XadillaX)<br/>|[<img src="https://avatars.githubusercontent.com/u/1195765?v=4" width="100px;"/><br/><sub><b>LeoYuan</b></sub>](https://github.com/LeoYuan)<br/>|[<img src="https://avatars.githubusercontent.com/u/13602053?v=4" width="100px;"/><br/><sub><b>cnlon</b></sub>](https://github.com/cnlon)<br/>|
-|[<img src="https://avatars.githubusercontent.com/u/6613538?v=4" width="100px;"/><br/><sub><b>Moudicat</b></sub>](https://github.com/Moudicat)<br/>|[<img src="https://avatars.githubusercontent.com/u/6753092?v=4" width="100px;"/><br/><sub><b>hanzhao</b></sub>](https://github.com/hanzhao)<br/>|[<img src="https://avatars.githubusercontent.com/u/431376?v=4" width="100px;"/><br/><sub><b>marcbachmann</b></sub>](https://github.com/marcbachmann)<br/>|[<img src="https://avatars.githubusercontent.com/u/19733683?v=4" width="100px;"/><br/><sub><b>snyk-bot</b></sub>](https://github.com/snyk-bot)<br/>|[<img src="https://avatars.githubusercontent.com/u/11251401?v=4" width="100px;"/><br/><sub><b>Solais</b></sub>](https://github.com/Solais)<br/>|[<img src="https://avatars.githubusercontent.com/u/958063?v=4" width="100px;"/><br/><sub><b>thonatos</b></sub>](https://github.com/thonatos)<br/>|
-|[<img src="https://avatars.githubusercontent.com/u/227713?v=4" width="100px;"/><br/><sub><b>atian25</b></sub>](https://github.com/atian25)<br/>|[<img src="https://avatars.githubusercontent.com/u/3364271?v=4" width="100px;"/><br/><sub><b>tommytroylin</b></sub>](https://github.com/tommytroylin)<br/>|[<img src="https://avatars.githubusercontent.com/u/3922719?v=4" width="100px;"/><br/><sub><b>wssgcg1213</b></sub>](https://github.com/wssgcg1213)<br/>|[<img src="https://avatars.githubusercontent.com/u/4136679?v=4" width="100px;"/><br/><sub><b>yibn2008</b></sub>](https://github.com/yibn2008)<br/>|[<img src="https://avatars.githubusercontent.com/u/29791463?v=4" width="100px;"/><br/><sub><b>fossabot</b></sub>](https://github.com/fossabot)<br/>|[<img src="https://avatars.githubusercontent.com/u/1908773?v=4" width="100px;"/><br/><sub><b>hugohua</b></sub>](https://github.com/hugohua)<br/>|
-[<img src="https://avatars.githubusercontent.com/u/19908330?v=4" width="100px;"/><br/><sub><b>hyj1991</b></sub>](https://github.com/hyj1991)<br/>|[<img src="https://avatars.githubusercontent.com/u/13431452?v=4" width="100px;"/><br/><sub><b>givingwu</b></sub>](https://github.com/givingwu)<br/>|[<img src="https://avatars.githubusercontent.com/u/1196941?v=4" width="100px;"/><br/><sub><b>Abreto</b></sub>](https://github.com/Abreto)<br/>
-
-This project follows the git-contributor [spec](https://github.com/xudafeng/git-contributor), auto updated at `Wed Nov 09 2022 14:41:07 GMT+0800`.
-
-<!-- GITCONTRIBUTOR_END -->
+MIT, 版权归属见 [LICENSE.txt](./LICENSE.txt).

@@ -1,8 +1,10 @@
 # Changelog
 
+easy-npd 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 6.8.0, 上游历史版本见 [npminstall 6.x CHANGELOG](https://github.com/cnpm/npminstall/blob/6.x/CHANGELOG.md) 与更早的 [History.md](https://github.com/cnpm/npminstall/blob/6.x/History.md).
+
 ## 0.0.0 (2026-09-28)
 
-easy-npd 基于 npminstall 6.8.0, 首个版本. 与上游行为差异的对照表见 [README.md](./README.md#与上游-680-的差异).
+首个版本. 与上游行为差异的对照表见 [README.md](./README.md#与上游-680-的差异).
 
 ### 命名
 
@@ -20,6 +22,8 @@ easy-npd 基于 npminstall 6.8.0, 首个版本. 与上游行为差异的对照�
 - `--lockfile-path` 加载失败时报错退出, 不再静默回退为联网解析.
 - 在 `npm run` / `npx` 下安装需要 prepare 的 git 依赖时, 不再因继承 `npm_config_allow_scripts` 被 npm 12 以 `EALLOWSCRIPTS` 拒绝; git 依赖安装失败时报错附带子进程 stderr.
 - `npd-uninstall` 等待 `package.json` 写回完成后再返回.
+- `npd-uninstall` 后移除根 `node_modules` 中已无人使用的提升链接, 被卸载包的依赖不再仍可被 require.
+- `.cnpmrc` 中的 registry 用户名密码只发送给与 registry 同 host 的请求, `always-auth` 也不例外, 不再泄露给备用 registry, tarball CDN 与二进制镜像.
 
 ### 移除
 
@@ -32,17 +36,3 @@ easy-npd 基于 npminstall 6.8.0, 首个版本. 与上游行为差异的对照�
 
 - Node.js >= 16.14.0; 依赖调整为 `node-gyp` 10, `tar` 7.
 - 开发工具改为 oxlint 与 oxfmt; 测试由 egg-bin 改为直接使用 mocha 11 与 c8.
-
-## [6.8.0](https://github.com/cnpm/npminstall/compare/v6.7.1...v6.8.0) (2023-12-18)
-
-
-### Features
-
-* add support for process.env.npminstall_cache ([#471](https://github.com/cnpm/npminstall/issues/471)) ([bd2cd34](https://github.com/cnpm/npminstall/commit/bd2cd348723b2fa91e406f9e8cad2fb14e186834))
-
-## [6.7.0](https://github.com/cnpm/npminstall/compare/v6.6.2...v6.7.0) (2023-09-15)
-
-
-### Features
-
-* add npm package-lock.json support for 6.x ([#463](https://github.com/cnpm/npminstall/issues/463)) ([fecd257](https://github.com/cnpm/npminstall/commit/fecd257a5baa07c2984c9f72087cd3569f495716)), closes [#462](https://github.com/cnpm/npminstall/issues/462)
