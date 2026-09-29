@@ -13,6 +13,8 @@ easy-npd 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 6.8.0, 上
 
 ### 新功能
 
+- 自动在 npmmirror 与 npmjs 之间切换: 每次运行先测速决定先后, manifest, tgz 与依赖安装脚本失败时交替换源, 最多 4 次; 镜像缺版本时向官方源重拉; 私有源与单独指定 registry 的 scope 不切换. `-c` 改为跳过测速, 镜像优先.
+- `--refresh-cache`: 忽略并覆盖已有的 manifest 与 tgz 缓存.
 - `npd-fetch` / `npd --fetch-only`: 只下载解压列出的包, 不安装依赖, 不执行脚本, 不链接 bin, 不修改 `package.json`.
 - 根目录提升链接始终指向最高版本; 完整安装时依赖变化后重装会更新上次的提升链接; 根 `package.json` 声明的包不覆盖.
 - 缓存目录改为 `np-manifests/<name>/<hash>.json`, `np-tgz/<name>/`, `np-tmp/<YYYYMMDD>/`; 旧布局的缓存不再读取, 不再自动清理过期临时目录.
@@ -20,6 +22,8 @@ easy-npd 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 6.8.0, 上
 
 ### 修复
 
+- 缓存中的 tgz 损坏时删除并重新下载, 不再每次重试都读到同一个坏文件.
+- 流式请求收到 4xx / 5xx 时不再因断开响应流抛出未捕获的 abort 错误.
 - 根目录已存在但完成标记为 false 的包(`npd-fetch` 解压或上次安装失败留下)不再因版本满足而跳过, 完整安装会重新处理并补齐依赖.
 - `--lockfile-path` 加载失败时报错退出, 不再静默回退为联网解析.
 - 在 `npm run` / `npx` 下安装需要 prepare 的 git 依赖时, 不再因继承 `npm_config_allow_scripts` 被 npm 12 以 `EALLOWSCRIPTS` 拒绝; git 依赖安装失败时报错附带子进程 stderr.

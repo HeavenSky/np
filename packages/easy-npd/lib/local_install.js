@@ -16,6 +16,7 @@ const fs = require('fs/promises');
 const moment = require('moment');
 const util = require('util');
 const utils = require('./utils');
+const mirror = require('./mirror');
 const postinstall = require('./postinstall');
 const preinstall = require('./preinstall');
 const prepublish = require('./prepublish');
@@ -436,7 +437,7 @@ async function runPostInstallTasks(options) {
         );
         const start = Date.now();
         try {
-          await utils.runScript(root, installScript, options);
+          await mirror.runScript(root, installScript, options);
         } catch (err) {
           options.console.warn(
             '[npd:runscript:error] %s scripts.install run %j error: %s',
@@ -463,7 +464,7 @@ async function runPostInstallTasks(options) {
         );
         const start = Date.now();
         try {
-          await utils.runScript(root, postinstallScript, options);
+          await mirror.runScript(root, postinstallScript, options);
         } catch (err) {
           options.console.warn(
             '[npd:runscript:error] %s scripts.postinstall run %j error: %s',

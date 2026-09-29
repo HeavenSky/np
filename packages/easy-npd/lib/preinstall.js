@@ -1,7 +1,7 @@
 'use strict';
 
 const chalk = require('chalk');
-const runScript = require('./utils').runScript;
+const { runScript } = require('./mirror');
 
 module.exports = preinstall;
 

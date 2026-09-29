@@ -17,6 +17,7 @@ const globalConfig = require('../lib/config');
 const { parsePackageName } = require('../lib/alias');
 const { LOCAL_TYPES, REMOTE_TYPES, ALIAS_TYPES } = require('../lib/npa_types');
 const Context = require('../lib/context');
+const mirror = require('../lib/mirror');
 const { lockfileConverter } = require('../lib/lockfile_resolver');
 
 const originalArgv = process.argv.slice(2);
@@ -79,6 +80,7 @@ Object.assign(
       // --prune 已移除: 按固定名单跳过解压文件会误删 tsconfig.json 等运行时文件
       'save-dependencies-tree',
       'fetch-only',
+      'refresh-cache',
       // --force-link-latest 已移除: 提升到根目录时始终链接最高版本
     ],
     default: {
@@ -121,7 +123,8 @@ Options:
   -r, --registry: specify custom registry
   --root: install root directory, default is current working directory
   --no-cache: don't use the tarball disk cache
-  -c, --china: specify in china, will automatically using chinese npm registry
+  -c, --china: try npmmirror first without probing, still fall back to npmjs on failure
+  --refresh-cache: ignore cached manifests and tarballs, download again and overwrite the cache
   -v, --version: show version
   -h, --help: show help
 `);
@@ -164,7 +167,8 @@ Options:
   --save-dependencies-tree: save the resolved dependencies tree to node_modules/.dependencies_tree.json
   -v, --version: show version
   -h, --help: show help
-  -c, --china: specify in china, will automatically using chinese npm registry and other binary's mirrors
+  -c, --china: try npmmirror and its binary mirrors first without probing, still fall back to npmjs on failure
+  --refresh-cache: ignore cached manifests and tarballs, download again and overwrite the cache
   -d, --detail: show detail log of installation
   --trace: show memory and cpu usages traces of installation
   --ignore-scripts: ignore all preinstall / install and postinstall scripts during the installation
@@ -234,6 +238,9 @@ const customChinaMirrorUrl = argv['custom-china-mirror-url'];
 
 // example: npd --registry xx --registry xxxx
 let registry = (Array.isArray(argv.registry) ? argv.registry[0] : argv.registry) || process.env.npm_registry;
+// 未指定 registry 或指定的是 npmmirror / npmjs 时自动换源, 指定私有源时全部关闭; -c 与指定公共源时跳过测速
+const preferSource = registry ? mirror.sourceOf(registry) : inChina ? 'mirror' : null;
+const autoMirror = !registry || !!preferSource;
 if (inChina) {
   registry = registry || globalConfig.chineseRegistry;
 }
@@ -271,8 +278,43 @@ debug('argv: %j, env: %j', argv, env);
 
 (async () => {
   let binaryMirrors = {};
+  let mirrorState;
 
-  if (inChina) {
+  if (autoMirror) {
+    const probed = await mirror.probe({ prefer: preferSource, globalOptions: { console } });
+    binaryMirrors = probed.binaryMirrorConfig?.mirrors?.china;
+    if (!binaryMirrors) {
+      try {
+        binaryMirrors = await utils.getBinaryMirrors(registry, {});
+      } catch (err) {
+        console.warn(chalk.yellow('npd WARN load binary mirror config error: %s'), err.message);
+        binaryMirrors = {};
+      }
+    }
+    if (customChinaMirrorUrl) {
+      for (const key in binaryMirrors) {
+        const item = binaryMirrors[key];
+        if (item.host) {
+          item.host = item.host.replace(globalConfig.chineseMirrorUrl, customChinaMirrorUrl);
+        }
+      }
+    }
+    const binaryEnvs = {};
+    for (const key in binaryMirrors.ENVS) {
+      binaryEnvs[key] = customChinaMirrorUrl
+        ? binaryMirrors.ENVS[key].replace(globalConfig.chineseMirrorUrl, customChinaMirrorUrl)
+        : binaryMirrors.ENVS[key];
+    }
+    mirrorState = mirror.create({ order: probed.order, binaryOrder: probed.binaryOrder, binaryEnvs });
+    if (!preferSource) {
+      registry = mirrorState.registry;
+      env.npm_config_registry = registry;
+    }
+    if (probed.binaryOrder[0] === 'mirror') {
+      Object.assign(env, binaryEnvs);
+    }
+    console.info(chalk.gray('npd registry: %s, binary: %s'), probed.order.join(' > '), probed.binaryOrder.join(' > '));
+  } else if (inChina) {
     binaryMirrors = await utils.getBinaryMirrors(registry, {});
     if (customChinaMirrorUrl) {
       for (const key in binaryMirrors) {
@@ -299,6 +341,8 @@ debug('argv: %j, env: %j', argv, env);
     production,
     cacheStrict: argv['cache-strict'],
     cacheDir,
+    refreshCache: argv['refresh-cache'],
+    mirror: mirrorState,
     env,
     binaryMirrors,
     forbiddenLicenses,

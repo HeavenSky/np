@@ -17,6 +17,8 @@ const semver = require('semver');
 const utility = require('utility');
 const { family: getLibcFamily } = require('detect-libc');
 const get = require('../get');
+
+const { MIRROR_ATTEMPTS } = get;
 const utils = require('../utils');
 const config = require('../cnpm_config');
 
@@ -73,9 +75,21 @@ async function resolve(pkg, options) {
     spec = 'latest';
   }
 
-  const distTags = packageMeta['dist-tags'];
+  let distTags = packageMeta['dist-tags'];
 
   let realPkgVersion = utils.findMaxSatisfyingVersion(spec, distTags, packageMeta.allVersions);
+  // 镜像同步滞后时新版本只在官方源上: 找不到版本时绕过缓存向官方源重拉一次
+  const missing = !realPkgVersion || !packageMeta.versions[realPkgVersion];
+  if (missing && _getMirror(pkg.name, options) && !packageMeta.fromOfficial) {
+    try {
+      const fullMeta = await getFullPackageMeta(pkg.name, options, { officialOnly: true });
+      Object.assign(packageMeta, fullMeta, { fromOfficial: true, allVersions: Object.keys(fullMeta.versions) });
+      distTags = packageMeta['dist-tags'];
+      realPkgVersion = utils.findMaxSatisfyingVersion(spec, distTags, packageMeta.allVersions);
+    } catch (err) {
+      debug('[%s] refetch manifests from official registry error: %s', pkg.name, err.message);
+    }
+  }
   let fixDependencies;
   let fixScripts;
 
@@ -151,18 +165,31 @@ function _getScope(name) {
   if (name[0] === '@') return name.slice(0, name.indexOf('/'));
 }
 
-async function _getCacheInfo(fullname, globalOptions) {
+// scope 单独指定 registry 时该 scope 不换源
+function _getMirror(name, options) {
+  const scope = _getScope(name);
+  if (scope && config.get(scope + ':registry')) return null;
+  return options.mirror || null;
+}
+
+async function _getCacheInfo(fullname, globalOptions, { officialOnly = false } = {}) {
   // check name has scope
   let registry = globalOptions.registry;
   const scope = _getScope(fullname);
   if (scope) {
     registry = config.get(scope + ':registry') || globalOptions.registry;
   }
+  // 换源时缓存键统一取官方源地址, 使两个源共用缓存
+  const mirror = _getMirror(fullname, globalOptions);
   const info = {
-    pkgUrl: utils.formatPackageUrl(registry, fullname),
+    pkgUrl: utils.formatPackageUrl(mirror ? mirror.officialRegistry : registry, fullname),
+    mirrorUrls: null,
     cacheFile: '',
     cache: null,
   };
+  if (mirror) {
+    info.mirrorUrls = officialOnly ? [info.pkgUrl] : mirror.expand(info.pkgUrl);
+  }
   if (!globalOptions.cacheDir) {
     return info;
   }
@@ -171,7 +198,8 @@ async function _getCacheInfo(fullname, globalOptions) {
   const parentDir = path.join(globalOptions.cacheDir, 'np-manifests', fullname);
   // { etag, age, headers, manifests }
   info.cacheFile = path.join(parentDir, `${hash}.json`);
-  const exists = await utils.exists(info.cacheFile);
+  // --refresh-cache 与回官方源重拉时不读旧缓存, 拉取后覆盖写入
+  const exists = !globalOptions.refreshCache && !officialOnly && (await utils.exists(info.cacheFile));
   // cache not exists
   if (!exists) {
     await utils.mkdirp(parentDir);
@@ -194,15 +222,15 @@ async function removeCacheInfo(fullname, globalOptions) {
   }
 }
 
-async function getFullPackageMeta(fullname, globalOptions) {
-  const info = await _getCacheInfo(fullname, globalOptions);
+async function getFullPackageMeta(fullname, globalOptions, fetchOptions) {
+  const info = await _getCacheInfo(fullname, globalOptions, fetchOptions);
   if (!info.cacheFile) {
-    const result = await _fetchFullPackageMeta(info.pkgUrl, globalOptions);
+    const result = await _fetchFullPackageMeta(info.pkgUrl, globalOptions, null, info.mirrorUrls);
     return result.data;
   }
   // cache file not exists
   if (!info.cache) {
-    return await _fetchFullPackageMetaWithCache(info.pkgUrl, globalOptions, info.cacheFile);
+    return await _fetchFullPackageMetaWithCache(info.pkgUrl, globalOptions, info.cacheFile, null, info.mirrorUrls);
   }
   // check is expired or not
   if (info.cache.expired > Date.now()) {
@@ -210,14 +238,14 @@ async function getFullPackageMeta(fullname, globalOptions) {
     return info.cache.manifests;
   }
   // use etag to request
-  return await _fetchFullPackageMetaWithCache(info.pkgUrl, globalOptions, info.cacheFile, info.cache);
+  return await _fetchFullPackageMetaWithCache(info.pkgUrl, globalOptions, info.cacheFile, info.cache, info.mirrorUrls);
 }
 
-async function _fetchFullPackageMetaWithCache(pkgUrl, globalOptions, cacheFile, cache) {
+async function _fetchFullPackageMetaWithCache(pkgUrl, globalOptions, cacheFile, cache, mirrorUrls) {
   const etag = cache && cache.etag;
   let result;
   try {
-    result = await _fetchFullPackageMeta(pkgUrl, globalOptions, etag);
+    result = await _fetchFullPackageMeta(pkgUrl, globalOptions, etag, mirrorUrls);
   } catch (err) {
     if (cache) {
       globalOptions.console.warn('[npd:download:npm] Request %s error, use cache instead', pkgUrl);
@@ -269,7 +297,7 @@ async function _fetchFullPackageMetaWithCache(pkgUrl, globalOptions, cacheFile, 
   return result.data;
 }
 
-async function _fetchFullPackageMeta(pkgUrl, globalOptions, etag) {
+async function _fetchFullPackageMeta(pkgUrl, globalOptions, etag, mirrorUrls = null) {
   const headers = {
     accept: 'application/vnd.npm.install-v1+json; q=1.0, application/json; q=0.8, */*',
   };
@@ -284,6 +312,7 @@ async function _fetchFullPackageMeta(pkgUrl, globalOptions, etag) {
       followRedirect: true,
       gzip: true,
       dataType: 'json',
+      mirrorUrls,
     },
     globalOptions
   );
@@ -355,17 +384,21 @@ async function download(pkg, options) {
 
   let lastErr;
   let count = 0;
-  const tarballUrls = utils.parseTarballUrls(pkg.dist.tarball);
+  const pkgMirror = _getMirror(pkg.name, options);
+  const mirrorUrls = pkgMirror && pkgMirror.expand(pkg.dist.tarball);
+  const tarballUrls = mirrorUrls || utils.parseTarballUrls(pkg.dist.tarball);
+  const maxCount = mirrorUrls ? MIRROR_ATTEMPTS : 3;
   let tarballUrlIndex = 0;
   let tarballUrl;
-  while (count < 3) {
+  while (count < maxCount) {
     tarballUrl = tarballUrls[tarballUrlIndex++];
     if (!tarballUrl) {
-      tarballUrlIndex = 0;
-      tarballUrl = tarballUrls[tarballUrlIndex];
+      tarballUrlIndex = 1;
+      tarballUrl = tarballUrls[0];
     }
+    let stream;
     try {
-      const stream = await getTarballStream(tarballUrl, pkg, options);
+      stream = await getTarballStream(tarballUrl, pkg, options, !!mirrorUrls);
       let useTarFormat = false;
       if (count === 1 && lastErr && lastErr.code === 'Z_DATA_ERROR') {
         options.console.warn(`[${pkg.name}@${pkg.version}] format ungzip error, try to use tar format`);
@@ -378,14 +411,19 @@ async function download(pkg, options) {
       lastErr = err;
       count++;
       options.console.warn(
-        `[${pkg.name}@${pkg.version}] download %s: %s, fail count: %s`,
+        `[${pkg.name}@${pkg.version}] download %s %s: %s, fail count: %s`,
+        tarballUrl,
         err.name,
         err.message,
         count
       );
+      // 缓存中的 tgz 校验或解压失败时删除, 否则之后每次重试都读到同一个损坏文件
+      if (stream && stream.tarballFile) {
+        await fs.rm(stream.tarballFile, { force: true });
+      }
       // retry download on any error
-      // sleep for a while to wait for server become normal
-      if (count < 3) {
+      // 换到下一个地址时直接重试, 所有地址都试过一轮才等待
+      if (count < maxCount && tarballUrlIndex >= tarballUrls.length) {
         await utils.sleep(count * 500);
       }
     }
@@ -413,90 +451,12 @@ async function download(pkg, options) {
   };
   const binaryMirror = options.binaryMirrors[pkg.name];
   if (binaryMirror) {
-    // node-pre-gyp
-    if (pkg.scripts && pkg.scripts.install && !binaryMirror.replaceHostFiles) {
-      // leveldown and sqlite3
-      // nodegit
-      if (
-        /prebuild --install/.test(pkg.scripts.install) ||
-        /prebuild --download/.test(pkg.scripts.install) ||
-        /node-pre-gyp install/.test(pkg.scripts.install) ||
-        // utf-8-validate
-        /prebuild-install || node-gyp rebuild/.test(pkg.scripts.install) ||
-        pkg.name === 'nodegit' ||
-        pkg.name === 'fsevents'
-      ) {
-        const newBinary = pkg.binary || {};
-        for (const key in binaryMirror) {
-          newBinary[key] = binaryMirror[key];
-        }
-        pkgMeta.binary = newBinary;
-        // ignore https protocol check on: node_modules/node-pre-gyp/lib/util/versioning.js
-        if (/node-pre-gyp install/.test(pkg.scripts.install)) {
-          const versioningFile = path.join(ungzipDir, 'node_modules/node-pre-gyp/lib/util/versioning.js');
-          if (await utils.exists(versioningFile)) {
-            let content = await fs.readFile(versioningFile, 'utf-8');
-            content = content.replace(
-              "if (protocol === 'http:') {",
-              "if (false && protocol === 'http:') { // hack by npd"
-            );
-            await fs.writeFile(versioningFile, content);
-          }
-        }
-        options.console.info('%s download from binary mirror: %j', chalk.gray(`${pkg.name}@${pkg.version}`), newBinary);
-      }
-    } else if (
-      (binaryMirror.replaceHost && binaryMirror.host) ||
-      binaryMirror.replaceHostMap ||
-      binaryMirror.replaceHostRegExpMap
-    ) {
-      // use mirror url instead
-      // e.g.: pngquant-bin
-      // https://github.com/lovell/sharp/blob/master/install/libvips.js#L19
-      const replaceHostFiles = binaryMirror.replaceHostFiles || ['lib/index.js', 'lib/install.js'];
-      for (const replaceHostFile of replaceHostFiles) {
-        const replaceHostFilePath = path.join(ungzipDir, replaceHostFile);
-        await replaceHostInFile(pkg, replaceHostFilePath, binaryMirror, options);
-      }
+    if (options.mirror) {
+      // 记下改写前的内容, 安装脚本失败换源重试时据此在镜像与官方地址之间切换
+      options.mirror.binaryPackages.set(ungzipDir, await snapshotBinaryFiles(pkg, ungzipDir, binaryMirror));
     }
-
-    // replace cypress download url
-    // https://github.com/cypress-io/cypress/blob/master/cli/lib/tasks/download.js#L30
-    if (pkg.name === 'cypress') {
-      const defaultPlatforms = {
-        darwin: 'osx64',
-        linux: 'linux64',
-        win32: 'win64',
-      };
-      let platforms = binaryMirror.platforms || defaultPlatforms;
-      // version >= 3.3.0 should use binaryMirror.newPlatforms by default, other use defaultPlatforms
-      if (binaryMirror.newPlatforms && semver.gte(pkg.version, '3.3.0')) {
-        platforms = binaryMirror.newPlatforms;
-      }
-      const targetPlatform = platforms[os.platform()];
-      if (targetPlatform) {
-        options.console.info(
-          '%s download from binary mirror: %j, targetPlatform: %s',
-          chalk.gray(`${pkg.name}@${pkg.version}`),
-          binaryMirror,
-          targetPlatform
-        );
-        const downloadFile = path.join(ungzipDir, 'lib/tasks/download.js');
-        if (await utils.exists(downloadFile)) {
-          let content = await fs.readFile(downloadFile, 'utf-8');
-          // return version ? prepend('desktop/' + version) : prepend('desktop');
-          const afterContent =
-            'return "' + binaryMirror.host + '/" + version + "/' + targetPlatform + '/cypress.zip"; // hack by npd\n';
-          content = content
-            .replace("return version ? prepend(`desktop/${version}`) : prepend('desktop')", afterContent)
-            .replace("return version ? prepend('desktop/' + version) : prepend('desktop');", afterContent);
-          await fs.writeFile(downloadFile, content);
-        }
-      }
-    } else if (pkg.name === 'vscode') {
-      // https://github.com/Microsoft/vscode-extension-vscode/blob/master/bin/install#L64
-      const indexFilepath = path.join(ungzipDir, 'bin/install');
-      await replaceHostInFile(pkg, indexFilepath, binaryMirror, options);
+    if (!options.mirror || options.mirror.binaryOrder[0] === 'mirror') {
+      await applyBinaryMirror(pkg, ungzipDir, binaryMirror, pkgMeta, options);
     }
   }
 
@@ -522,7 +482,7 @@ async function download(pkg, options) {
   };
 }
 
-async function getTarballStream(tarballUrl, pkg, options) {
+async function getTarballStream(tarballUrl, pkg, options, mirrored = false) {
   // 只改写首个请求地址: urllib 3 不支持 formatRedirectUrl, 重定向后的地址无法再按 mapping 改写
   if (options.formatNpmTarbalUrl) {
     tarballUrl = options.formatNpmTarbalUrl(tarballUrl);
@@ -546,6 +506,9 @@ async function getTarballStream(tarballUrl, pkg, options) {
     }
   }
 
+  // 公共源地址由 download 的外层循环换源重试, 这里不再原地重试
+  const retry = mirrored ? 1 : undefined;
+
   if (!options.cacheDir || utils.isSudo()) {
     // sudo don't touch the cacheDir
     // production mode
@@ -555,6 +518,7 @@ async function getTarballStream(tarballUrl, pkg, options) {
       {
         timeout: options.streamingTimeout || options.timeout,
         followRedirect: true,
+        retry,
         streaming: true,
       },
       options
@@ -584,7 +548,8 @@ async function getTarballStream(tarballUrl, pkg, options) {
   }
   const parentDir = path.join(options.cacheDir, 'np-tgz', pkg.name);
   const tarballFile = path.join(parentDir, `${pkg.version}-${pkg.dist.shasum}.tgz`);
-  let exists = await utils.exists(tarballFile);
+  // --refresh-cache 时忽略已有缓存, 下载后覆盖
+  let exists = !options.refreshCache && (await utils.exists(tarballFile));
   if (!exists) {
     const tmpDir = path.join(options.cacheDir, 'np-tmp', moment().format('YYYYMMDD'));
     await utils.mkdirp(parentDir);
@@ -595,6 +560,7 @@ async function getTarballStream(tarballUrl, pkg, options) {
       {
         timeout: options.streamingTimeout || options.timeout,
         followRedirect: true,
+        retry,
         writeStream: createWriteStream(tmpFile),
       },
       options
@@ -604,7 +570,7 @@ async function getTarballStream(tarballUrl, pkg, options) {
       throw new Error(`Download ${tarballUrl} status: ${result.status} error, should be 200`);
     }
     // make sure tarball file is not exists again
-    exists = await utils.exists(tarballFile);
+    exists = !options.refreshCache && (await utils.exists(tarballFile));
     if (!exists) {
       try {
         await fs.rename(tmpFile, tarballFile);
@@ -719,6 +685,125 @@ function checkShasumAndUngzip(ungzipDir, readstream, pkg, useTarFormat) {
     }
   });
 }
+
+// 把包内的二进制下载地址改写为镜像: node-pre-gyp 类写入 pkgMeta.binary, 其余直接改写包内文件
+async function applyBinaryMirror(pkg, ungzipDir, binaryMirror, pkgMeta, options) {
+  // node-pre-gyp
+  if (pkg.scripts && pkg.scripts.install && !binaryMirror.replaceHostFiles) {
+    // leveldown and sqlite3
+    // nodegit
+    if (
+      /prebuild --install/.test(pkg.scripts.install) ||
+      /prebuild --download/.test(pkg.scripts.install) ||
+      /node-pre-gyp install/.test(pkg.scripts.install) ||
+      // utf-8-validate
+      /prebuild-install || node-gyp rebuild/.test(pkg.scripts.install) ||
+      pkg.name === 'nodegit' ||
+      pkg.name === 'fsevents'
+    ) {
+      const newBinary = Object.assign({}, pkg.binary);
+      for (const key in binaryMirror) {
+        newBinary[key] = binaryMirror[key];
+      }
+      pkgMeta.binary = newBinary;
+      // ignore https protocol check on: node_modules/node-pre-gyp/lib/util/versioning.js
+      if (/node-pre-gyp install/.test(pkg.scripts.install)) {
+        const versioningFile = path.join(ungzipDir, 'node_modules/node-pre-gyp/lib/util/versioning.js');
+        if (await utils.exists(versioningFile)) {
+          let content = await fs.readFile(versioningFile, 'utf-8');
+          content = content.replace(
+            "if (protocol === 'http:') {",
+            "if (false && protocol === 'http:') { // hack by npd"
+          );
+          await fs.writeFile(versioningFile, content);
+        }
+      }
+      options.console.info('%s download from binary mirror: %j', chalk.gray(`${pkg.name}@${pkg.version}`), newBinary);
+    }
+  } else if (
+    (binaryMirror.replaceHost && binaryMirror.host) ||
+    binaryMirror.replaceHostMap ||
+    binaryMirror.replaceHostRegExpMap
+  ) {
+    // use mirror url instead
+    // e.g.: pngquant-bin
+    // https://github.com/lovell/sharp/blob/master/install/libvips.js#L19
+    const replaceHostFiles = binaryMirror.replaceHostFiles || ['lib/index.js', 'lib/install.js'];
+    for (const replaceHostFile of replaceHostFiles) {
+      const replaceHostFilePath = path.join(ungzipDir, replaceHostFile);
+      await replaceHostInFile(pkg, replaceHostFilePath, binaryMirror, options);
+    }
+  }
+
+  // replace cypress download url
+  // https://github.com/cypress-io/cypress/blob/master/cli/lib/tasks/download.js#L30
+  if (pkg.name === 'cypress') {
+    const defaultPlatforms = {
+      darwin: 'osx64',
+      linux: 'linux64',
+      win32: 'win64',
+    };
+    let platforms = binaryMirror.platforms || defaultPlatforms;
+    // version >= 3.3.0 should use binaryMirror.newPlatforms by default, other use defaultPlatforms
+    if (binaryMirror.newPlatforms && semver.gte(pkg.version, '3.3.0')) {
+      platforms = binaryMirror.newPlatforms;
+    }
+    const targetPlatform = platforms[os.platform()];
+    if (targetPlatform) {
+      options.console.info(
+        '%s download from binary mirror: %j, targetPlatform: %s',
+        chalk.gray(`${pkg.name}@${pkg.version}`),
+        binaryMirror,
+        targetPlatform
+      );
+      const downloadFile = path.join(ungzipDir, 'lib/tasks/download.js');
+      if (await utils.exists(downloadFile)) {
+        let content = await fs.readFile(downloadFile, 'utf-8');
+        // return version ? prepend('desktop/' + version) : prepend('desktop');
+        const afterContent =
+          'return "' + binaryMirror.host + '/" + version + "/' + targetPlatform + '/cypress.zip"; // hack by npd\n';
+        content = content
+          .replace("return version ? prepend(`desktop/${version}`) : prepend('desktop')", afterContent)
+          .replace("return version ? prepend('desktop/' + version) : prepend('desktop');", afterContent);
+        await fs.writeFile(downloadFile, content);
+      }
+    }
+  } else if (pkg.name === 'vscode') {
+    // https://github.com/Microsoft/vscode-extension-vscode/blob/master/bin/install#L64
+    const indexFilepath = path.join(ungzipDir, 'bin/install');
+    await replaceHostInFile(pkg, indexFilepath, binaryMirror, options);
+  }
+}
+
+function binaryMirrorFiles(pkg, binaryMirror) {
+  const files = [...(binaryMirror.replaceHostFiles || ['lib/index.js', 'lib/install.js'])];
+  if (pkg.name === 'cypress') files.push('lib/tasks/download.js');
+  if (pkg.name === 'vscode') files.push('bin/install');
+  return files;
+}
+
+async function snapshotBinaryFiles(pkg, ungzipDir, binaryMirror) {
+  const files = {};
+  for (const file of binaryMirrorFiles(pkg, binaryMirror)) {
+    const filepath = path.join(ungzipDir, file);
+    if (await utils.exists(filepath)) files[filepath] = await fs.readFile(filepath);
+  }
+  return { pkg, binaryMirror, binary: pkg.binary && JSON.parse(JSON.stringify(pkg.binary)), files };
+}
+
+// 安装脚本换源重试前调用: official 还原改写前的文件与 binary 字段, mirror 在还原后重新改写
+module.exports.useBinarySource = async (ungzipDir, source, options) => {
+  const snapshot = options.mirror && options.mirror.binaryPackages.get(ungzipDir);
+  if (!snapshot) return;
+  for (const filepath in snapshot.files) {
+    await fs.writeFile(filepath, snapshot.files[filepath]);
+  }
+  const pkgMeta = { binary: snapshot.binary };
+  if (source === 'mirror') {
+    await applyBinaryMirror(snapshot.pkg, ungzipDir, snapshot.binaryMirror, pkgMeta, options);
+  }
+  await utils.addMetaToJSONFile(path.join(ungzipDir, 'package.json'), pkgMeta);
+};
 
 async function replaceHostInFile(pkg, filepath, binaryMirror, globalOptions) {
   const exists = await utils.exists(filepath);

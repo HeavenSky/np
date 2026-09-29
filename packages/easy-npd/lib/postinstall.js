@@ -1,6 +1,7 @@
 const chalk = require('chalk');
 const path = require('path');
 const utils = require('./utils');
+const mirror = require('./mirror');
 
 module.exports = postinstall;
 
@@ -23,7 +24,7 @@ async function postinstall(pkg, root, optional, displayName, options) {
     );
     const cmd = 'node-gyp rebuild';
     try {
-      await utils.runScript(root, cmd, options);
+      await mirror.runScript(root, cmd, options);
     } catch (err) {
       options.console.warn(
         '[npd:runscript:error] %s has binding.gyp file, run %j error: %s',

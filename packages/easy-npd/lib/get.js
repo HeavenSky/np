@@ -15,7 +15,14 @@ const httpclient = new urllib.HttpClient({
   lookup: cacheable.lookup,
 });
 
+// 公共源交替尝试的总次数: 两个源各 2 次
+const MIRROR_ATTEMPTS = 4;
+get.MIRROR_ATTEMPTS = MIRROR_ATTEMPTS;
+
 async function get(url, options, globalOptions) {
+  if (options.mirrorUrls && options.mirrorUrls.length > 1) {
+    return await getFromMirrors(options, globalOptions);
+  }
   options.headers = options.headers || {};
   options.headers['User-Agent'] = USER_AGENT;
   // 不传 rejectUnauthorized / proxy / enableProxy: urllib 3 均不支持, 传入不生效
@@ -41,6 +48,8 @@ async function get(url, options, globalOptions) {
   if (result.status < 100 || result.status >= 400) {
     if (options.streaming) {
       try {
+        // 主动断开响应流会触发 abort 错误, 不监听会成为未捕获异常
+        result.res.on('error', () => {});
         destroy(result.res);
       } catch (err) {
         const logger = (globalOptions && globalOptions.console) || console;
@@ -56,6 +65,23 @@ async function get(url, options, globalOptions) {
     throw err;
   }
   return result;
+}
+
+// 按 mirrorUrls 的先后交替尝试, 4xx / 5xx 也换源: 镜像同步滞后时新版本在镜像上是 404
+async function getFromMirrors(options, globalOptions) {
+  const { mirrorUrls, ...requestOptions } = options;
+  let lastErr;
+  for (let i = 0; i < MIRROR_ATTEMPTS; i++) {
+    const url = mirrorUrls[i % mirrorUrls.length];
+    try {
+      // 每次复制请求头再按本次 url 判断是否附加凭据, 避免把一个源的凭据带给另一个源
+      return await get(url, { ...requestOptions, headers: { ...requestOptions.headers }, retry: 1 }, globalOptions);
+    } catch (err) {
+      lastErr = err;
+      debug('mirror attempt %s GET %s error: %s', i + 1, url, err.message);
+    }
+  }
+  throw lastErr;
 }
 
 function isSameHost(url, registry) {
