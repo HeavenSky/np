@@ -11,7 +11,7 @@
 
 ## 共用缓存
 
-两个包共用磁盘缓存 `~/.np_tarball`, 由 `np_cache` 或 `npm_config_cache` 改写; 目录下的 `np-manifests/<name>/<md5(manifest url)>.json` 与 `np-tgz/<name>/<version>-<shasum>.tgz` 两边写法相同, 可互相复用. 修改任一个包的缓存路径, 文件名或 manifest 缓存的 JSON 结构时 MUST 同步修改另一个包, 否则两者会静默读到对方写入的不兼容缓存.
+两个包共用磁盘缓存 `~/.np_tarball`, 由 `np_cache` 或 `npm_config_cache` 改写; 目录下的 `np-manifests/<name>/<md5(manifest url)>.json`(公共源统一按官方源的 manifest 地址) 与 `np-tgz/<name>/<version>-<shasum>.tgz` 两边写法相同, 可互相复用. 修改任一个包的缓存路径, 文件名或 manifest 缓存的 JSON 结构时 MUST 同步修改另一个包, 否则两者会静默读到对方写入的不兼容缓存.
 
 ## 开发
 
