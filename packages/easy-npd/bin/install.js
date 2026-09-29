@@ -431,7 +431,7 @@ async function updateDependencies(root, pkgs, propName, saveExact, remoteNames) 
     if (REMOTE_TYPES.includes(item.type)) {
       // if install from remote or git and don't specified name
       // get package's name from `remoteNames`
-      item.name ? (deps[item.name] = item.version) : (deps[remoteNames[item.version]] = item.version);
+      deps[item.name || remoteNames[item.version]] = item.version;
     } else if (item.type === ALIAS_TYPES) {
       deps[item.name] = item.version;
     } else {

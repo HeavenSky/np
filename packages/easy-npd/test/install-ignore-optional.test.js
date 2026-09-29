@@ -10,7 +10,7 @@ const npmupdate = path.join(__dirname, '..', 'bin', 'update.js');
 describe('test/install-ignore-optional.test.js', () => {
   let cwd;
   async function cleanup() {
-    cwd && (await rimraf(path.join(cwd, 'node_modules')));
+    if (cwd) await rimraf(path.join(cwd, 'node_modules'));
     cwd = null;
   }
 

@@ -1,7 +1,6 @@
 'use strict';
 
 const assert = require('assert');
-const fs = require('fs/promises');
 const path = require('path');
 const coffee = require('coffee');
 const helper = require('./helper');

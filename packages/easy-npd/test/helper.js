@@ -30,7 +30,7 @@ exports.tmp = name => {
     try {
       // avoid Error: ENOTEMPTY: directory not empty, rmdir
       await rimraf(dir);
-    } catch (_) {
+    } catch {
       // ignore error
     }
     await mkdirp(dir);

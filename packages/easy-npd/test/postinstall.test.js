@@ -57,7 +57,7 @@ describe('test/postinstall.test.js', () => {
       let hasFile = false;
       try {
         hasFile = !!fs.statSync(path.join(root, 'node_modules', '.prepublish.txt'));
-      } catch (err) {
+      } catch {
         // empty
       }
       assert.equal(hasFile, false);

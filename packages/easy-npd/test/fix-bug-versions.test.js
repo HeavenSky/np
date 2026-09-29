@@ -52,7 +52,7 @@ describe('test/fix-bug-versions.test.js', () => {
       .fork(bin, ['styled-components@5.3.5', '-d', '--fix-bug-versions', '--no-cache'], { cwd: tmp })
       .debug()
       .expect('code', 0)
-      .expect('stderr', /use scripts: {"postinstall":"\"} instead, reason:/)
+      .expect('stderr', /use scripts: {"postinstall":""} instead, reason:/)
       .notExpect('stderr', /scripts.postinstall styled-components@5.3.5 finished/)
       .notExpect('stdout', /scripts.postinstall styled-components@5.3.5 finished/)
       .end();

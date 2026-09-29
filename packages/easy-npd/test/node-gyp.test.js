@@ -24,7 +24,7 @@ if (process.platform !== 'win32' && semver.satisfies(process.version, '< 12.0.0'
           root: tmp,
           pkgs: [{ name: 'node-icu-charset-detector', version: '0.2.0' }],
         });
-      } catch (err) {
+      } catch {
         // ignore
       }
       assert(await exists(path.join(tmp, 'node_modules/node-icu-charset-detector/build')));

@@ -94,7 +94,7 @@ describe('test/installGit.test.js', () => {
       });
     } catch (err) {
       assert(
-        /\[@git\+https:\/\/github.com\/mozilla\/nunjucks.git#wtf\?\?\?!\!!fail-here,hahaa\] The git reference could not be found/.test(
+        /\[@git\+https:\/\/github.com\/mozilla\/nunjucks.git#wtf\?\?\?!!!fail-here,hahaa\] The git reference could not be found/.test(
           err.message
         )
       );

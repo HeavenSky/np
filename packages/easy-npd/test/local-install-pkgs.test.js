@@ -26,7 +26,7 @@ describe('test/local-install-pkgs.test.js', () => {
       .notExpect('stdout', /Linked \d+ latest versions/)
       .end();
     let names = await fs.readdir(path.join(cwd, 'node_modules'));
-    names = names.filter(n => !/^[.\_]/.test(n));
+    names = names.filter(n => !/^[._]/.test(n));
     assert(names.length > 10);
     assert(names.includes('koa'));
     assert(names.includes('accepts'));

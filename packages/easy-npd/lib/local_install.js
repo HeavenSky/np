@@ -52,7 +52,7 @@ const Context = require('./context');
  */
 module.exports = async (options, context = new Context()) => {
   options = formatInstallOptions(options);
-  options.spinner && options.spinner.start();
+  if (options.spinner) options.spinner.start();
   let traceTimer;
   let showTrace;
   if (options.trace) {
@@ -161,7 +161,7 @@ async function _install(options, context) {
 
   await pMap(pkgs, mapper, 10);
   options.downloadFinished = Date.now();
-  options.spinner && options.spinner.succeed(`Installed ${pkgs.length} packages`);
+  if (options.spinner) options.spinner.succeed(`Installed ${pkgs.length} packages`);
 
   // dedupe mode https://docs.npmjs.com/cli/dedupe
   // link every packages' latest version to target directory
@@ -258,7 +258,7 @@ async function checkLinkPeerDependencies(params, options) {
   try {
     rootPkg = await utils.readJSON(path.join(options.targetDir, 'node_modules', realPkg.name, 'package.json'));
     if (rootPkg.version === realPkg.version) return;
-  } catch (_) {
+  } catch {
     // ignore
   }
   options.console.warn(
@@ -334,7 +334,7 @@ async function linkAllLatestVersion(rootPkgsMap, options) {
     };
     await pMap(options.latestVersions, mapper, 20);
   }
-  options.spinner && options.spinner.succeed(`Linked ${options.latestVersions.size} latest versions`);
+  if (options.spinner) options.spinner.succeed(`Linked ${options.latestVersions.size} latest versions`);
 }
 
 // 根目录直接依赖与提升链接都指向 _name@ver@name, 只能按 package.json 声明名单区分, 声明过的包永不覆盖
@@ -355,7 +355,7 @@ async function isHoistedLink(pkg, linkDir, storeDir, options) {
       basename.startsWith(prefix) &&
       basename.endsWith(`@${path.basename(pkg.name)}`)
     );
-  } catch (_) {
+  } catch {
     return false;
   }
 }
@@ -373,7 +373,7 @@ async function shouldOverrideLink(pkg, linkDir, storeDir, options) {
     }
 
     return false;
-  } catch (e) {
+  } catch {
     return true;
   }
 }
@@ -494,7 +494,7 @@ async function runPostInstallTasks(options) {
       throw err;
     }
   }
-  options.spinner && options.spinner.succeed(`Run ${options.postInstallTasks.length} scripts`);
+  if (options.spinner) options.spinner.succeed(`Run ${options.postInstallTasks.length} scripts`);
 }
 
 function printPendingMessages(options) {
@@ -551,13 +551,13 @@ function recordRecentlyUpdates(options) {
       const text = `  ${label}`;
       recentlyUpdatesText += `${text}\n`;
 
-      logToConsole && console.info(chalk.gray(text));
+      if (logToConsole) console.info(chalk.gray(text));
       const list = displays[key];
       for (const message of list) {
         const text = `    ${chalk.green('→')} ${message}`;
         recentlyUpdatesText += `${text}\n`;
 
-        logToConsole && console.info(text);
+        if (logToConsole) console.info(text);
       }
     }
     writeFileSync(recentlyUpdatesTextFile, recentlyUpdatesText);
