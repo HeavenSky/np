@@ -67,7 +67,6 @@ Object.assign(
       'save-isomorphic',
       // Saved dependencies will be configured with an exact version rather than using npm's default semver range operator.
       'save-exact',
-      'china',
       'ignore-scripts',
       // run scripts on foreground, default is background
       'foreground-scripts',
@@ -101,7 +100,6 @@ Object.assign(
       v: 'version',
       h: 'help',
       g: 'global',
-      c: 'china',
       r: 'registry',
       d: 'detail',
       w: 'workspace',
@@ -130,7 +128,6 @@ Options:
   -r, --registry: specify custom registry
   --root: install root directory, default is current working directory
   --no-cache: don't use the tarball disk cache
-  -c, --china: try npmmirror first without probing, still fall back to npmjs on failure
   --refresh-cache: ignore cached manifests and tarballs, download again and overwrite the cache
   --offline: only use the disk cache and never request the network
   -v, --version: show version
@@ -173,13 +170,12 @@ Options:
   --root: install root directory, default is current working directory
   --prefix: global install prefix used with -g, default is '$npm config get prefix'
   --no-cache: don't use the tarball disk cache, ignored when --cache-strict is set
-  --custom-china-mirror-url: replace the default china binary mirror https://npmmirror.com/mirrors, used with -c
+  --custom-china-mirror-url: replace the default china binary mirror https://npmmirror.com/mirrors
   --tarball-url-mapping: JSON object to rewrite tarball urls before request, redirect targets are not rewritten, e.g.: --tarball-url-mapping='{"https://a.com":"https://b.com"}'
   --lockfile-path: install from package-lock.json (lockfileVersion >= 2), optionalDependencies in lockfile are ignored, not supported with workspaces, fail if the lockfile can't be loaded
   --save-dependencies-tree: save the resolved dependencies tree to node_modules/.dependencies_tree.json
   -v, --version: show version
   -h, --help: show help
-  -c, --china: try npmmirror and its binary mirrors first without probing, still fall back to npmjs on failure
   --refresh-cache: ignore cached manifests and tarballs, download again and overwrite the cache
   -d, --detail: show detail log of installation
   -w, --workspace: install on one workspace only, e.g.: np koa -w a
@@ -249,8 +245,6 @@ forbiddenLicenses = forbiddenLicenses ? forbiddenLicenses.split(',') : null;
 
 const flatten = argv.flatten;
 
-// if in china, will automatic using chinese registry and mirror.
-const inChina = argv.china || !!process.env.npm_china;
 // if exists, override default china mirror url
 const customChinaMirrorUrl = argv['custom-china-mirror-url'];
 
@@ -265,12 +259,9 @@ if (offline && !cacheDir) {
   );
   process.exit(1);
 }
-// 未指定 registry 或指定的是 npmmirror / npmjs 时自动换源, 指定私有源时全部关闭; -c 与指定公共源时跳过测速
-const preferSource = registry ? mirror.sourceOf(registry) : inChina ? 'mirror' : null;
+// 未指定 registry 或指定的是 npmmirror / npmjs 时自动换源, 指定私有源时全部关闭; 指定公共源时跳过测速并以它优先
+const preferSource = registry ? mirror.sourceOf(registry) : null;
 const autoMirror = !registry || !!preferSource;
-if (inChina) {
-  registry = registry || globalConfig.chineseRegistry;
-}
 // for env.npm_config_registry
 registry = registry || 'https://registry.npmjs.com';
 
@@ -360,24 +351,6 @@ debug('argv: %j, env: %j', argv, env);
       Object.assign(env, binaryEnvs);
     }
     console.info(chalk.gray('np registry: %s, binary: %s'), probed.order.join(' > '), probed.binaryOrder.join(' > '));
-  } else if (inChina) {
-    binaryMirrors = await utils.getBinaryMirrors(registry, { offline, cacheDir });
-    if (customChinaMirrorUrl) {
-      for (const key in binaryMirrors) {
-        const item = binaryMirrors[key];
-        if (item.host) {
-          item.host = item.host.replace(globalConfig.chineseMirrorUrl, customChinaMirrorUrl);
-        }
-      }
-    }
-
-    // set env
-    for (const key in binaryMirrors.ENVS) {
-      env[key] = binaryMirrors.ENVS[key];
-      if (customChinaMirrorUrl) {
-        env[key] = env[key].replace(globalConfig.chineseMirrorUrl, customChinaMirrorUrl);
-      }
-    }
   }
 
   const config = {

@@ -13,7 +13,7 @@ easy-np 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1, 上�
 
 ### 新功能
 
-- 自动在 npmmirror 与 npmjs 之间切换: 每次运行先测速决定先后, manifest, tgz 与依赖安装脚本失败时交替换源, 最多 4 次; 镜像缺版本时向官方源重拉; 私有源与单独指定 registry 的 scope 不切换. `-c` 改为跳过测速, 镜像优先.
+- 自动在 npmmirror 与 npmjs 之间切换: 每次运行先测速决定先后, manifest, tgz 与依赖安装脚本失败时交替换源, 最多 4 次; 镜像缺版本时向官方源重拉; 私有源与单独指定 registry 的 scope 不切换.
 - `--refresh-cache`: 忽略并覆盖已有的 manifest 与 tgz 缓存.
 - `np-fetch` / `np --fetch-only`: 只下载解压列出的包, 不安装依赖, 不执行脚本, 不链接 bin, 不修改 `package.json`.
 - `--dedup`: 把依赖树中每个包的最高版本链接到根 `node_modules`, 即 npminstall@6 的扁平效果.
@@ -42,6 +42,7 @@ easy-np 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1, 上�
 
 ### 移除
 
+- `-c`, `--china` 与 `npm_china`: 由 npmmirror 与 npmjs 的自动切换取代.
 - `--prune` 与 `config.np.prune`: 按固定名单跳过解压文件会误删 `tsconfig.json` 等运行时文件.
 - `--proxy`, `npm_proxy`, `npm_config_proxy` 与 npm `strict-ssl`: urllib 不支持对应参数, 从未生效.
 - `--force-link-latest`, `--disable-fallback-store`, `np-uninstall --ignore-scripts`.

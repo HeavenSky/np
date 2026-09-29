@@ -97,7 +97,7 @@ exports.defaultOrder = ({ prefer, sources = DEFAULT_SOURCES } = {}) => {
 };
 
 /**
- * 测速决定两个源的先后; prefer 为已由 -c 或 --registry 指定的源, 此时跳过 registry 测速
+ * 测速决定两个源的先后; prefer 为 --registry 指定的公共源, 此时跳过 registry 测速
  * @return {Object} { order, binaryOrder, binaryMirrorConfig } binaryMirrorConfig 为测速顺带取到的 binary-mirror-config
  */
 exports.probe = async ({ prefer, sources = DEFAULT_SOURCES, globalOptions }) => {
