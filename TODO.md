@@ -13,6 +13,7 @@
 ### 已知的验证缺口
 
 - 2026-09-29 在 `main`(`d169ba0`)上两个包各跑一次并行全量, 零失败: easy-npd 252 个用例 245 通过 7 pending, 墙钟 83s; easy-np 278 个用例 276 通过 2 pending, 墙钟 113s. 跑完工作区无改动, 无 `.tmp_*` 残留.
+- 之后删除了全部 9 个无条件跳过的用例(整文件 `describe.skip` 的 `eslint-plugin-html`, `install-cypress`, `next`, 以及 `flatten` 两例, `installGlobal` 的 global prefix, `installGit` 的 ikt), 连同只被它们使用的 fixture; 两个包里已无 `.skip`.
 - 复现: 在包目录执行 `npx mocha --reporter json --reporter-option output=<file> 'test/*.test.js'`, 再按 `.tests[].file` 汇总 `.duration`.
 - 按文件累计耗时最长的: 两个包都是 `installGit`(约 65s, 12 例)与 `concurrency-install`(约 56s, 1 例); easy-np 另有 `install-workspaces`(56s), `fix-bug-versions`(47s), `bigPackage`(40s). 并行墙钟的下限就是单个最慢文件.
 - 根目录 `.github/workflows/ci.yml` 从未在 GitHub 上运行过.
