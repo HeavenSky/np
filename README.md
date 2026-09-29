@@ -9,7 +9,9 @@
 
 两个包的命令名互不冲突, 可以同时全局安装: `npm i -g easy-np easy-npd`; npm 不支持从 git 仓库子目录安装.
 
-## 共用缓存
+## 共用缓存与配置
+
+两个包读取同一份用户配置 `~/.nprc`(registry, scope registry 与认证).
 
 两个包共用磁盘缓存 `~/.np_tarball`, 由 `np_cache` 或 `npm_config_cache` 改写; 目录下的 `np-manifests/<name>/<md5(manifest url)>.json`(公共源统一按官方源的 manifest 地址) 与 `np-tgz/<name>/<version>-<shasum>.tgz` 两边写法相同, 可互相复用. 修改任一个包的缓存路径, 文件名或 manifest 缓存的 JSON 结构时 MUST 同步修改另一个包, 否则两者会静默读到对方写入的不兼容缓存.
 
