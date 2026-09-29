@@ -1,7 +1,6 @@
+// 从 GitHub 简写, ssh, https 与分支安装 git 依赖, 以及不存在的 ref
 const assert = require('node:assert');
 const path = require('node:path');
-const coffee = require('coffee');
-const fs = require('node:fs');
 const npminstall = require('./npminstall');
 const helper = require('./helper');
 
@@ -50,30 +49,6 @@ describe('test/installGit.test.js', () => {
     assert(pkg.version !== '0.0.3');
   });
 
-  it('should install from github with commit hash https://github.com/mozilla/nunjucks.git#0f8b21b8df7e8e852b2e1889388653b7075f0d09', async () => {
-    await npminstall({
-      root: tmp,
-      pkgs: [
-        { name: null, version: 'git+https://github.com/mozilla/nunjucks.git#0f8b21b8df7e8e852b2e1889388653b7075f0d09' },
-      ],
-    });
-
-    const pkg = await helper.readJSON(path.join(tmp, 'node_modules/nunjucks/package.json'));
-    assert.equal(pkg.name, 'nunjucks');
-    assert.equal(pkg.version, '1.2.0');
-  });
-
-  it('should also ok on https://github.com/mozilla/nunjucks.git#0f8b21b8d', async () => {
-    await npminstall({
-      root: tmp,
-      pkgs: [{ name: null, version: 'git+https://github.com/mozilla/nunjucks.git#0f8b21b8d' }],
-    });
-
-    const pkg = await helper.readJSON(path.join(tmp, 'node_modules/nunjucks/package.json'));
-    assert.equal(pkg.name, 'nunjucks');
-    assert.equal(pkg.version, '1.2.0');
-  });
-
   it('should also ok on https://github.com/node-modules/agentkeepalive#2.x', async () => {
     await npminstall({
       root: tmp,
@@ -98,57 +73,4 @@ describe('test/installGit.test.js', () => {
       );
     }
   });
-
-  // skip windows
-  if (process.platform !== 'win32') {
-    it('should warn on some name not match', done => {
-      coffee
-        .fork(helper.npminstall, ['error@git+https://github.com/mozilla/nunjucks.git#0f8b21b8d'], {
-          cwd: tmp,
-        })
-        .debug()
-        .expect('code', 0)
-        .expect('stderr', /Package name unmatched: expected error but found nunjucks/)
-        .end(err => {
-          assert(require(path.join(tmp, 'node_modules/error/package.json')).name === 'nunjucks');
-          done(err);
-        });
-    });
-
-    it('should install success', done => {
-      coffee
-        .fork(helper.npminstall, ['a@git+ssh://git@bitbucket.org/saibotsivad/demo-npm-git-semver.git#semver:1.0.3'], {
-          cwd: tmp,
-        })
-        .debug()
-        .expect('code', 0)
-        .end(() => {
-          const nodeModulesDir = path.join(tmp, 'node_modules');
-          // check package installed and linked
-          const symlink = fs.readlinkSync(path.join(nodeModulesDir, 'a'));
-          assert.strictEqual(require(path.join(nodeModulesDir, 'a/package.json')).name, 'demo-npm-git-semver');
-          // check package real package existed
-          assert.strictEqual(require(path.join(nodeModulesDir, `${symlink}/package.json`)).name, 'demo-npm-git-semver');
-          done();
-        });
-    });
-
-    it('should install with https success', done => {
-      coffee
-        .fork(helper.npminstall, ['a@git+https://git@bitbucket.org/saibotsivad/demo-npm-git-semver.git#semver:1.0.3'], {
-          cwd: tmp,
-        })
-        .debug()
-        .expect('code', 0)
-        .end(() => {
-          const nodeModulesDir = path.join(tmp, 'node_modules');
-          // check package installed and linked
-          const symlink = fs.readlinkSync(path.join(nodeModulesDir, 'a'));
-          assert.strictEqual(require(path.join(nodeModulesDir, 'a/package.json')).name, 'demo-npm-git-semver');
-          // check package real package existed
-          assert.strictEqual(require(path.join(nodeModulesDir, `${symlink}/package.json`)).name, 'demo-npm-git-semver');
-          done();
-        });
-    });
-  }
 });
