@@ -25,6 +25,7 @@ easy-np 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1, 上�
 
 ### 修复
 
+- `--offline` 只读磁盘缓存: 缓存中没有的 tgz 立即失败而不再联网下载, git 包与 tarball url 依赖直接报错, 与 `--no-cache` 同用时报错.
 - 缓存中的 tgz 损坏时删除并重新下载, 不再每次重试都读到同一个坏文件.
 - 流式请求收到 4xx / 5xx 时不再因断开响应流抛出未捕获的 abort 错误.
 - 根目录已存在但完成标记为 false 的包(`np-fetch` 解压或上次安装失败留下)不再因版本满足而跳过, 完整安装会重新处理并补齐依赖.

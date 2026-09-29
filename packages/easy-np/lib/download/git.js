@@ -6,6 +6,9 @@ const Arborist = require('@npmcli/arborist');
 const utils = require('../utils');
 
 module.exports = async (pkg, options) => {
+  if (options.offline) {
+    throw new Error(`Can't install ${pkg.raw} on offline mode: git packages are always fetched from the network`);
+  }
   const { name, raw, displayName } = pkg;
 
   options.gitPackages++;

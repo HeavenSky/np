@@ -132,6 +132,7 @@ Options:
   --no-cache: don't use the tarball disk cache
   -c, --china: try npmmirror first without probing, still fall back to npmjs on failure
   --refresh-cache: ignore cached manifests and tarballs, download again and overwrite the cache
+  --offline: only use the disk cache and never request the network
   -v, --version: show version
   -h, --help: show help
 `);
@@ -197,7 +198,7 @@ Options:
   --fetch-only: same as np-fetch, only download and extract the listed packages without their dependencies and scripts
   --public-hoist-pattern: regexp of package names to link into <root>/node_modules with their latest version, fallback to config.np.publicHoistPattern in package.json, default is none.
   --dedup: link every package's latest version into <root>/node_modules like npminstall@6, overrides --public-hoist-pattern.
-  --offline: offline mode. If a package won't be found locally, the installation will fail.
+  --offline: only use the disk cache and never request the network, fail when a manifest or tarball is not cached. git and remote url packages are not supported.
 `);
   process.exit(0);
 }
@@ -256,6 +257,14 @@ const customChinaMirrorUrl = argv['custom-china-mirror-url'];
 // example: np --registry xx --registry xxxx
 let registry = (Array.isArray(argv.registry) ? argv.registry[0] : argv.registry) || process.env.npm_registry;
 const offline = !!argv.offline;
+if (offline && !cacheDir) {
+  console.error(
+    chalk.red(
+      'np ERROR --offline needs the disk cache, it can not be used with --no-cache, or --production without --cache-strict'
+    )
+  );
+  process.exit(1);
+}
 // 未指定 registry 或指定的是 npmmirror / npmjs 时自动换源, 指定私有源时全部关闭; -c 与指定公共源时跳过测速
 const preferSource = registry ? mirror.sourceOf(registry) : inChina ? 'mirror' : null;
 const autoMirror = !registry || !!preferSource;
