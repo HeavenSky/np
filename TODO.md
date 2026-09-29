@@ -12,8 +12,9 @@
 
 ### 已知的验证缺口
 
-- 两个包都没有在当前 `main` 上跑过全量; 本轮只跑了改动涉及的测试文件, 全部通过: easy-npd 的 link / install-save / install-cache-strict / local-install-pkgs / peer / uninstall 系列与 `get.test.js`, `uninstall-hoisted-links.test.js`; easy-np 的 link 系列, `install-save-folder`, `uninstallGlobal`.
-- easy-npd 并行试跑的历史基线: 全量约 80s 完成, 此前唯一失败 `link-folder.test.js` 的 "should link one folder work" 已查明是断言仍写旧目录名 `link-demo`, 已修.
+- 2026-09-29 在 `main`(`d169ba0`)上两个包各跑一次并行全量, 零失败: easy-npd 252 个用例 245 通过 7 pending, 墙钟 83s; easy-np 278 个用例 276 通过 2 pending, 墙钟 113s. 跑完工作区无改动, 无 `.tmp_*` 残留.
+- 复现: 在包目录执行 `npx mocha --reporter json --reporter-option output=<file> 'test/*.test.js'`, 再按 `.tests[].file` 汇总 `.duration`.
+- 按文件累计耗时最长的: 两个包都是 `installGit`(约 65s, 12 例)与 `concurrency-install`(约 56s, 1 例); easy-np 另有 `install-workspaces`(56s), `fix-bug-versions`(47s), `bigPackage`(40s). 并行墙钟的下限就是单个最慢文件.
 - 根目录 `.github/workflows/ci.yml` 从未在 GitHub 上运行过.
 
 ## 用户已定的决策
@@ -34,14 +35,13 @@
 | --- | --- | --- | --- | --- |
 | D5 | 合仓后的 `main` 如何进入远端, 远端 `master` 何时删除 | 推送 `main`, 把 GitHub 默认分支设为 `main`; `master` 按用户决定暂留 | GitHub 拒绝删除默认分支, 删 `master` 前必须先换默认分支 | 推送与改默认分支都是对外可见的操作, 需用户确认后执行 |
 | D6 | 两个包是否以及何时发布到 npm | 跑完一次全量并让 CI 通过后再发布 | 根 README 与两个包 README 的安装方式已写成 `npm i -g easy-np` / `easy-npd`, 未发布前这两条命令不可用 | 发布不可撤回(npm unpublish 有时间与依赖限制) |
-| D7 | 测试耗时的测量是否算作全量运行 | 允许一次 `mocha --reporter json` 的并行全量, 只用于测量 | 找出最慢的测试文件必须跑全部文件; 并行后 easy-npd 全量约 80s, 耗时问题可能已基本解决 | 不允许则只能按经验猜慢文件, 改错方向 |
+| D7 | 并行后是否还要继续压测试耗时 | 视为已解决, 不再改测试; "修好前不跑全量"的限制解除 | 并行后全量 83s / 113s, 墙钟下限由 `installGit` 与 `concurrency-install` 两个真实联网的文件决定, 再压需要 mock git 与 registry, 收益小于维护成本 | 若仍嫌慢, 可再对这两个文件做本地 mock, 可回退 |
 
 ## 待办
 
 ### A. 测试耗时
 
-- [ ] 按 D7 取得测量数据: 用 `mocha --reporter json` 或逐文件计时找出最慢的测试文件; 慢的主因预期是真实访问 registry 与安装大包(例如 `bigPackage`, `install-cypress`, `installGlobal`), 可选方向是复用本地缓存目录, 把大包换成小包, 或对 registry 做本地 mock; 选哪种先给出测量数据.
-- [ ] 耗时修好后, 两个包各跑一次全量, 补齐上方「已知的验证缺口」.
+- [ ] 按 D7 的结论决定是否对 `installGit`, `concurrency-install` 做本地 mock.
 - [ ] 让 CI 在 GitHub 上实际跑一次(依赖 D5 推送).
 
 ### D. 仓库与发布
