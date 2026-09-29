@@ -2,3 +2,11 @@ node_modules
 *.log
 .DS_Store
 .idea
+.ai-ctx/
+
+# 以下路径需要跟踪, 取消常见全局忽略规则(以点开头的目录, *.tar, *.tgz)的影响; 删掉后这些文件在改名或新增时会被静默漏提交
+!/.github/
+!packages/*/test/fixtures/**/.config/
+!packages/*/test/fixtures/**/node_modules/.bin/
+!packages/*/test/fixtures/local/*.tar
+!packages/*/test/fixtures/local/*.tgz
