@@ -86,7 +86,7 @@ module.exports = function formatInstallOptions(options) {
   options.registryPackages = 0;
   options.gitPackages = 0;
   options.binaryMirrors = options.binaryMirrors || {};
-  const defaultCacheDir = path.join(os.homedir(), '.npd_tarball');
+  const defaultCacheDir = path.join(os.homedir(), '.np_tarball');
   if (options.cacheStrict) {
     options.cacheDir = options.cacheDir || defaultCacheDir;
   } else {

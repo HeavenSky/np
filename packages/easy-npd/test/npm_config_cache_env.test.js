@@ -10,7 +10,7 @@ describe('test/npm_config_cache_env.test.js', () => {
   const [tmp, cleanup] = helper.tmp();
   const env = Object.assign({}, process.env, { HOME: tmp });
   delete env.npm_config_cache;
-  delete env.npd_cache;
+  delete env.np_cache;
 
   beforeEach(async () => {
     await cleanup();
@@ -34,11 +34,11 @@ describe('test/npm_config_cache_env.test.js', () => {
 
   it('should set npm_config_cache to the tarball cache dir for scripts', async () => {
     await coffee.fork(helper.npminstall, [], { cwd: tmp, env }).debug().expect('code', 0).end();
-    assert.equal(await readScriptCache(), path.join(tmp, '.npd_tarball'));
+    assert.equal(await readScriptCache(), path.join(tmp, '.np_tarball'));
   });
 
   it('should still set npm_config_cache with --no-cache', async () => {
     await coffee.fork(helper.npminstall, ['--no-cache'], { cwd: tmp, env }).debug().expect('code', 0).end();
-    assert.equal(await readScriptCache(), path.join(tmp, '.npd_tarball'));
+    assert.equal(await readScriptCache(), path.join(tmp, '.np_tarball'));
   });
 });

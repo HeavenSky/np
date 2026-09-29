@@ -193,8 +193,8 @@ if (production) {
 if (cacheDir === null && process.env.npm_config_cache) {
   cacheDir = process.env.npm_config_cache;
 }
-if (process.env.npd_cache) {
-  cacheDir = process.env.npd_cache;
+if (process.env.np_cache) {
+  cacheDir = process.env.np_cache;
 }
 
 let forbiddenLicenses = argv['forbidden-licenses'];

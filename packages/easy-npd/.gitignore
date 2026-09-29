@@ -29,7 +29,7 @@ test/fixtures/css-loader-example2/webpack*.json
 !test/fixtures/ignore-warn-node-modules-exists/node_modules
 test/fixtures/high-speed-store/tmp
 .nyc_output
-.npd_tarball
+.np_tarball
 
 .editorconfig
 .DS_Store

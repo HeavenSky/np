@@ -41,7 +41,7 @@ const Context = require('./context');
  *  - {Array<Object>} [pkgs] - optional packages to install, default is `[]`
  *  - {Boolean} [production] - production mode install, default is `false`
  *  - {Object} [env] - postinstall and preinstall scripts custom env.
- *  - {String} [cacheDir] - tarball cache store dir, default is `$HOME/.npd_tarball`.
+ *  - {String} [cacheDir] - tarball cache store dir, default is `$HOME/.np_tarball`.
  *  	if `production` mode enable, `cacheDir` will be disable.
  *  - {Object} [binaryMirrors] - binary mirror config, default is `{}`
  *  - {Boolean} [ignoreScripts] - ignore pre / post install scripts, default is `false`

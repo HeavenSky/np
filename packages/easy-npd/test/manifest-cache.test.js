@@ -9,7 +9,7 @@ const helper = require('./helper');
 describe('test/manifest-cache.test.js', () => {
   const [tmp, cleanup] = helper.tmp();
   const cacheDir = path.join(tmp, '.cache');
-  const env = Object.assign({}, process.env, { npd_cache: cacheDir });
+  const env = Object.assign({}, process.env, { np_cache: cacheDir });
 
   beforeEach(async () => {
     await cleanup();

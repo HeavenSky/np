@@ -14,7 +14,7 @@ describe('test/install-cache-strict.test.js', () => {
   const demo = helper.fixtures('demo-install-cache-strict');
   // 外部 shell 设置的缓存变量会覆盖 HOME 推导出的默认缓存目录, 使断言落空
   const baseEnv = Object.assign({}, process.env);
-  delete baseEnv.npd_cache;
+  delete baseEnv.np_cache;
   delete baseEnv.npm_config_cache;
   const cleanupModules = helper.cleanup(demo);
 
@@ -36,7 +36,7 @@ describe('test/install-cache-strict.test.js', () => {
       })
       .debug()
       .end();
-    assert(await fs.stat(path.join(homedir, '.npd_tarball/np-tgz/debug')));
+    assert(await fs.stat(path.join(homedir, '.np_tarball/np-tgz/debug')));
   });
 
   it('should read disk cache from npm_config_cache env', async () => {
@@ -45,12 +45,12 @@ describe('test/install-cache-strict.test.js', () => {
         cwd: demo,
         env: Object.assign({}, baseEnv, {
           HOME: homedir,
-          npm_config_cache: path.join(homedir, 'foocache/.npd_tarball'),
+          npm_config_cache: path.join(homedir, 'foocache/.np_tarball'),
         }),
       })
       .debug()
       .end();
-    assert(await fs.stat(path.join(homedir, 'foocache/.npd_tarball/np-tgz/debug')));
+    assert(await fs.stat(path.join(homedir, 'foocache/.np_tarball/np-tgz/debug')));
   });
 
   it('should read disk cache on --cache-strict NODE_ENV=production', async () => {
@@ -64,20 +64,20 @@ describe('test/install-cache-strict.test.js', () => {
       })
       .debug()
       .end();
-    assert(await fs.stat(path.join(homedir, '.npd_tarball/np-tgz/debug')));
+    assert(await fs.stat(path.join(homedir, '.np_tarball/np-tgz/debug')));
   });
 
-  it('should read disk cache from npd_cache env', async () => {
+  it('should read disk cache from np_cache env', async () => {
     await coffee
       .fork(helper.npminstall, [], {
         cwd: demo,
         env: Object.assign({}, baseEnv, {
           HOME: homedir,
-          npd_cache: path.join(homedir, 'foocache/.npd_tarball'),
+          np_cache: path.join(homedir, 'foocache/.np_tarball'),
         }),
       })
       .debug()
       .end();
-    assert(await fs.stat(path.join(homedir, 'foocache/.npd_tarball/np-tgz/debug')));
+    assert(await fs.stat(path.join(homedir, 'foocache/.np_tarball/np-tgz/debug')));
   });
 });
