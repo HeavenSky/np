@@ -9,7 +9,7 @@ easy-np 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1, 上�
 ### 命名
 
 - 用户配置文件由 `~/.cnpmrc` 改为 `~/.nprc`, 两个包共用.
-- 包名 `easy-np`; 命令 `np`, `np-link`, `np-uninstall`, `np-update`; User-Agent 为 `easy-np/<version>`.
+- 包名 `easy-np`; 命令 `np`, `np-fetch`, `np-link`, `np-uninstall`, `np-update`; User-Agent 为 `easy-np/<version>`.
 - 默认缓存目录 `~/.np_tarball`, 缓存环境变量 `np_cache`, `package.json` 配置键 `config.np`, 安装完成标记 `__np_done`; 由 npminstall 装出的 `node_modules` 需删除后重装.
 
 ### 新功能
