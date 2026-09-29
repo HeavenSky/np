@@ -1,0 +1,10 @@
+{
+  "name": "alotta-modules",
+  "version": "0.0.1",
+  "dependencies": {
+    "font-awesome": "^4.7.0",
+    "highcharts": "^10.2.1",
+    "jquery-ui": "1.13.2",
+    "lodash": "^4.17.21"
+  }
+}

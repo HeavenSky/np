@@ -21,14 +21,5 @@ describe('test/bigPackage.test.js', () => {
     });
   }
 
-  // phantomjs break in node >= 16
-  // if (process.platform !== 'win32' && semver.satisfies(process.version, '< 16.0.0')) {
-  //   // too slow, ignore spmwebpacktest
-  //   [
-  //     // 'spmtest',
-  //     // 'spmwebpacktest',
-  //   ].forEach(testcase);
-  // }
-
-  ['standardtest'].forEach(testcase);
+  ['alotta-files'].forEach(testcase);
 });
