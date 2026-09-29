@@ -4,7 +4,7 @@ easy-npd 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 6.8.0, 上
 
 ## 0.0.0 (2026-09-28)
 
-首个版本. 与上游行为差异的对照表见 [README.md](./README.md#与上游-680-的差异).
+首个版本, 相对 npminstall 6.8.0 的全部变更如下.
 
 ### 命名
 
