@@ -3,7 +3,7 @@ const urllib = require('urllib');
 const destroy = require('destroy');
 const CacheableLookup = require('cacheable-lookup');
 const utils = require('./utils');
-const cnpmConfig = require('./cnpm_config');
+const npConfig = require('./np_config');
 const urlParser = require('url');
 
 module.exports = get;
@@ -30,14 +30,14 @@ async function get(url, options, globalOptions) {
     options.headers.Referer = globalOptions.referer;
   }
   // need auth
-  const registryUrl = cnpmConfig.get('registry');
+  const registryUrl = npConfig.get('registry');
   const registryUri = (registryUrl && registryUrl.replace(urlParser.parse(registryUrl).protocol, '')) || '';
   const hasUserSettings =
-    typeof cnpmConfig.get(registryUri + ':username') === 'string' &&
-    typeof cnpmConfig.get(registryUri + ':_password') === 'string';
+    typeof npConfig.get(registryUri + ':username') === 'string' &&
+    typeof npConfig.get(registryUri + ':_password') === 'string';
   // 凭据只发给与 registry 同 host 的请求, always-auth 也不例外; 放宽会把凭据泄露给备用 registry, tarball CDN 与二进制镜像
   if (hasUserSettings && isSameHost(url, registryUrl)) {
-    const authToken = `${cnpmConfig.get(registryUri + ':username')}:${Buffer.from(cnpmConfig.get(registryUri + ':_password'), 'base64').toString()}`;
+    const authToken = `${npConfig.get(registryUri + ':username')}:${Buffer.from(npConfig.get(registryUri + ':_password'), 'base64').toString()}`;
     options.headers.Authorization = `Basic ${Buffer.from(authToken).toString('base64')}`;
   }
   const retry = options.retry || options.retry === 0 ? options.retry : MAX_RETRY;

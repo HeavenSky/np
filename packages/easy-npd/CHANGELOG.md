@@ -8,6 +8,7 @@ easy-npd 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 6.8.0, 上
 
 ### 命名
 
+- 用户配置文件由 `~/.cnpmrc` 改为 `~/.nprc`, 两个包共用.
 - 包名 `easy-npd`; 命令 `npd`, `npd-link`, `npd-uninstall`, `npd-update`; User-Agent 为 `easy-npd/<version>`, 日志前缀与 debug 名空间为 `npd`.
 - 默认缓存目录 `~/.np_tarball`, 缓存环境变量 `np_cache`, 与 easy-np 相同并共用缓存; 安装完成标记 `__npd_done`, 全局安装的 store 目录 `.<name>_npd`; 由 npminstall 装出的 `node_modules` 需删除后重装.
 
@@ -30,11 +31,12 @@ easy-npd 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 6.8.0, 上
 - 在 `npm run` / `npx` 下安装需要 prepare 的 git 依赖时, 不再因继承 `npm_config_allow_scripts` 被 npm 12 以 `EALLOWSCRIPTS` 拒绝; git 依赖安装失败时报错附带子进程 stderr.
 - `npd-uninstall` 等待 `package.json` 写回完成后再返回.
 - `npd-uninstall` 后移除根 `node_modules` 中已无人使用的提升链接, 被卸载包的依赖不再仍可被 require.
-- `.cnpmrc` 中的 registry 用户名密码只发送给与 registry 同 host 的请求, `always-auth` 也不例外, 不再泄露给备用 registry, tarball CDN 与二进制镜像.
+- `.nprc` 中的 registry 用户名密码只发送给与 registry 同 host 的请求, `always-auth` 也不例外, 不再泄露给备用 registry, tarball CDN 与二进制镜像.
 
 ### 移除
 
 - `-c`, `--china` 与 `npm_china`: 由 npmmirror 与 npmjs 的自动切换取代.
+- `--custom-china-mirror-url`.
 - `--prune`, `config.npminstall.prune` 与 `env:production` / `env:development`: 按固定名单跳过解压文件会误删 `tsconfig.json` 等运行时文件.
 - `--proxy`, `npm_proxy`, `npm_config_proxy` 与 npm `strict-ssl`: urllib 3 不支持对应参数, 从未生效.
 - `--force-link-latest`, `--disable-dedupe` 与 `config.npminstall.disableDedupe`.

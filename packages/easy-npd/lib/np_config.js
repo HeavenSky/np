@@ -11,7 +11,7 @@ function createConfigs() {
   } else {
     root = process.env.HOME || process.env.TMPDIR || '/tmp';
   }
-  const userConfig = path.join(root, '.cnpmrc');
+  const userConfig = path.join(root, '.nprc');
   if (!fs.existsSync(userConfig)) return;
   const userConfigContent = fs.readFileSync(userConfig).toString();
   const configs = typeof userConfigContent === 'string' && userConfigContent.split(os.EOL);

@@ -1,4 +1,4 @@
-// 在独立进程里按 argv 中的 JSON 配置调用 installLocal, 供 mirror.test.js 使用真实的 ~/.cnpmrc
+// 在独立进程里按 argv 中的 JSON 配置调用 installLocal, 供 mirror.test.js 使用真实的 ~/.nprc
 'use strict';
 
 const mirror = require('../lib/mirror');

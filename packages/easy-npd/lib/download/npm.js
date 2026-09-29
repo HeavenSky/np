@@ -20,7 +20,7 @@ const get = require('../get');
 
 const { MIRROR_ATTEMPTS } = get;
 const utils = require('../utils');
-const config = require('../cnpm_config');
+const config = require('../np_config');
 
 module.exports = async (pkg, options) => {
   const realPkg = await resolve(pkg.subSpec || pkg, options);

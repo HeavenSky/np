@@ -9,20 +9,20 @@ const npminstall = require('./npminstall');
 
 describe('test/installScopeRegistry.test.js', () => {
   const [tmp, cleanup] = helper.tmp();
-  let mockCnpmrc;
+  let mockNprc;
 
   before(() => {
-    mockCnpmrc = path.join(__dirname, './fixtures/scope/');
-    if (!fs.existsSync(mockCnpmrc + '.cnpmrc')) {
+    mockNprc = path.join(__dirname, './fixtures/scope/');
+    if (!fs.existsSync(mockNprc + '.nprc')) {
       fs.writeFileSync(
-        mockCnpmrc + '.cnpmrc',
+        mockNprc + '.nprc',
         '@starthubit:registry=https://registry-mock.org/\n@rstacruz:registry=https://mirrors.huaweicloud.com/repository/npm/\n'
       );
     }
-    mm(process.env, 'HOME', mockCnpmrc);
-    mm(process.env, 'USERPROFILE', mockCnpmrc);
-    // clean cnpm_config.js cache
-    delete require.cache[require.resolve('../lib/cnpm_config')];
+    mm(process.env, 'HOME', mockNprc);
+    mm(process.env, 'USERPROFILE', mockNprc);
+    // clean np_config.js cache
+    delete require.cache[require.resolve('../lib/np_config')];
     delete require.cache[require.resolve('../lib/get')];
     delete require.cache[require.resolve('./npminstall')];
     mm.restore();
