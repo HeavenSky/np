@@ -9,7 +9,7 @@ easy-npd 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 6.8.0, 上
 ### 命名
 
 - 用户配置文件由 `~/.cnpmrc` 改为 `~/.nprc`, 两个包共用.
-- 包名 `easy-npd`; 命令 `npd`, `npd-link`, `npd-uninstall`, `npd-update`; User-Agent 为 `easy-npd/<version>`, 日志前缀与 debug 名空间为 `npd`.
+- 包名 `easy-npd`; 命令 `npd`, `npd-fetch`, `npd-link`, `npd-uninstall`, `npd-update`; User-Agent 为 `easy-npd/<version>`, 日志前缀与 debug 名空间为 `npd`.
 - 默认缓存目录 `~/.np_tarball`, 缓存环境变量 `np_cache`, 与 easy-np 相同并共用缓存; 安装完成标记 `__npd_done`, 全局安装的 store 目录 `.<name>_npd`; 由 npminstall 装出的 `node_modules` 需删除后重装.
 
 ### 新功能
