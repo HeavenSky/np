@@ -1,7 +1,6 @@
 const mm = require('mm');
 const assert = require('node:assert');
 const path = require('node:path');
-const coffee = require('coffee');
 const semver = require('semver');
 const npminstall = require('./npminstall');
 const helper = require('./helper');
@@ -201,19 +200,5 @@ describe('test/installLocal.test.js', () => {
       pkg = await helper.readJSON(path.join(root, 'node_modules/pkg/package.json'));
       assert.equal(pkg.name, 'pkg');
     });
-
-    if (process.env.npm_china) {
-      it('should install from custom china mirror url work', () => {
-        const cli = require.resolve('../bin/install');
-        return coffee
-          .fork(cli, ['phantomjs-prebuilt', '--custom-china-mirror-url=https://npmmirror.com/mirrors'], {
-            cwd: root,
-          })
-          .coverage(false)
-          .debug()
-          .expect('code', 0)
-          .end();
-      });
-    }
   }
 });

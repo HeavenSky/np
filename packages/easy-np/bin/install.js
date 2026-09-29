@@ -31,7 +31,6 @@ Object.assign(
       'registry',
       'prefix',
       'forbidden-licenses',
-      'custom-china-mirror-url',
       // {"http://a.com":"http://b.com"}
       'tarball-url-mapping',
       // --proxy 已移除: urllib 3 不支持 proxy / enableProxy 参数, 传入后请求仍直连
@@ -170,7 +169,6 @@ Options:
   --root: install root directory, default is current working directory
   --prefix: global install prefix used with -g, default is '$npm config get prefix'
   --no-cache: don't use the tarball disk cache, ignored when --cache-strict is set
-  --custom-china-mirror-url: replace the default china binary mirror https://npmmirror.com/mirrors
   --tarball-url-mapping: JSON object to rewrite tarball urls before request, redirect targets are not rewritten, e.g.: --tarball-url-mapping='{"https://a.com":"https://b.com"}'
   --lockfile-path: install from package-lock.json (lockfileVersion >= 2), optionalDependencies in lockfile are ignored, not supported with workspaces, fail if the lockfile can't be loaded
   --save-dependencies-tree: save the resolved dependencies tree to node_modules/.dependencies_tree.json
@@ -244,9 +242,6 @@ let forbiddenLicenses = argv['forbidden-licenses'];
 forbiddenLicenses = forbiddenLicenses ? forbiddenLicenses.split(',') : null;
 
 const flatten = argv.flatten;
-
-// if exists, override default china mirror url
-const customChinaMirrorUrl = argv['custom-china-mirror-url'];
 
 // example: np --registry xx --registry xxxx
 let registry = (Array.isArray(argv.registry) ? argv.registry[0] : argv.registry) || process.env.npm_registry;
@@ -328,20 +323,7 @@ debug('argv: %j, env: %j', argv, env);
         binaryMirrors = {};
       }
     }
-    if (customChinaMirrorUrl) {
-      for (const key in binaryMirrors) {
-        const item = binaryMirrors[key];
-        if (item.host) {
-          item.host = item.host.replace(globalConfig.chineseMirrorUrl, customChinaMirrorUrl);
-        }
-      }
-    }
-    const binaryEnvs = {};
-    for (const key in binaryMirrors.ENVS) {
-      binaryEnvs[key] = customChinaMirrorUrl
-        ? binaryMirrors.ENVS[key].replace(globalConfig.chineseMirrorUrl, customChinaMirrorUrl)
-        : binaryMirrors.ENVS[key];
-    }
+    const binaryEnvs = { ...binaryMirrors.ENVS };
     mirrorState = mirror.create({ order: probed.order, binaryOrder: probed.binaryOrder, binaryEnvs });
     if (!preferSource) {
       registry = mirrorState.registry;
@@ -642,7 +624,7 @@ async function updateDependencies(root, pkgs, propName, saveExact, remoteNames) 
         saveName = itemPkg.name;
         saveVersion = itemPkg.version;
       }
-      // If install with `cnpm i foo`, the type is tag but rawSpec is empty string
+      // If install with `np foo`, the type is tag but rawSpec is empty string
       if (item.arg.type === 'tag' && item.arg.rawSpec) {
         saveSpec = item.arg.rawSpec;
       } else {

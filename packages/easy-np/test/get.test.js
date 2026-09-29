@@ -4,18 +4,18 @@ const path = require('node:path');
 const assertFile = require('assert-file');
 const mm = require('mm');
 
-const mockCnpmrc = path.join(__dirname, './fixtures/auth/');
-if (!fs.existsSync(path.join(mockCnpmrc, '.cnpmrc'))) {
+const mockNprc = path.join(__dirname, './fixtures/auth/');
+if (!fs.existsSync(path.join(mockNprc, '.nprc'))) {
   fs.writeFileSync(
-    path.join(mockCnpmrc, '.cnpmrc'),
+    path.join(mockNprc, '.nprc'),
     'registry=https://registry-mock.org/\n//registry-mock.org/:always-auth=true\n//registry-mock.org/:_password="bW9jaw=="\n//registry-mock.org/:username=hyj19911120'
   );
 }
-mm(process.env, 'HOME', mockCnpmrc);
-mm(process.env, 'USERPROFILE', mockCnpmrc);
-// clean cnpm_config.js cache
+mm(process.env, 'HOME', mockNprc);
+mm(process.env, 'USERPROFILE', mockNprc);
+// clean np_config.js cache
 delete require.cache[require.resolve('../lib/get')];
-delete require.cache[require.resolve('../lib/cnpm_config')];
+delete require.cache[require.resolve('../lib/np_config')];
 const get = require('../lib/get');
 mm.restore();
 
@@ -42,7 +42,7 @@ describe('test/get.test.js', () => {
       },
     };
     const options = { dataType: 'json' };
-    assertFile(path.join(mockCnpmrc, '.cnpmrc'));
+    assertFile(path.join(mockNprc, '.nprc'));
     try {
       await get('https://registry-mock.org/mock', options, { console: logger });
       assert(false, 'should not run this');

@@ -249,7 +249,7 @@ describe('test/mirror.test.js', () => {
     await publish({ name: '@corp/foo', version: '1.0.0' }, {}, { only: ['official'] });
     const home = path.join(tmp, 'home');
     await fs.mkdir(home, { recursive: true });
-    await fs.writeFile(path.join(home, '.cnpmrc'), `@corp:registry=${sources.official.registry}`);
+    await fs.writeFile(path.join(home, '.nprc'), `@corp:registry=${sources.official.registry}`);
     const args = {
       root: path.join(tmp, 'root'),
       pkgs: [{ name: '@corp/foo', version: '1.0.0' }],

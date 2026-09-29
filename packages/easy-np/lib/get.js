@@ -5,7 +5,7 @@ const chalk = require('chalk');
 const destroy = require('destroy');
 const CacheableLookup = require('cacheable-lookup');
 const utils = require('./utils');
-const cnpmConfig = require('./cnpm_config');
+const npConfig = require('./np_config');
 
 module.exports = get;
 
@@ -39,17 +39,14 @@ async function get(url, options, globalOptions, hasCache = false) {
       }
     } else {
       // the old style, use user and password
-      const registryUrl = cnpmConfig.get('registry');
+      const registryUrl = npConfig.get('registry');
       const registryUri = (registryUrl && registryUrl.replace(urlParser.parse(registryUrl).protocol, '')) || '';
       const authed = registryUri && url.indexOf(registryUri) !== -1;
       const hasUserSettings =
-        typeof cnpmConfig.get(registryUri + ':username') === 'string' &&
-        typeof cnpmConfig.get(registryUri + ':_password') === 'string';
-      if (
-        hasUserSettings &&
-        (authed || cnpmConfig.get(registryUri + ':always-auth') || cnpmConfig.get('always-auth'))
-      ) {
-        const authToken = `${cnpmConfig.get(registryUri + ':username')}:${Buffer.from(cnpmConfig.get(registryUri + ':_password'), 'base64').toString()}`;
+        typeof npConfig.get(registryUri + ':username') === 'string' &&
+        typeof npConfig.get(registryUri + ':_password') === 'string';
+      if (hasUserSettings && (authed || npConfig.get(registryUri + ':always-auth') || npConfig.get('always-auth'))) {
+        const authToken = `${npConfig.get(registryUri + ':username')}:${Buffer.from(npConfig.get(registryUri + ':_password'), 'base64').toString()}`;
         options.headers.Authorization = `Basic ${Buffer.from(authToken).toString('base64')}`;
       }
     }

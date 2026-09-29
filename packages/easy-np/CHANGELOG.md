@@ -8,6 +8,7 @@ easy-np 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1, 上�
 
 ### 命名
 
+- 用户配置文件由 `~/.cnpmrc` 改为 `~/.nprc`, 两个包共用.
 - 包名 `easy-np`; 命令 `np`, `np-link`, `np-uninstall`, `np-update`; User-Agent 为 `easy-np/<version>`.
 - 默认缓存目录 `~/.np_tarball`, 缓存环境变量 `np_cache`, `package.json` 配置键 `config.np`, 安装完成标记 `__np_done`; 由 npminstall 装出的 `node_modules` 需删除后重装.
 
@@ -43,6 +44,7 @@ easy-np 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1, 上�
 ### 移除
 
 - `-c`, `--china` 与 `npm_china`: 由 npmmirror 与 npmjs 的自动切换取代.
+- `--custom-china-mirror-url`.
 - `--prune` 与 `config.np.prune`: 按固定名单跳过解压文件会误删 `tsconfig.json` 等运行时文件.
 - `--proxy`, `npm_proxy`, `npm_config_proxy` 与 npm `strict-ssl`: urllib 不支持对应参数, 从未生效.
 - `--force-link-latest`, `--disable-fallback-store`, `np-uninstall --ignore-scripts`.
