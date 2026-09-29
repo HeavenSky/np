@@ -80,7 +80,7 @@ async function resolve(pkg, options) {
   let realPkgVersion = utils.findMaxSatisfyingVersion(spec, distTags, packageMeta.allVersions);
   // 镜像同步滞后时新版本只在官方源上: 找不到版本时绕过缓存向官方源重拉一次
   const missing = !realPkgVersion || !packageMeta.versions[realPkgVersion];
-  if (missing && _getMirror(pkg.name, options) && !packageMeta.fromOfficial) {
+  if (missing && !options.offline && _getMirror(pkg.name, options) && !packageMeta.fromOfficial) {
     try {
       const fullMeta = await getFullPackageMeta(pkg.name, options, { officialOnly: true });
       Object.assign(packageMeta, fullMeta, { fromOfficial: true, allVersions: Object.keys(fullMeta.versions) });
@@ -199,7 +199,8 @@ async function _getCacheInfo(fullname, globalOptions, { officialOnly = false } =
   // { etag, age, headers, manifests }
   info.cacheFile = path.join(parentDir, `${hash}.json`);
   // --refresh-cache 与回官方源重拉时不读旧缓存, 拉取后覆盖写入
-  const exists = !globalOptions.refreshCache && !officialOnly && (await utils.exists(info.cacheFile));
+  const exists =
+    (globalOptions.offline || (!globalOptions.refreshCache && !officialOnly)) && (await utils.exists(info.cacheFile));
   // cache not exists
   if (!exists) {
     await utils.mkdirp(parentDir);
@@ -224,6 +225,10 @@ async function removeCacheInfo(fullname, globalOptions) {
 
 async function getFullPackageMeta(fullname, globalOptions, fetchOptions) {
   const info = await _getCacheInfo(fullname, globalOptions, fetchOptions);
+  if (globalOptions.offline && !info.cache) {
+    throw new Error(`Can't find package ${fullname} manifests on offline mode`);
+  }
+
   if (!info.cacheFile) {
     const result = await _fetchFullPackageMeta(info.pkgUrl, globalOptions, null, info.mirrorUrls);
     return result.data;
@@ -233,7 +238,8 @@ async function getFullPackageMeta(fullname, globalOptions, fetchOptions) {
     return await _fetchFullPackageMetaWithCache(info.pkgUrl, globalOptions, info.cacheFile, null, info.mirrorUrls);
   }
   // check is expired or not
-  if (info.cache.expired > Date.now()) {
+  // offline should force to use cache manifests
+  if (globalOptions.offline || info.cache.expired > Date.now()) {
     globalOptions.totalCacheJSONCount += 1;
     return info.cache.manifests;
   }
@@ -409,6 +415,8 @@ async function download(pkg, options) {
       break;
     } catch (err) {
       lastErr = err;
+      // 离线时缓存缺失不会因重试而改变, 直接失败
+      if (err.code === 'EOFFLINE') break;
       count++;
       options.console.warn(
         `[${pkg.name}@${pkg.version}] download %s %s: %s, fail count: %s`,
@@ -509,6 +517,10 @@ async function getTarballStream(tarballUrl, pkg, options, mirrored = false) {
   // 公共源地址由 download 的外层循环换源重试, 这里不再原地重试
   const retry = mirrored ? 1 : undefined;
 
+  if (options.offline && (!options.cacheDir || utils.isSudo())) {
+    throw offlineError(`Can't download tarball ${pkg.name}@${pkg.version} on offline mode without the disk cache`);
+  }
+
   if (!options.cacheDir || utils.isSudo()) {
     // sudo don't touch the cacheDir
     // production mode
@@ -549,7 +561,10 @@ async function getTarballStream(tarballUrl, pkg, options, mirrored = false) {
   const parentDir = path.join(options.cacheDir, 'np-tgz', pkg.name);
   const tarballFile = path.join(parentDir, `${pkg.version}-${pkg.dist.shasum}.tgz`);
   // --refresh-cache 时忽略已有缓存, 下载后覆盖
-  let exists = !options.refreshCache && (await utils.exists(tarballFile));
+  let exists = (options.offline || !options.refreshCache) && (await utils.exists(tarballFile));
+  if (!exists && options.offline) {
+    throw offlineError(`Can't find tarball ${pkg.name}@${pkg.version} in the disk cache on offline mode`);
+  }
   if (!exists) {
     const tmpDir = path.join(options.cacheDir, 'np-tmp', moment().format('YYYYMMDD'));
     await utils.mkdirp(parentDir);
@@ -570,7 +585,7 @@ async function getTarballStream(tarballUrl, pkg, options, mirrored = false) {
       throw new Error(`Download ${tarballUrl} status: ${result.status} error, should be 200`);
     }
     // make sure tarball file is not exists again
-    exists = !options.refreshCache && (await utils.exists(tarballFile));
+    exists = (options.offline || !options.refreshCache) && (await utils.exists(tarballFile));
     if (!exists) {
       try {
         await fs.rename(tmpFile, tarballFile);
@@ -804,6 +819,12 @@ module.exports.useBinarySource = async (ungzipDir, source, options) => {
   }
   await utils.addMetaToJSONFile(path.join(ungzipDir, 'package.json'), pkgMeta);
 };
+
+function offlineError(message) {
+  const err = new Error(message);
+  err.code = 'EOFFLINE';
+  return err;
+}
 
 async function replaceHostInFile(pkg, filepath, binaryMirror, globalOptions) {
   const exists = await utils.exists(filepath);

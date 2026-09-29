@@ -81,6 +81,7 @@ Object.assign(
       'save-dependencies-tree',
       'fetch-only',
       'refresh-cache',
+      'offline',
       // --force-link-latest 已移除: 提升到根目录时始终链接最高版本
     ],
     default: {
@@ -125,6 +126,7 @@ Options:
   --no-cache: don't use the tarball disk cache
   -c, --china: try npmmirror first without probing, still fall back to npmjs on failure
   --refresh-cache: ignore cached manifests and tarballs, download again and overwrite the cache
+  --offline: only use the disk cache and never request the network
   -v, --version: show version
   -h, --help: show help
 `);
@@ -169,6 +171,7 @@ Options:
   -h, --help: show help
   -c, --china: try npmmirror and its binary mirrors first without probing, still fall back to npmjs on failure
   --refresh-cache: ignore cached manifests and tarballs, download again and overwrite the cache
+  --offline: only use the disk cache and never request the network, fail when a manifest or tarball is not cached. git and remote url packages are not supported.
   -d, --detail: show detail log of installation
   --trace: show memory and cpu usages traces of installation
   --ignore-scripts: ignore all preinstall / install and postinstall scripts during the installation
@@ -224,6 +227,15 @@ if (cacheDir === null && process.env.npm_config_cache) {
 }
 if (process.env.np_cache) {
   cacheDir = process.env.np_cache;
+}
+const offline = !!argv.offline;
+if (offline && cacheDir === '' && !argv['cache-strict']) {
+  console.error(
+    chalk.red(
+      'npd ERROR --offline needs the disk cache, it can not be used with --no-cache, or --production without --cache-strict'
+    )
+  );
+  process.exit(1);
 }
 
 let forbiddenLicenses = argv['forbidden-licenses'];
@@ -281,11 +293,14 @@ debug('argv: %j, env: %j', argv, env);
   let mirrorState;
 
   if (autoMirror) {
-    const probed = await mirror.probe({ prefer: preferSource, globalOptions: { console } });
+    // offline 时不测速, 但仍按公共源处理, 使缓存键与在线时一致
+    const probed = offline
+      ? mirror.defaultOrder({ prefer: preferSource })
+      : await mirror.probe({ prefer: preferSource, globalOptions: { console } });
     binaryMirrors = probed.binaryMirrorConfig?.mirrors?.china;
     if (!binaryMirrors) {
       try {
-        binaryMirrors = await utils.getBinaryMirrors(registry, {});
+        binaryMirrors = await utils.getBinaryMirrors(registry, { offline });
       } catch (err) {
         console.warn(chalk.yellow('npd WARN load binary mirror config error: %s'), err.message);
         binaryMirrors = {};
@@ -315,7 +330,7 @@ debug('argv: %j, env: %j', argv, env);
     }
     console.info(chalk.gray('npd registry: %s, binary: %s'), probed.order.join(' > '), probed.binaryOrder.join(' > '));
   } else if (inChina) {
-    binaryMirrors = await utils.getBinaryMirrors(registry, {});
+    binaryMirrors = await utils.getBinaryMirrors(registry, { offline });
     if (customChinaMirrorUrl) {
       for (const key in binaryMirrors) {
         const item = binaryMirrors[key];
@@ -342,6 +357,7 @@ debug('argv: %j, env: %j', argv, env);
     cacheStrict: argv['cache-strict'],
     cacheDir,
     refreshCache: argv['refresh-cache'],
+    offline,
     mirror: mirrorState,
     env,
     binaryMirrors,
@@ -373,7 +389,7 @@ debug('argv: %j, env: %j', argv, env);
   }
 
   if (argv['fix-bug-versions']) {
-    const packageVersionMapping = await utils.getBugVersions(registry, {});
+    const packageVersionMapping = await utils.getBugVersions(registry, { offline });
     config.autoFixVersion = function autoFixVersion(name, version) {
       const fixVersions = packageVersionMapping[name];
       return (fixVersions && fixVersions[version]) || null;

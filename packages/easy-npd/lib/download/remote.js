@@ -6,6 +6,9 @@ const chalk = require('chalk');
 const utils = require('../utils');
 
 module.exports = async (pkg, options) => {
+  if (options.offline) {
+    throw new Error(`Can't install ${pkg.raw} on offline mode: remote packages are always fetched from the network`);
+  }
   const { name, raw, fetchSpec, displayName } = pkg;
 
   options.remotePackages++;

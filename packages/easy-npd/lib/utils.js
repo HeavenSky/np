@@ -453,6 +453,10 @@ exports.getTarballStream = async (url, options) => {
 };
 
 async function getRemotePackage(name, registry, globalOptions) {
+  // 离线时直接用随包安装的同名依赖
+  if (globalOptions && globalOptions.offline) {
+    return require(name + '/package.json');
+  }
   const registries = [registry].concat([
     'https://registry.npmmirror.com',
     'https://r.cnpmjs.org',
