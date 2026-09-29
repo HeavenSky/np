@@ -12,29 +12,22 @@ const update = path.join(path.dirname(helper.npminstall), 'update.js');
 describe('test/fix-bug-versions.test.js', () => {
   const demo = helper.fixtures('fix-bug-versions-app');
   const cleanupModules = helper.cleanup(demo);
-  const [ tmp, cleanupTmp ] = helper.tmp();
+  const [tmp, cleanupTmp] = helper.tmp();
 
   function getPkg(subPath) {
     return JSON.parse(fs.readFileSync(path.join(tmp, subPath)));
   }
 
   async function cleanup() {
-    await Promise.all([
-      cleanupModules(),
-      cleanupTmp(),
-    ]);
+    await Promise.all([cleanupModules(), cleanupTmp()]);
   }
 
   beforeEach(cleanup);
   afterEach(cleanup);
 
   it('should use fix version instead', done => {
-    coffee.fork(bin, [
-      'is-my-json-valid@2.17.0',
-      '-d',
-      '--fix-bug-versions',
-      '--no-cache',
-    ], { cwd: tmp })
+    coffee
+      .fork(bin, ['is-my-json-valid@2.17.0', '-d', '--fix-bug-versions', '--no-cache'], { cwd: tmp })
       .debug()
       .expect('code', 0)
       .expect('stdout', /is-my-json-valid@2\.17\.1@is-my-json-valid/)
@@ -42,15 +35,11 @@ describe('test/fix-bug-versions.test.js', () => {
   });
 
   it('should use fix dependencies instead', async () => {
-    await coffee.fork(bin, [
-      'accord@0.28.0',
-      '-d',
-      '--fix-bug-versions',
-      '--no-cache',
-    ], { cwd: tmp })
+    await coffee
+      .fork(bin, ['accord@0.28.0', '-d', '--fix-bug-versions', '--no-cache'], { cwd: tmp })
       .debug()
       .expect('code', 0)
-      .expect('stderr', /\[accord@0\.28\.0\] use dependencies: {\"less\":\"\^2.7.0\"} instead, reason:/)
+      .expect('stderr', /\[accord@0\.28\.0\] use dependencies: {"less":"\^2.7.0"} instead, reason:/)
       .end();
 
     assert(getPkg('node_modules/accord/package.json').version === '0.28.0');
@@ -59,15 +48,11 @@ describe('test/fix-bug-versions.test.js', () => {
   });
 
   it('should use fix "scripts"', async () => {
-    await coffee.fork(bin, [
-      'styled-components@5.3.5',
-      '-d',
-      '--fix-bug-versions',
-      '--no-cache',
-    ], { cwd: tmp })
+    await coffee
+      .fork(bin, ['styled-components@5.3.5', '-d', '--fix-bug-versions', '--no-cache'], { cwd: tmp })
       .debug()
       .expect('code', 0)
-      .expect('stderr', /use scripts: {\"postinstall\":\"\"} instead, reason:/)
+      .expect('stderr', /use scripts: {"postinstall":"\"} instead, reason:/)
       .notExpect('stderr', /scripts.postinstall styled-components@5.3.5 finished/)
       .notExpect('stdout', /scripts.postinstall styled-components@5.3.5 finished/)
       .end();
@@ -78,21 +63,15 @@ describe('test/fix-bug-versions.test.js', () => {
   });
 
   it('should support on install and update', async () => {
-    await coffee.fork(bin, [
-      '-d',
-      '--fix-bug-versions',
-      '--no-cache',
-    ], { cwd: demo })
+    await coffee
+      .fork(bin, ['-d', '--fix-bug-versions', '--no-cache'], { cwd: demo })
       .debug()
       .expect('code', 0)
       .expect('stdout', /is-my-json-valid@2\.17\.1@is-my-json-valid/)
       .end();
 
-    await coffee.fork(update, [
-      '-d',
-      '--fix-bug-versions',
-      '--no-cache',
-    ], { cwd: demo })
+    await coffee
+      .fork(update, ['-d', '--fix-bug-versions', '--no-cache'], { cwd: demo })
       .debug()
       .expect('code', 0)
       .expect('stdout', /is-my-json-valid@2\.17\.1@is-my-json-valid/)
@@ -100,12 +79,8 @@ describe('test/fix-bug-versions.test.js', () => {
   });
 
   it('should not match version', done => {
-    coffee.fork(bin, [
-      'is-my-json-valid@2.16.0',
-      '-d',
-      '--fix-bug-versions',
-      '--no-cache',
-    ], { cwd: tmp })
+    coffee
+      .fork(bin, ['is-my-json-valid@2.16.0', '-d', '--fix-bug-versions', '--no-cache'], { cwd: tmp })
       .debug()
       .expect('code', 0)
       .expect('stdout', /is-my-json-valid@2\.16\.0@is-my-json-valid/)
@@ -113,12 +88,8 @@ describe('test/fix-bug-versions.test.js', () => {
   });
 
   it('should not match name', done => {
-    coffee.fork(bin, [
-      'mm',
-      '-d',
-      '--fix-bug-versions',
-      '--no-cache',
-    ], { cwd: tmp })
+    coffee
+      .fork(bin, ['mm', '-d', '--fix-bug-versions', '--no-cache'], { cwd: tmp })
       .debug()
       .expect('code', 0)
       .expect('stdout', /mm@latest installed/)

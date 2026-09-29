@@ -19,7 +19,8 @@ describe('test/high-speed-store.test.js', () => {
   afterEach(cleanup);
 
   it('should get tarball stream from store', async () => {
-    await coffee.fork(helper.npminstall, [ '-d', `--high-speed-store=${storeScript}` ], { cwd })
+    await coffee
+      .fork(helper.npminstall, ['-d', `--high-speed-store=${storeScript}`], { cwd })
       .debug()
       .expect('code', 0)
       .expect('stdout', /All packages installed/)

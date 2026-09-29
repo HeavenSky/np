@@ -18,10 +18,7 @@ describe('test/postinstall.test.js', () => {
     afterEach(cleanup);
 
     it('should run preinstall, install, postinstall and prepublish', async () => {
-      await coffee.fork(helper.npminstall, [], { cwd: root })
-        .debug()
-        .expect('code', 0)
-        .end();
+      await coffee.fork(helper.npminstall, [], { cwd: root }).debug().expect('code', 0).end();
       const pkg = await readJSON(path.join(root, 'node_modules', 'utility', 'package.json'));
       assert.equal(pkg.name, 'utility');
       assert.equal(pkg.version, '1.6.0');
@@ -31,7 +28,10 @@ describe('test/postinstall.test.js', () => {
       // install pass
       assert.equal(fs.readFileSync(path.join(root, 'node_modules', '.install.txt'), 'utf8'), 'success: install');
       // postinstall pass
-      assert.equal(fs.readFileSync(path.join(root, 'node_modules', '.postinstall.txt'), 'utf8'), 'success: postinstall');
+      assert.equal(
+        fs.readFileSync(path.join(root, 'node_modules', '.postinstall.txt'), 'utf8'),
+        'success: postinstall'
+      );
       // prepublish pass
       assert.equal(fs.readFileSync(path.join(root, 'node_modules', '.prepublish.txt'), 'utf8'), 'success: prepublish');
       // prepare pass
@@ -48,7 +48,10 @@ describe('test/postinstall.test.js', () => {
       assert.equal(pkg.version, '1.6.0');
 
       // postinstall pass
-      assert.equal(fs.readFileSync(path.join(root, 'node_modules', '.postinstall.txt'), 'utf8'), 'success: postinstall');
+      assert.equal(
+        fs.readFileSync(path.join(root, 'node_modules', '.postinstall.txt'), 'utf8'),
+        'success: postinstall'
+      );
 
       // prepublish pass
       let hasFile = false;
@@ -91,12 +94,10 @@ describe('test/postinstall.test.js', () => {
         afterEach(cleanup);
 
         it('should install --save pedding and update dependencies', async () => {
-          await coffee.fork(helper.npminstall, [
-            '--foo_bar_haha=okok',
-            '-d',
-          ], {
-            cwd: root,
-          })
+          await coffee
+            .fork(helper.npminstall, ['--foo_bar_haha=okok', '-d'], {
+              cwd: root,
+            })
             .debug()
             .expect('stdout', /pedding@1\.0\.0 installed/)
             .expect('stdout', /npm_config_foo_bar_haha = okok/)

@@ -9,19 +9,14 @@ const chalk = require('chalk');
 const utils = require('../utils');
 
 module.exports = async (pkg, options) => {
-  const {
-    fetchSpec,
-    displayName,
-  } = pkg;
+  const { fetchSpec, displayName } = pkg;
   options.localPackages++;
   let filepath = fetchSpec;
 
   try {
     filepath = await fs.realpath(filepath);
     const stat = await fs.stat(filepath);
-    return stat.isDirectory()
-      ? await localFolder(filepath, pkg, options)
-      : await localTarball(filepath, pkg, options);
+    return stat.isDirectory() ? await localFolder(filepath, pkg, options) : await localTarball(filepath, pkg, options);
   } catch (err) {
     throw new Error(`[${displayName}] resolved target ${filepath} error: ${err.message}`);
   }
@@ -45,7 +40,9 @@ async function localFolder(filepath, pkg, options) {
     }
   } catch (err) {
     // fallback to copy
-    options.console.warn(`[npd:download:local] install ${pkg.displayName} from local folder ${filepath} with npm pack failed(${err.message}), use copy`);
+    options.console.warn(
+      `[npd:download:local] install ${pkg.displayName} from local folder ${filepath} with npm pack failed(${err.message}), use copy`
+    );
     return await utils.copyInstall(filepath, options);
   }
 }
@@ -64,7 +61,11 @@ async function localTarball(filepath, pkg, options) {
     try {
       await utils.rimraf(ungzipDir);
     } catch (err) {
-      options.console.warn(chalk.yellow(`[npd:download:local] ${pkg.displayName} rmdir local ungzip dir: ${ungzipDir} error: ${err}, ignore it`));
+      options.console.warn(
+        chalk.yellow(
+          `[npd:download:local] ${pkg.displayName} rmdir local ungzip dir: ${ungzipDir} error: ${err}, ignore it`
+        )
+      );
     }
   }
 }

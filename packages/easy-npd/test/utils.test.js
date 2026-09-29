@@ -10,145 +10,151 @@ describe('test/utils.test.js', () => {
   describe('matchPlatform()', () => {
     it('should match os names', () => {
       assert(utils.matchPlatform('darwin', []));
-      assert(utils.matchPlatform('darwin', [ 'darwin' ]));
-      assert(utils.matchPlatform('darwin', [ 'linux', 'darwin' ]));
-      assert(utils.matchPlatform('darwin', [ 'linux', 'win32', 'darwin' ]));
-      assert(utils.matchPlatform('win32', [ 'win32' ]));
-      assert(utils.matchPlatform('linux', [ 'linux' ]));
-      assert(utils.matchPlatform('darwin', [ '!win32' ]));
-      assert(utils.matchPlatform('darwin', [ '!linux' ]));
-      assert(utils.matchPlatform('darwin', [ '!linux', 'darwin' ]));
-      assert(utils.matchPlatform('darwin', [ 'darwin', '!darwin' ]));
+      assert(utils.matchPlatform('darwin', ['darwin']));
+      assert(utils.matchPlatform('darwin', ['linux', 'darwin']));
+      assert(utils.matchPlatform('darwin', ['linux', 'win32', 'darwin']));
+      assert(utils.matchPlatform('win32', ['win32']));
+      assert(utils.matchPlatform('linux', ['linux']));
+      assert(utils.matchPlatform('darwin', ['!win32']));
+      assert(utils.matchPlatform('darwin', ['!linux']));
+      assert(utils.matchPlatform('darwin', ['!linux', 'darwin']));
+      assert(utils.matchPlatform('darwin', ['darwin', '!darwin']));
     });
 
     it('should match cpu names', () => {
       assert(utils.matchPlatform('x64', []));
-      assert(utils.matchPlatform('x64', [ 'x64' ]));
-      assert(utils.matchPlatform('x64', [ 'x64', 'ia32' ]));
-      assert(utils.matchPlatform('x64', [ 'x64', 'ia32', 'arm' ]));
-      assert(utils.matchPlatform('ia32', [ 'ia32' ]));
-      assert(utils.matchPlatform('mips', [ 'mips' ]));
-      assert(utils.matchPlatform('x64', [ '!mips' ]));
-      assert(utils.matchPlatform('x64', [ '!ia32' ]));
-      assert(utils.matchPlatform('x64', [ '!ia32', 'x64' ]));
-      assert(utils.matchPlatform('x64', [ 'x64', '!x64' ]));
+      assert(utils.matchPlatform('x64', ['x64']));
+      assert(utils.matchPlatform('x64', ['x64', 'ia32']));
+      assert(utils.matchPlatform('x64', ['x64', 'ia32', 'arm']));
+      assert(utils.matchPlatform('ia32', ['ia32']));
+      assert(utils.matchPlatform('mips', ['mips']));
+      assert(utils.matchPlatform('x64', ['!mips']));
+      assert(utils.matchPlatform('x64', ['!ia32']));
+      assert(utils.matchPlatform('x64', ['!ia32', 'x64']));
+      assert(utils.matchPlatform('x64', ['x64', '!x64']));
     });
 
     it('should match libc names', () => {
       assert(utils.matchPlatform('glibc', []));
       assert(utils.matchPlatform('musl', []));
       assert(utils.matchPlatform(null, []));
-      assert(utils.matchPlatform('glibc', [ 'glibc' ]));
-      assert(utils.matchPlatform('glibc', [ 'glibc', 'musl' ]));
-      assert(utils.matchPlatform('musl', [ 'glibc', 'musl' ]));
-      assert(utils.matchPlatform('musl', [ 'musl' ]));
-      assert(utils.matchPlatform('glibc', [ '!musl' ]));
-      assert(utils.matchPlatform('musl', [ '!glibc' ]));
-      assert(utils.matchPlatform('glibc', [ '!musl', 'glibc' ]));
-      assert(utils.matchPlatform('glibc', [ 'glibc', '!glibc' ]));
+      assert(utils.matchPlatform('glibc', ['glibc']));
+      assert(utils.matchPlatform('glibc', ['glibc', 'musl']));
+      assert(utils.matchPlatform('musl', ['glibc', 'musl']));
+      assert(utils.matchPlatform('musl', ['musl']));
+      assert(utils.matchPlatform('glibc', ['!musl']));
+      assert(utils.matchPlatform('musl', ['!glibc']));
+      assert(utils.matchPlatform('glibc', ['!musl', 'glibc']));
+      assert(utils.matchPlatform('glibc', ['glibc', '!glibc']));
     });
 
     it('should not match os names', () => {
-      assert(!utils.matchPlatform('darwin', [ 'linux' ]));
-      assert(!utils.matchPlatform('darwin', [ 'win32' ]));
-      assert(!utils.matchPlatform('darwin', [ 'linux', 'win32' ]));
-      assert(!utils.matchPlatform('win32', [ 'darwin' ]));
-      assert(!utils.matchPlatform('linux', [ 'darwin' ]));
-      assert(!utils.matchPlatform('linux', [ '!linux' ]));
-      assert(!utils.matchPlatform('darwin', [ '!darwin' ]));
-      assert(!utils.matchPlatform('darwin', [ '!linux', '!darwin' ]));
-      assert(!utils.matchPlatform('win32', [ '!win32' ]));
-      assert(!utils.matchPlatform('win32', [ '!win32', 'win32' ]));
+      assert(!utils.matchPlatform('darwin', ['linux']));
+      assert(!utils.matchPlatform('darwin', ['win32']));
+      assert(!utils.matchPlatform('darwin', ['linux', 'win32']));
+      assert(!utils.matchPlatform('win32', ['darwin']));
+      assert(!utils.matchPlatform('linux', ['darwin']));
+      assert(!utils.matchPlatform('linux', ['!linux']));
+      assert(!utils.matchPlatform('darwin', ['!darwin']));
+      assert(!utils.matchPlatform('darwin', ['!linux', '!darwin']));
+      assert(!utils.matchPlatform('win32', ['!win32']));
+      assert(!utils.matchPlatform('win32', ['!win32', 'win32']));
     });
 
     it('should not match cpu names', () => {
-      assert(!utils.matchPlatform('x64', [ 'ia32' ]));
-      assert(!utils.matchPlatform('ia32', [ 'x64' ]));
-      assert(!utils.matchPlatform('ia32', [ 'mips', 'arm' ]));
-      assert(!utils.matchPlatform('arm', [ '!arm' ]));
-      assert(!utils.matchPlatform('mips', [ '!mips' ]));
-      assert(!utils.matchPlatform('mips', [ '!x64', '!mips' ]));
-      assert(!utils.matchPlatform('x64', [ '!x64' ]));
+      assert(!utils.matchPlatform('x64', ['ia32']));
+      assert(!utils.matchPlatform('ia32', ['x64']));
+      assert(!utils.matchPlatform('ia32', ['mips', 'arm']));
+      assert(!utils.matchPlatform('arm', ['!arm']));
+      assert(!utils.matchPlatform('mips', ['!mips']));
+      assert(!utils.matchPlatform('mips', ['!x64', '!mips']));
+      assert(!utils.matchPlatform('x64', ['!x64']));
     });
 
     it('should not match libc names', () => {
-      assert(!utils.matchPlatform(null, [ 'musl' ]));
-      assert(!utils.matchPlatform(null, [ 'glibc' ]));
-      assert(!utils.matchPlatform('glibc', [ 'musl' ]));
-      assert(!utils.matchPlatform('musl', [ 'glibc' ]));
-      assert(!utils.matchPlatform('glibc', [ '!glibc' ]));
-      assert(!utils.matchPlatform('musl', [ '!musl' ]));
+      assert(!utils.matchPlatform(null, ['musl']));
+      assert(!utils.matchPlatform(null, ['glibc']));
+      assert(!utils.matchPlatform('glibc', ['musl']));
+      assert(!utils.matchPlatform('musl', ['glibc']));
+      assert(!utils.matchPlatform('glibc', ['!glibc']));
+      assert(!utils.matchPlatform('musl', ['!musl']));
     });
   });
 
   describe('findMaxSatisfyingVersion()', () => {
     it('should use vaild version itself', () => {
-      assert(utils.findMaxSatisfyingVersion('1.0.2', {
-        latest: '2.0.0',
-      }, [
-        '1.0.1',
-        '1.0.2',
-        '1.0.3',
-        '2.0.0',
-      ]) === '1.0.2');
+      assert(
+        utils.findMaxSatisfyingVersion(
+          '1.0.2',
+          {
+            latest: '2.0.0',
+          },
+          ['1.0.1', '1.0.2', '1.0.3', '2.0.0']
+        ) === '1.0.2'
+      );
     });
 
     it('should return undefined when no version match', () => {
-      assert(utils.findMaxSatisfyingVersion('>= 2.0.1 < 3.0.0', {
-        latest: '2.0.0',
-      }, [
-        '1.0.1',
-        '1.0.2',
-        '1.0.3',
-        '2.0.0',
-      ]) === null);
+      assert(
+        utils.findMaxSatisfyingVersion(
+          '>= 2.0.1 < 3.0.0',
+          {
+            latest: '2.0.0',
+          },
+          ['1.0.1', '1.0.2', '1.0.3', '2.0.0']
+        ) === null
+      );
     });
 
     it('should use max range version', () => {
-      assert(utils.findMaxSatisfyingVersion('>= 1.0.1 < 2.0.0', {
-        latest: '2.0.0',
-      }, [
-        '1.0.1',
-        '1.0.2',
-        '1.0.3',
-        '2.0.0',
-      ]) === '1.0.3');
+      assert(
+        utils.findMaxSatisfyingVersion(
+          '>= 1.0.1 < 2.0.0',
+          {
+            latest: '2.0.0',
+          },
+          ['1.0.1', '1.0.2', '1.0.3', '2.0.0']
+        ) === '1.0.3'
+      );
     });
 
     it('should return latest version', () => {
-      assert(utils.findMaxSatisfyingVersion('latest', {
-        latest: '2.0.0',
-        'latest-1': '1.0.2',
-      }, [
-        '1.0.1',
-        '1.0.2',
-        '1.0.3',
-        '2.0.0',
-      ]) === '2.0.0');
+      assert(
+        utils.findMaxSatisfyingVersion(
+          'latest',
+          {
+            latest: '2.0.0',
+            'latest-1': '1.0.2',
+          },
+          ['1.0.1', '1.0.2', '1.0.3', '2.0.0']
+        ) === '2.0.0'
+      );
     });
 
     it('should support latest version first', () => {
-      assert(utils.findMaxSatisfyingVersion('>= 1.0.1 < 2.0.0', {
-        latest: '1.0.1',
-        'latest-1': '1.0.2',
-      }, [
-        '1.0.1',
-        '1.0.2',
-        '1.0.3',
-        '2.0.0',
-      ]) === '1.0.1');
+      assert(
+        utils.findMaxSatisfyingVersion(
+          '>= 1.0.1 < 2.0.0',
+          {
+            latest: '1.0.1',
+            'latest-1': '1.0.2',
+          },
+          ['1.0.1', '1.0.2', '1.0.3', '2.0.0']
+        ) === '1.0.1'
+      );
     });
 
     it('should support latest-{major} version', () => {
-      assert(utils.findMaxSatisfyingVersion('>= 1.0.1 < 2.0.0', {
-        latest: '2.0.0',
-        'latest-1': '1.0.2',
-      }, [
-        '1.0.1',
-        '1.0.2',
-        '1.0.3',
-        '2.0.0',
-      ]) === '1.0.2');
+      assert(
+        utils.findMaxSatisfyingVersion(
+          '>= 1.0.1 < 2.0.0',
+          {
+            latest: '2.0.0',
+            'latest-1': '1.0.2',
+          },
+          ['1.0.1', '1.0.2', '1.0.3', '2.0.0']
+        ) === '1.0.2'
+      );
     });
   });
 
@@ -163,31 +169,44 @@ describe('test/utils.test.js', () => {
     });
 
     it('should return multi urls', () => {
-      assert.deepEqual(utils.parseTarballUrls('http://foo-us1.oss.com/@cnpmtest/download-test-module/-/@cnpmtest/download-test-module-1.0.0.tgz?other_urls=http%3A%2F%2Fdefault.oss.com%2F%40cnpmtest%2Fdownload-test-module%2F-%2F%40cnpmtest%2Fdownload-test-module-1.0.0.tgz%2Chttp%3A%2F%2Fbackup.oss.com%2F%40cnpmtest%2Fdownload-test-module%2F-%2F%40cnpmtest%2Fdownload-test-module-1.0.0.tgz'), [
-        'http://foo-us1.oss.com/@cnpmtest/download-test-module/-/@cnpmtest/download-test-module-1.0.0.tgz?other_urls=http%3A%2F%2Fdefault.oss.com%2F%40cnpmtest%2Fdownload-test-module%2F-%2F%40cnpmtest%2Fdownload-test-module-1.0.0.tgz%2Chttp%3A%2F%2Fbackup.oss.com%2F%40cnpmtest%2Fdownload-test-module%2F-%2F%40cnpmtest%2Fdownload-test-module-1.0.0.tgz',
-        'http://default.oss.com/@cnpmtest/download-test-module/-/@cnpmtest/download-test-module-1.0.0.tgz',
-        'http://backup.oss.com/@cnpmtest/download-test-module/-/@cnpmtest/download-test-module-1.0.0.tgz',
-      ]);
+      assert.deepEqual(
+        utils.parseTarballUrls(
+          'http://foo-us1.oss.com/@cnpmtest/download-test-module/-/@cnpmtest/download-test-module-1.0.0.tgz?other_urls=http%3A%2F%2Fdefault.oss.com%2F%40cnpmtest%2Fdownload-test-module%2F-%2F%40cnpmtest%2Fdownload-test-module-1.0.0.tgz%2Chttp%3A%2F%2Fbackup.oss.com%2F%40cnpmtest%2Fdownload-test-module%2F-%2F%40cnpmtest%2Fdownload-test-module-1.0.0.tgz'
+        ),
+        [
+          'http://foo-us1.oss.com/@cnpmtest/download-test-module/-/@cnpmtest/download-test-module-1.0.0.tgz?other_urls=http%3A%2F%2Fdefault.oss.com%2F%40cnpmtest%2Fdownload-test-module%2F-%2F%40cnpmtest%2Fdownload-test-module-1.0.0.tgz%2Chttp%3A%2F%2Fbackup.oss.com%2F%40cnpmtest%2Fdownload-test-module%2F-%2F%40cnpmtest%2Fdownload-test-module-1.0.0.tgz',
+          'http://default.oss.com/@cnpmtest/download-test-module/-/@cnpmtest/download-test-module-1.0.0.tgz',
+          'http://backup.oss.com/@cnpmtest/download-test-module/-/@cnpmtest/download-test-module-1.0.0.tgz',
+        ]
+      );
 
-      assert.deepEqual(utils.parseTarballUrls('http://foo-us1.oss.com/@cnpmtest/download-test-module/-/@cnpmtest/download-test-module-1.0.0.tgz?foo=bar&other_urls=http%3A%2F%2Fdefault.oss.com%2F%40cnpmtest%2Fdownload-test-module%2F-%2F%40cnpmtest%2Fdownload-test-module-1.0.0.tgz%2Chttp%3A%2F%2Fbackup.oss.com%2F%40cnpmtest%2Fdownload-test-module%2F-%2F%40cnpmtest%2Fdownload-test-module-1.0.0.tgz'), [
-        'http://foo-us1.oss.com/@cnpmtest/download-test-module/-/@cnpmtest/download-test-module-1.0.0.tgz?foo=bar&other_urls=http%3A%2F%2Fdefault.oss.com%2F%40cnpmtest%2Fdownload-test-module%2F-%2F%40cnpmtest%2Fdownload-test-module-1.0.0.tgz%2Chttp%3A%2F%2Fbackup.oss.com%2F%40cnpmtest%2Fdownload-test-module%2F-%2F%40cnpmtest%2Fdownload-test-module-1.0.0.tgz',
-        'http://default.oss.com/@cnpmtest/download-test-module/-/@cnpmtest/download-test-module-1.0.0.tgz',
-        'http://backup.oss.com/@cnpmtest/download-test-module/-/@cnpmtest/download-test-module-1.0.0.tgz',
-      ]);
+      assert.deepEqual(
+        utils.parseTarballUrls(
+          'http://foo-us1.oss.com/@cnpmtest/download-test-module/-/@cnpmtest/download-test-module-1.0.0.tgz?foo=bar&other_urls=http%3A%2F%2Fdefault.oss.com%2F%40cnpmtest%2Fdownload-test-module%2F-%2F%40cnpmtest%2Fdownload-test-module-1.0.0.tgz%2Chttp%3A%2F%2Fbackup.oss.com%2F%40cnpmtest%2Fdownload-test-module%2F-%2F%40cnpmtest%2Fdownload-test-module-1.0.0.tgz'
+        ),
+        [
+          'http://foo-us1.oss.com/@cnpmtest/download-test-module/-/@cnpmtest/download-test-module-1.0.0.tgz?foo=bar&other_urls=http%3A%2F%2Fdefault.oss.com%2F%40cnpmtest%2Fdownload-test-module%2F-%2F%40cnpmtest%2Fdownload-test-module-1.0.0.tgz%2Chttp%3A%2F%2Fbackup.oss.com%2F%40cnpmtest%2Fdownload-test-module%2F-%2F%40cnpmtest%2Fdownload-test-module-1.0.0.tgz',
+          'http://default.oss.com/@cnpmtest/download-test-module/-/@cnpmtest/download-test-module-1.0.0.tgz',
+          'http://backup.oss.com/@cnpmtest/download-test-module/-/@cnpmtest/download-test-module-1.0.0.tgz',
+        ]
+      );
     });
   });
 
   describe('pruneJSON()', () => {
-    const [ tmp, cleanup ] = helper.tmp();
+    const [tmp, cleanup] = helper.tmp();
     beforeEach(cleanup);
     afterEach(cleanup);
 
     it('should finish writing package.json before resolve', async () => {
       const pkgFile = path.join(tmp, 'package.json');
-      await fs.writeFile(pkgFile, JSON.stringify({
-        dependencies: { foo: '1.0.0', bar: '1.0.0' },
-        devDependencies: { foo: '1.0.0' },
-      }));
+      await fs.writeFile(
+        pkgFile,
+        JSON.stringify({
+          dependencies: { foo: '1.0.0', bar: '1.0.0' },
+          devDependencies: { foo: '1.0.0' },
+        })
+      );
       await utils.pruneJSON(pkgFile, 'foo');
       const pkg = JSON.parse(await fs.readFile(pkgFile, 'utf8'));
       assert.deepEqual(pkg.dependencies, { bar: '1.0.0' });

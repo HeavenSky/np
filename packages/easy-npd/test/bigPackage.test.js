@@ -30,7 +30,5 @@ describe('test/bigPackage.test.js', () => {
   //   ].forEach(testcase);
   // }
 
-  [
-    'standardtest',
-  ].forEach(testcase);
+  ['standardtest'].forEach(testcase);
 });

@@ -18,14 +18,19 @@ async function postinstall(pkg, root, optional, displayName, options) {
   if (!scripts.install && (await utils.exists(path.join(root, 'binding.gyp')))) {
     options.console.warn(
       '[npd:runscript] %s found binding.gyp file, auto run "node-gyp rebuild", root: %j',
-      chalk.gray(displayName), root
+      chalk.gray(displayName),
+      root
     );
     const cmd = 'node-gyp rebuild';
     try {
       await utils.runScript(root, cmd, options);
     } catch (err) {
-      options.console.warn('[npd:runscript:error] %s has binding.gyp file, run %j error: %s',
-        chalk.red(displayName), cmd, err);
+      options.console.warn(
+        '[npd:runscript:error] %s has binding.gyp file, run %j error: %s',
+        chalk.red(displayName),
+        cmd,
+        err
+      );
       throw err;
     }
   }

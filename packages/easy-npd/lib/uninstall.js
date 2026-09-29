@@ -7,8 +7,15 @@ const utils = require('./utils');
 const preUninstall = require('./preuninstall');
 const postUninstall = require('./postuninstall');
 
-const DEP_FIELDS = [ 'dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies',
-  'clientDependencies', 'buildDependencies', 'isomorphicDependencies' ];
+const DEP_FIELDS = [
+  'dependencies',
+  'devDependencies',
+  'optionalDependencies',
+  'peerDependencies',
+  'clientDependencies',
+  'buildDependencies',
+  'isomorphicDependencies',
+];
 
 module.exports = async options => {
   const pkgs = options.pkgs;
@@ -45,7 +52,7 @@ async function cleanupHoistedLinks(root, names, options) {
   }
   const stores = await listStorePackages(nodeModules);
   const removed = new Set();
-  const queue = [ ...names ];
+  const queue = [...names];
   while (queue.length) {
     const name = queue.shift();
     if (removed.has(name) || declared.has(name)) continue;
@@ -81,7 +88,7 @@ async function listStorePackages(nodeModules) {
   for (const entry of entries) {
     if (!entry.startsWith('_')) continue;
     const dir = path.join(nodeModules, entry);
-    const dirs = entry.includes('@@') ? (await fs.readdir(dir)).map(sub => path.join(dir, sub)) : [ dir ];
+    const dirs = entry.includes('@@') ? (await fs.readdir(dir)).map(sub => path.join(dir, sub)) : [dir];
     for (const pkgDir of dirs) {
       const pkg = await utils.readJSON(path.join(pkgDir, 'package.json'));
       if (pkg.name) stores.push({ name: pkg.name, dir: pkgDir });
@@ -127,17 +134,21 @@ async function uninstall(pkg, options) {
     await utils.pruneJSON(pkgFile, pkg.name);
   }
   await postUninstall(pkgInfo, realRoot, options);
-  options.console.log('- %s %s -> %s',
+  options.console.log(
+    '- %s %s -> %s',
     chalk.yellow(`${pkgInfo.name}@${pkgInfo.version}`),
     chalk.gray(pkgRoot.replace(options.root, '.')),
-    chalk.gray(realRoot.replace(options.root, '.')));
+    chalk.gray(realRoot.replace(options.root, '.'))
+  );
 
   for (const file in pkgInfo.bin) {
     const binPath = path.join(options.binDir, file);
     await utils.rimraf(binPath);
-    options.console.log('- %s %s',
+    options.console.log(
+      '- %s %s',
       chalk.yellow(`${pkgInfo.name}@${pkgInfo.version}`),
-      chalk.gray(binPath.replace(options.root, '.')));
+      chalk.gray(binPath.replace(options.root, '.'))
+    );
   }
   return pkgInfo;
 }

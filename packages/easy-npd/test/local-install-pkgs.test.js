@@ -19,13 +19,14 @@ describe('test/local-install-pkgs.test.js', () => {
   afterEach(cleanup);
 
   it('should install pkg and dont link latestVersions', async () => {
-    await coffee.fork(helper.npminstall, [ 'koa' ], { cwd })
+    await coffee
+      .fork(helper.npminstall, ['koa'], { cwd })
       .debug()
       .expect('code', 0)
       .notExpect('stdout', /Linked \d+ latest versions/)
       .end();
     let names = await fs.readdir(path.join(cwd, 'node_modules'));
-    names = names.filter(n => !/^[\.\_]/.test(n));
+    names = names.filter(n => !/^[.\_]/.test(n));
     assert(names.length > 10);
     assert(names.includes('koa'));
     assert(names.includes('accepts'));

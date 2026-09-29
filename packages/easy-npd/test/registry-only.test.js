@@ -11,9 +11,10 @@ describe('test/registry-only.test.js', () => {
   afterEach(cleanup);
 
   it('should install fail', () => {
-    return coffee.fork(helper.npminstall, [ '--registry-only' ], {
-      cwd,
-    })
+    return coffee
+      .fork(helper.npminstall, ['--registry-only'], {
+        cwd,
+      })
       .debug()
       .expect('stderr', /Only allow install package from registry/)
       .expect('code', 1)

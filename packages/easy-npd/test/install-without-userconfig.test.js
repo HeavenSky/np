@@ -11,13 +11,14 @@ describe('test/install-without-userconfig.test.js', () => {
   afterEach(cleanup);
 
   it('should run cnpm install successfully without cnpmrc userconfig', async () => {
-    await coffee.fork(helper.npminstall, [ 'webpack-parallel-uglify-plugin@1.0.0' ], {
-      cwd,
-      env: Object.assign({}, process.env, {
-        USERPROFILE: cwd,
-        HOME: cwd,
-      }),
-    })
+    await coffee
+      .fork(helper.npminstall, ['webpack-parallel-uglify-plugin@1.0.0'], {
+        cwd,
+        env: Object.assign({}, process.env, {
+          USERPROFILE: cwd,
+          HOME: cwd,
+        }),
+      })
       .debug()
       .expect('code', 0)
       .end();

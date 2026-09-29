@@ -61,9 +61,13 @@ module.exports = async (options, context = new Context()) => {
     showTrace = () => {
       cpuUsage = process.cpuUsage && process.cpuUsage(cpuUsage);
       const memoryUsage = process.memoryUsage();
-      const loads = os.loadavg().map(v => Math.round(v * 10) / 10 + '').join(', ');
+      const loads = os
+        .loadavg()
+        .map(v => Math.round(v * 10) / 10 + '')
+        .join(', ');
       if (cpuUsage) {
-        options.console.warn('[trace] %s 🏊  memory usage, rss: %s, heapTotal: %s, heapUsed: %s, external: %s; 💻  os free: %s, os load: %s; 🏃  cpu usage, user: %s, system: %s',
+        options.console.warn(
+          '[trace] %s 🏊  memory usage, rss: %s, heapTotal: %s, heapUsed: %s, external: %s; 💻  os free: %s, os load: %s; 🏃  cpu usage, user: %s, system: %s',
           ms(Date.now() - startTime),
           bytes(memoryUsage.rss),
           bytes(memoryUsage.heapTotal),
@@ -72,16 +76,19 @@ module.exports = async (options, context = new Context()) => {
           bytes(os.freemem()),
           loads,
           Math.floor(cpuUsage.user / 1000 / 1000),
-          Math.floor(cpuUsage.system / 1000 / 1000));
+          Math.floor(cpuUsage.system / 1000 / 1000)
+        );
       } else {
-        options.console.warn('[trace] %s 🏊  memory usage, rss: %s, heapTotal: %s, heapUsed: %s, external: %s; 💻  os free: %s, os load: %s',
+        options.console.warn(
+          '[trace] %s 🏊  memory usage, rss: %s, heapTotal: %s, heapUsed: %s, external: %s; 💻  os free: %s, os load: %s',
           ms(Date.now() - startTime),
           bytes(memoryUsage.rss),
           bytes(memoryUsage.heapTotal),
           bytes(memoryUsage.heapUsed),
           bytes(memoryUsage.external || 0),
           bytes(os.freemem()),
-          loads);
+          loads
+        );
       }
     };
     traceTimer = setInterval(showTrace, 1000);
@@ -122,7 +129,9 @@ async function _install(options, context) {
     } else {
       pkgs = rootPkgDependencies.all;
     }
-    debug(`about to locally install pkgs (production: ${options.production}, client: ${options.client}): ${JSON.stringify(pkgs, null, 2)}`);
+    debug(
+      `about to locally install pkgs (production: ${options.production}, client: ${options.client}): ${JSON.stringify(pkgs, null, 2)}`
+    );
   } else {
     // try to fix no version package from rootPkgDependencies
     const allDeps = rootPkgDependencies.allMap;
@@ -136,7 +145,10 @@ async function _install(options, context) {
 
   if (options.installRoot) await preinstall(rootPkg, options.root, displayName, options);
 
-  context.nested.update(pkgs.map(pkg => `${pkg.name}@${pkg.version}`), rootPkg.name && rootPkg.version ? displayName : 'root');
+  context.nested.update(
+    pkgs.map(pkg => `${pkg.name}@${pkg.version}`),
+    rootPkg.name && rootPkg.version ? displayName : 'root'
+  );
   const nodeModulesDir = path.join(options.targetDir, 'node_modules');
   await utils.mkdirp(nodeModulesDir);
   const rootPkgsMap = new Map();
@@ -294,24 +306,30 @@ async function validatePeerDependencies(params, options) {
       );
       continue;
     }
-    debug('%s requires a peer of %s and %s was installed at %s',
+    debug(
+      '%s requires a peer of %s and %s was installed at %s',
       chalk.green(params.displayName),
       chalk.green(`${name}@${expectVersion}`),
       chalk.green(`${name}@${realPkg.version}`),
-      realPkg.installPath);
+      realPkg.installPath
+    );
   }
 }
 
 async function linkAllLatestVersion(rootPkgsMap, options) {
   if (options.latestVersions.size > 0) {
-    const mapper = async ([ name, version ]) => {
+    const mapper = async ([name, version]) => {
       if (!rootPkgsMap.has(name)) {
         options.progresses.linkTasks++;
         // link latest package to `storeDir/node_modules`
-        await linkLatestVersion({
-          name,
-          version,
-        }, options.storeDir, options);
+        await linkLatestVersion(
+          {
+            name,
+            version,
+          },
+          options.storeDir,
+          options
+        );
       }
     };
     await pMap(options.latestVersions, mapper, 20);
@@ -332,7 +350,11 @@ async function isHoistedLink(pkg, linkDir, storeDir, options) {
     const target = path.resolve(path.dirname(linkDir), await fs.readlink(linkDir));
     const prefix = `_${pkg.name.replace(/\//g, '_')}@`;
     const basename = path.basename(target);
-    return path.dirname(target) === path.resolve(storeDir) && basename.startsWith(prefix) && basename.endsWith(`@${path.basename(pkg.name)}`);
+    return (
+      path.dirname(target) === path.resolve(storeDir) &&
+      basename.startsWith(prefix) &&
+      basename.endsWith(`@${path.basename(pkg.name)}`)
+    );
   } catch (_) {
     return false;
   }
@@ -358,22 +380,29 @@ async function shouldOverrideLink(pkg, linkDir, storeDir, options) {
 
 async function linkLatestVersion(pkg, storeDir, options) {
   const linkDir = path.join(storeDir, pkg.name);
-  if (await utils.exists(linkDir) && !(await shouldOverrideLink(pkg, linkDir, storeDir, options))) {
+  if ((await utils.exists(linkDir)) && !(await shouldOverrideLink(pkg, linkDir, storeDir, options))) {
     options.progresses.finishedLinkTasks++;
-    return debug('[%s/%s] %s already exists',
+    return debug(
+      '[%s/%s] %s already exists',
       options.progresses.finishedLinkTasks,
       options.progresses.linkTasks,
-      linkDir);
+      linkDir
+    );
   }
   await utils.rimraf(linkDir); // make sure to delete linkDir
   await utils.mkdirp(path.dirname(linkDir));
   const realDir = utils.getPackageStorePath(storeDir, pkg);
   const relative = await utils.forceSymlink(realDir, linkDir);
   options.progresses.finishedLinkTasks++;
-  debug('[%s/%s] %s@%s link %s => %s',
+  debug(
+    '[%s/%s] %s@%s link %s => %s',
     options.progresses.finishedLinkTasks,
     options.progresses.linkTasks,
-    pkg.name, pkg.version, linkDir, relative);
+    pkg.name,
+    pkg.version,
+    linkDir,
+    relative
+  );
 }
 
 async function runPostInstallTasks(options) {
@@ -408,8 +437,12 @@ async function runPostInstallTasks(options) {
         try {
           await utils.runScript(root, installScript, options);
         } catch (err) {
-          options.console.warn('[npd:runscript:error] %s scripts.install run %j error: %s',
-            chalk.red(displayName), installScript, err);
+          options.console.warn(
+            '[npd:runscript:error] %s scripts.install run %j error: %s',
+            chalk.red(displayName),
+            installScript,
+            err
+          );
           throw err;
         }
         options.console.warn(
@@ -431,8 +464,12 @@ async function runPostInstallTasks(options) {
         try {
           await utils.runScript(root, postinstallScript, options);
         } catch (err) {
-          options.console.warn('[npd:runscript:error] %s scripts.postinstall run %j error: %s',
-            chalk.red(displayName), postinstallScript, err);
+          options.console.warn(
+            '[npd:runscript:error] %s scripts.postinstall run %j error: %s',
+            chalk.red(displayName),
+            postinstallScript,
+            err
+          );
           throw err;
         }
         options.console.warn(
@@ -485,10 +522,12 @@ function recordRecentlyUpdates(options) {
     const since = moment(options.recentlyUpdateMinDateTime).format('YYYY-MM-DD');
     const recentlyUpdatesTextFile = path.join(options.storeDir, '.recently_updates.txt');
     let recentlyUpdatesText = `Recently updated (since ${since})`;
-    console.info('%s: %s %s',
+    console.info(
+      '%s: %s %s',
       chalk.gray(recentlyUpdatesText),
       `${chalk.green(options.recentlyUpdates.size)} packages`,
-      chalk.gray(`(detail see file ${recentlyUpdatesTextFile})`));
+      chalk.gray(`(detail see file ${recentlyUpdatesTextFile})`)
+    );
     const displays = {};
     for (const item of options.recentlyUpdates) {
       const name = item[0];
@@ -550,9 +589,11 @@ function finishInstall(options) {
   const totalUse = Date.now() - options.start;
   const downloadUse = options.downloadFinished - options.start;
   const totalSize = options.totalTarballSize + options.totalJSONSize;
-  const avgSpeed = totalSize / downloadUse * 1000;
+  const avgSpeed = (totalSize / downloadUse) * 1000;
   const logArguments = [
-    chalk[options.detail ? 'green' : 'white']('All packages installed (%s%s%s%sused %s(network %s), speed %s/s, json %s(%s), tarball %s, manifests cache hit %s, etag hit %s / miss %s)'),
+    chalk[options.detail ? 'green' : 'white'](
+      'All packages installed (%s%s%s%sused %s(network %s), speed %s/s, json %s(%s), tarball %s, manifests cache hit %s, etag hit %s / miss %s)'
+    ),
     options.registryPackages ? `${options.registryPackages} packages installed from npm registry, ` : '',
     options.remotePackages ? `${options.remotePackages} packages installed from remote url, ` : '',
     options.localPackages ? `${options.localPackages} packages installed from local file, ` : '',

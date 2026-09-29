@@ -16,9 +16,7 @@ describe('test/package-versions.test.js', () => {
   it('should not record package version when not installRoot', async () => {
     await npminstall({
       root,
-      pkgs: [
-        { name: 'koa', version: 'latest' },
-      ],
+      pkgs: [{ name: 'koa', version: 'latest' }],
     });
     assert(!existsSync(path.join(root, 'node_modules/.package_versions.json')));
     assert(existsSync(path.join(root, 'node_modules/koa')));

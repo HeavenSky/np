@@ -9,7 +9,7 @@ const helper = require('./helper');
 describe('test/concurrency-install.test.js', () => {
   const root1 = helper.fixtures('concurrency1');
   const root2 = helper.fixtures('concurrency2');
-  const [ cacheDir, cleanupTmp ] = helper.tmp();
+  const [cacheDir, cleanupTmp] = helper.tmp();
 
   async function cleanup() {
     await Promise.all([

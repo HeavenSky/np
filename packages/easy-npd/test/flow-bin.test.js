@@ -5,7 +5,7 @@ const utils = require('../lib/utils');
 const helper = require('./helper');
 
 describe('test/flow-bin.test.js', () => {
-  const [ tmp, cleanup ] = helper.tmp();
+  const [tmp, cleanup] = helper.tmp();
 
   beforeEach(cleanup);
   afterEach(cleanup);
@@ -16,9 +16,7 @@ describe('test/flow-bin.test.js', () => {
     const binaryMirrors = await utils.getBinaryMirrors(registry);
     await npminstall({
       root: tmp,
-      pkgs: [
-        { name: 'flow-bin' },
-      ],
+      pkgs: [{ name: 'flow-bin' }],
       binaryMirrors,
     });
   });
@@ -29,9 +27,7 @@ describe('test/flow-bin.test.js', () => {
     const binaryMirrors = await utils.getBinaryMirrors(registry);
     await npminstall({
       root: tmp,
-      pkgs: [
-        { name: 'cypress' },
-      ],
+      pkgs: [{ name: 'cypress' }],
       binaryMirrors,
     });
   });

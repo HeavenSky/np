@@ -26,11 +26,8 @@ describe('test/peer.test.js', () => {
 
     // will fail on Windows, ignore it
     if (process.platform !== 'win32') {
-      it('should use ancestor\'s dependency for peerDependencies', async () => {
-        await coffee.fork(helper.npminstall, [], { cwd: tmp })
-          .debug()
-          .expect('code', 0)
-          .end();
+      it("should use ancestor's dependency for peerDependencies", async () => {
+        await coffee.fork(helper.npminstall, [], { cwd: tmp }).debug().expect('code', 0).end();
         let pkg = await getPkg('node_modules/antd-tools/node_modules/tslint/node_modules/typescript/package.json');
         assert(pkg.version === '2.1.6');
         pkg = await getPkg('node_modules/antd-tools/node_modules/gulp-typescript/node_modules/typescript/package.json');
@@ -41,10 +38,7 @@ describe('test/peer.test.js', () => {
     }
 
     it('should ignore peerDependency if in dependencies', async () => {
-      await coffee.fork(helper.npminstall, [ 'react-countup@1.3.0' ], { cwd: tmp })
-        .debug()
-        .expect('code', 0)
-        .end();
+      await coffee.fork(helper.npminstall, ['react-countup@1.3.0'], { cwd: tmp }).debug().expect('code', 0).end();
       let pkg = await getPkg('node_modules/react-countup/node_modules/react/package.json');
       assert(pkg.version.startsWith('15.'));
       pkg = await getPkg('node_modules/react-countup/package.json');
@@ -61,10 +55,7 @@ describe('test/peer.test.js', () => {
     afterEach(cleanup);
 
     it('should ignore peerDependency match with root', async () => {
-      await coffee.fork(helper.npminstall, [], { cwd: tmp })
-        .debug()
-        .expect('code', 0)
-        .end();
+      await coffee.fork(helper.npminstall, [], { cwd: tmp }).debug().expect('code', 0).end();
       assert(!existsSync(path.join(tmp, 'node_modules/react-dom/node_modules/react')));
       assert(existsSync(path.join(tmp, 'node_modules/react-dom')));
       assert(existsSync(path.join(tmp, 'node_modules/react')));

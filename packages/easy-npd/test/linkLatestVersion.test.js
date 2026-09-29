@@ -14,7 +14,7 @@ describe('test/linkLatestVersion.test.js', () => {
   afterEach(cleanup);
 
   it('should link latest version to node_modules', async () => {
-    const names = [ 'debug', 'ms', 'iconv-lite', 'utility' ];
+    const names = ['debug', 'ms', 'iconv-lite', 'utility'];
     await npminstall({
       root,
     });
@@ -27,8 +27,7 @@ describe('test/linkLatestVersion.test.js', () => {
       versions[pkg.name] = pkg.version;
     }
 
-    const pkg2 = await helper.readJSON(path.join(root,
-      'node_modules', 'iconv-lite', 'package.json'));
+    const pkg2 = await helper.readJSON(path.join(root, 'node_modules', 'iconv-lite', 'package.json'));
     assert.equal(pkg2.name, 'iconv-lite');
 
     await npminstall({
@@ -54,12 +53,15 @@ describe('test/linkLatestVersion.test.js', () => {
   });
 
   describe('reinstall', () => {
-    const [ tmp, cleanupTmp ] = helper.tmp();
+    const [tmp, cleanupTmp] = helper.tmp();
     beforeEach(cleanupTmp);
     afterEach(cleanupTmp);
 
     async function writePkg(dependencies) {
-      await fs.writeFile(path.join(tmp, 'package.json'), JSON.stringify({ name: 'demo', version: '1.0.0', dependencies }));
+      await fs.writeFile(
+        path.join(tmp, 'package.json'),
+        JSON.stringify({ name: 'demo', version: '1.0.0', dependencies })
+      );
     }
 
     async function readVersion(name) {

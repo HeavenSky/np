@@ -8,7 +8,7 @@ const npminstall = require('./npminstall');
 const helper = require('./helper');
 
 describe('test/cleanup.test.js', () => {
-  const [ tmp, cleanup ] = helper.tmp();
+  const [tmp, cleanup] = helper.tmp();
 
   beforeEach(cleanup);
   afterEach(cleanup);
@@ -18,34 +18,34 @@ describe('test/cleanup.test.js', () => {
     try {
       await npminstall({
         root: tmp,
-        pkgs: [
-          { name: 'install-error', version: 'latest' },
-        ],
+        pkgs: [{ name: 'install-error', version: 'latest' }],
       });
     } catch (err) {
       throwError = true;
     }
     assert(throwError);
 
-    let done = await utils.isInstallDone(path.join(tmp, 'node_modules/_install-error@1.0.1@install-error/package.json'));
+    let done = await utils.isInstallDone(
+      path.join(tmp, 'node_modules/_install-error@1.0.1@install-error/package.json')
+    );
     assert.equal(done, false);
     const dirs = await fs.readdir(path.join(tmp, 'node_modules'));
-    assert.deepEqual(dirs, [ '_install-error@1.0.1@install-error' ]);
+    assert.deepEqual(dirs, ['_install-error@1.0.1@install-error']);
 
     // install again will try to download
     throwError = false;
     try {
       await npminstall({
         root: tmp,
-        pkgs: [
-          { name: 'install-error', version: 'latest' },
-        ],
+        pkgs: [{ name: 'install-error', version: 'latest' }],
       });
     } catch (err) {
       throwError = true;
     }
     assert.equal(throwError, true);
-    done = await utils.isInstallDone(path.join(tmp, 'node_modules/_install-error@1.0.1@install-error/.npminstall.done'));
+    done = await utils.isInstallDone(
+      path.join(tmp, 'node_modules/_install-error@1.0.1@install-error/.npminstall.done')
+    );
     assert.equal(done, false);
   });
 
@@ -62,7 +62,9 @@ describe('test/cleanup.test.js', () => {
     }
     assert.equal(throwError, true);
 
-    let done = await utils.isInstallDone(path.join(tmp, 'node_modules/_postinstall-error@1.0.0@postinstall-error/.npminstall.done'));
+    let done = await utils.isInstallDone(
+      path.join(tmp, 'node_modules/_postinstall-error@1.0.0@postinstall-error/.npminstall.done')
+    );
     assert.equal(done, false);
 
     // install again will try to download
@@ -76,7 +78,9 @@ describe('test/cleanup.test.js', () => {
       throwError = true;
     }
     assert.equal(throwError, true);
-    done = await utils.isInstallDone(path.join(tmp, 'node_modules/_postinstall-error@1.0.0@postinstall-error/.npminstall.done'));
+    done = await utils.isInstallDone(
+      path.join(tmp, 'node_modules/_postinstall-error@1.0.0@postinstall-error/.npminstall.done')
+    );
     assert.equal(done, false);
   });
 });

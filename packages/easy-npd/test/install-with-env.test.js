@@ -11,7 +11,8 @@ describe('test/install-with-env.test.js', () => {
   afterEach(cleanup);
 
   it('should install husky@4.0.3', async () => {
-    await coffee.fork(helper.npminstall, [], { cwd })
+    await coffee
+      .fork(helper.npminstall, [], { cwd })
       .debug()
       .expect('code', 0)
       .expect('stdout', /INIT_CWD:.+install-husky-4/)

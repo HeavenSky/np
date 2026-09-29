@@ -10,7 +10,7 @@ const helper = require('./helper');
 const npmuninstall = path.join(__dirname, '../bin/uninstall.js');
 
 describe('test/uninstall-hoisted-links.test.js', () => {
-  const [ tmp, cleanup ] = helper.tmp();
+  const [tmp, cleanup] = helper.tmp();
 
   beforeEach(cleanup);
   afterEach(cleanup);
@@ -26,7 +26,10 @@ describe('test/uninstall-hoisted-links.test.js', () => {
 
   async function install(dependencies) {
     await fs.mkdir(tmp, { recursive: true });
-    await fs.writeFile(path.join(tmp, 'package.json'), JSON.stringify({ name: 'root', version: '1.0.0', dependencies }));
+    await fs.writeFile(
+      path.join(tmp, 'package.json'),
+      JSON.stringify({ name: 'root', version: '1.0.0', dependencies })
+    );
     await coffee.fork(helper.npminstall, [], { cwd: tmp }).debug().expect('code', 0).end();
   }
 

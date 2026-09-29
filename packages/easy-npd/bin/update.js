@@ -18,19 +18,14 @@ Options:
 
   --root: project root directory, default is current working directory
   -h, --help: show help
-`
-  );
+`);
   process.exit(0);
 }
 
 (async () => {
   const argv = parseArgs(process.argv.slice(2), {
-    string: [
-      'root',
-    ],
-    boolean: [
-      'help',
-    ],
+    string: ['root'],
+    boolean: ['help'],
     alias: {
       h: 'help',
     },

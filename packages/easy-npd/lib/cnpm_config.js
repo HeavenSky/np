@@ -26,7 +26,6 @@ function createConfigs() {
     }
     return pre;
   }, config);
-
 }
 
 createConfigs();

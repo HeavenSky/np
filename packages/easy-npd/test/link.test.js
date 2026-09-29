@@ -8,7 +8,7 @@ const { mkdirp } = require('../lib/utils');
 const helper = require('./helper');
 
 describe('test/link.test.js', () => {
-  const [ tmp, cleanup ] = helper.tmp();
+  const [tmp, cleanup] = helper.tmp();
 
   beforeEach(cleanup);
   afterEach(cleanup);

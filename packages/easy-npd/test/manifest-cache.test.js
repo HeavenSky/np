@@ -7,7 +7,7 @@ const coffee = require('coffee');
 const helper = require('./helper');
 
 describe('test/manifest-cache.test.js', () => {
-  const [ tmp, cleanup ] = helper.tmp();
+  const [tmp, cleanup] = helper.tmp();
   const cacheDir = path.join(tmp, '.cache');
   const env = Object.assign({}, process.env, { npd_cache: cacheDir });
 
@@ -23,7 +23,8 @@ describe('test/manifest-cache.test.js', () => {
   }
 
   it('should group manifest cache files by package name', async () => {
-    await coffee.fork(helper.npminstall, [ 'ms@2.1.3', '@tsconfig/node18@18.2.4' ], { cwd: tmp, env })
+    await coffee
+      .fork(helper.npminstall, ['ms@2.1.3', '@tsconfig/node18@18.2.4'], { cwd: tmp, env })
       .debug()
       .expect('code', 0)
       .end();
@@ -31,7 +32,8 @@ describe('test/manifest-cache.test.js', () => {
     assert.equal((await listCacheFiles('@tsconfig/node18')).length, 1);
 
     await fs.rm(path.join(tmp, 'node_modules'), { recursive: true, force: true });
-    await coffee.fork(helper.npminstall, [ 'ms@2.1.3', '@tsconfig/node18@18.2.4' ], { cwd: tmp, env })
+    await coffee
+      .fork(helper.npminstall, ['ms@2.1.3', '@tsconfig/node18@18.2.4'], { cwd: tmp, env })
       .debug()
       .expect('code', 0)
       .expect('stderr', /manifests cache hit 2/)

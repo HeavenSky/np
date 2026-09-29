@@ -6,7 +6,10 @@ const mm = require('mm');
 const path = require('path');
 const mockCnpmrc = path.join(__dirname, './fixtures/auth/');
 if (!fs.existsSync(mockCnpmrc + '.cnpmrc')) {
-  fs.writeFileSync(mockCnpmrc + '.cnpmrc', 'registry=https://registry-mock.org/\n//registry-mock.org/:always-auth=true\n//registry-mock.org/:_password="bW9jaw=="\n//registry-mock.org/:username=hyj19911120');
+  fs.writeFileSync(
+    mockCnpmrc + '.cnpmrc',
+    'registry=https://registry-mock.org/\n//registry-mock.org/:always-auth=true\n//registry-mock.org/:_password="bW9jaw=="\n//registry-mock.org/:username=hyj19911120'
+  );
 }
 mm(process.env, 'HOME', mockCnpmrc);
 mm(process.env, 'USERPROFILE', mockCnpmrc);
@@ -37,10 +40,7 @@ describe('test/get.test.js', () => {
     }
   });
 
-  for (const url of [
-    'https://other-mock.org/mock',
-    'https://other-mock.org/mock?from=//registry-mock.org/',
-  ]) {
+  for (const url of ['https://other-mock.org/mock', 'https://other-mock.org/mock?from=//registry-mock.org/']) {
     it(`should not send auth info to other host even with always-auth: ${url}`, async () => {
       const options = { dataType: 'json', retry: 0 };
       await assert.rejects(get(url, options, { console: { warn() {} } }));

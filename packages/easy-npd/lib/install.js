@@ -14,9 +14,7 @@ const bin = require('./bin');
 const link = require('./link');
 const dependencies = require('./dependencies');
 const resolve = require('./download/npm').resolve;
-const {
-  REGISTRY_TYPES,
-} = require('./npa_types');
+const { REGISTRY_TYPES } = require('./npa_types');
 
 module.exports = install;
 
@@ -37,9 +35,10 @@ async function install(parentDir, pkg, ancestors, options, context) {
   }
 }
 
-
 async function _install(parentDir, pkg, ancestors, options, context) {
-  const rootPkgDependencies = options.production ? options.rootPkgDependencies.prodMap : options.rootPkgDependencies.allMap;
+  const rootPkgDependencies = options.production
+    ? options.rootPkgDependencies.prodMap
+    : options.rootPkgDependencies.allMap;
   const ancestorsWithRoot = [{ dependencies: rootPkgDependencies, name: 'root package.json' }].concat(ancestors);
 
   // default install latest version
@@ -49,15 +48,19 @@ async function _install(parentDir, pkg, ancestors, options, context) {
 
   pkg = options.resolution(pkg, ancestors, context.nested);
 
-  debug('[%s/%s] install %s@%s in %s',
+  debug(
+    '[%s/%s] install %s@%s in %s',
     options.progresses.finishedInstallTasks,
     options.progresses.installTasks,
-    pkg.name, pkg.version, parentDir);
+    pkg.name,
+    pkg.version,
+    parentDir
+  );
   if (options.spinner) {
     options.spinner.text = `[${options.progresses.finishedInstallTasks}/${options.progresses.installTasks}] Installing ${pkg.name}@${pkg.version}`;
   }
   let p = npa(pkg.name ? `${pkg.name}@${pkg.version}` : pkg.version, { where: options.root, nested: context.nested });
-  const displayName = p.displayName = utils.getDisplayName(pkg, ancestors);
+  const displayName = (p.displayName = utils.getDisplayName(pkg, ancestors));
 
   if (options.registryOnly && REGISTRY_TYPES.includes(p.type)) {
     throw new Error(`Only allow install package from registry, but "${displayName}" is ${p.type}`);
@@ -70,7 +73,7 @@ async function _install(parentDir, pkg, ancestors, options, context) {
       if (res.childResolved !== res.ancestorResolved) {
         options.pendingMessages.push([
           'warn',
-          '%s %s delcares %s(resolved as %s) but using ancestor(%s)\'s dependency %s(resolved as %s)',
+          "%s %s delcares %s(resolved as %s) but using ancestor(%s)'s dependency %s(resolved as %s)",
           chalk.magenta('anti semver'),
           chalk.gray(res.displayName),
           chalk.yellow(`${res.name}@${res.childSpec}`),
@@ -200,16 +203,14 @@ async function _install(parentDir, pkg, ancestors, options, context) {
     // https://docs.npmjs.com/files/package.json#engines
     const nodeVersion = realPkg.engines && realPkg.engines.node;
     if (nodeVersion && !semver.satisfies(process.version, nodeVersion)) {
-      const err = new Error(`"node@${process.version}" is incompatible with ${displayName}, expected node@${nodeVersion}`);
+      const err = new Error(
+        `"node@${process.version}" is incompatible with ${displayName}, expected node@${nodeVersion}`
+      );
       err.name = 'UnSupportedNodeError';
       if (options.engineStrict) {
         throw err;
       } else {
-        options.console.warn(
-          '\n%s %s',
-          chalk.magenta('WARN node unsupported'),
-          err.message
-        );
+        options.console.warn('\n%s %s', chalk.magenta('WARN node unsupported'), err.message);
       }
     }
 
@@ -232,7 +233,7 @@ async function _install(parentDir, pkg, ancestors, options, context) {
       for (const name in peerDependencies) {
         const version = peerDependencies[name];
         const raw = `${name}@${version}`;
-        context.nested.update([ raw ], p.raw);
+        context.nested.update([raw], p.raw);
         // don't need to check if peer dependency is in dependencies
         if (pkgMaps[name]) continue;
 
@@ -259,14 +260,23 @@ async function _install(parentDir, pkg, ancestors, options, context) {
     if (pkgs.length > 0) {
       await utils.mkdirp(nodeModulesDir);
       const needPkgs = pkgs.filter(childPkg => !bundledDependencies.includes(childPkg.name));
-      context.nested.update(needPkgs.map(pkg => `${pkg.name}@${pkg.version}`), `${realPkg.name}@${realPkg.version}`);
+      context.nested.update(
+        needPkgs.map(pkg => `${pkg.name}@${pkg.version}`),
+        `${realPkg.name}@${realPkg.version}`
+      );
 
       const mapper = async childPkg => {
-        await install(realPkgDir, childPkg, ancestors.concat({
-          displayName: `${realPkg.name}@${realPkg.version}`,
-          name: realPkg.name,
-          dependencies: deps.prodMap,
-        }), options, context);
+        await install(
+          realPkgDir,
+          childPkg,
+          ancestors.concat({
+            displayName: `${realPkg.name}@${realPkg.version}`,
+            name: realPkg.name,
+            dependencies: deps.prodMap,
+          }),
+          options,
+          context
+        );
       };
       await pMap(needPkgs, mapper, 10);
     }
@@ -283,12 +293,14 @@ async function _install(parentDir, pkg, ancestors, options, context) {
 
   await linkModule(pkg, parentDir, realPkg, realPkgDir, options);
 
-  debug('[%s/%s] installed %s@%s at %s',
+  debug(
+    '[%s/%s] installed %s@%s at %s',
     options.progresses.finishedInstallTasks,
     options.progresses.installTasks,
     realPkg.name,
     realPkg.version,
-    realPkgDir);
+    realPkgDir
+  );
 
   return {
     exists: false,
@@ -346,7 +358,8 @@ async function satisfiesRange(childPkg, ancestorPkg, options) {
   }
   if (!satisfies) return;
 
-  debug('%s delcares %s(resolved as %s) but using ancestor(%s)\'s dependency %s(resolved as %s)',
+  debug(
+    "%s delcares %s(resolved as %s) but using ancestor(%s)'s dependency %s(resolved as %s)",
     childPkg.displayName,
     `${childPkg.name}@${childPkg.rawSpec}`,
     resolveChildPkg.version || '-',

@@ -82,18 +82,22 @@ async function resolve(pkg, options) {
   if (!realPkgVersion) {
     // remove disk cache
     await removeCacheInfo(pkg.name, options);
-    throw new Error(`[${pkg.displayName}] Can\'t find package ${pkg.name}@${pkg.rawSpec}`);
+    throw new Error(`[${pkg.displayName}] Can't find package ${pkg.name}@${pkg.rawSpec}`);
   }
 
   if (options.autoFixVersion) {
     const fixVersion = options.autoFixVersion(pkg.name, realPkgVersion);
     if (fixVersion) {
       if (fixVersion.version && fixVersion.version !== realPkgVersion) {
-        options.console.warn(`[${pkg.name}@${realPkgVersion}] use ${pkg.name}@${chalk.green(fixVersion.version)} instead, reason: ${chalk.yellow(fixVersion.reason)}`);
+        options.console.warn(
+          `[${pkg.name}@${realPkgVersion}] use ${pkg.name}@${chalk.green(fixVersion.version)} instead, reason: ${chalk.yellow(fixVersion.reason)}`
+        );
         realPkgVersion = fixVersion.version;
       }
       if (fixVersion.dependencies) {
-        options.console.warn(`[${pkg.name}@${realPkgVersion}] use dependencies: ${chalk.green(JSON.stringify(fixVersion.dependencies))} instead, reason: ${chalk.yellow(fixVersion.reason)}`);
+        options.console.warn(
+          `[${pkg.name}@${realPkgVersion}] use dependencies: ${chalk.green(JSON.stringify(fixVersion.dependencies))} instead, reason: ${chalk.yellow(fixVersion.reason)}`
+        );
         fixDependencies = fixVersion.dependencies;
       }
       // https://github.com/npm/rfcs/pull/488/files
@@ -107,7 +111,9 @@ async function resolve(pkg, options) {
       //   }
       // }
       if (fixVersion.scripts) {
-        options.console.warn(`[${pkg.name}@${realPkgVersion}] use scripts: ${chalk.green(JSON.stringify(fixVersion.scripts))} instead, reason: ${chalk.yellow(fixVersion.reason)}`);
+        options.console.warn(
+          `[${pkg.name}@${realPkgVersion}] use scripts: ${chalk.green(JSON.stringify(fixVersion.scripts))} instead, reason: ${chalk.yellow(fixVersion.reason)}`
+        );
         fixScripts = fixVersion.scripts;
       }
     }
@@ -117,7 +123,7 @@ async function resolve(pkg, options) {
   if (!realPkg) {
     // remove disk cache
     await removeCacheInfo(pkg.name, options);
-    throw new Error(`[${pkg.displayName}] Can\'t find package ${pkg.name}\'s version: ${realPkgVersion}`);
+    throw new Error(`[${pkg.displayName}] Can't find package ${pkg.name}'s version: ${realPkgVersion}`);
   }
 
   if (fixDependencies) {
@@ -127,8 +133,14 @@ async function resolve(pkg, options) {
     realPkg.__fixScripts = fixScripts;
   }
 
-  debug('[%s@%s] spec: %s, real version: %s, dist-tags: %j',
-    pkg.name, pkg.rawSpec, pkg.fetchSpec, realPkg.version, distTags);
+  debug(
+    '[%s@%s] spec: %s, real version: %s, dist-tags: %j',
+    pkg.name,
+    pkg.rawSpec,
+    pkg.fetchSpec,
+    realPkg.version,
+    distTags
+  );
 
   // cache resolve result
   dependenciesTree[pkg.raw] = realPkg;
@@ -230,8 +242,7 @@ async function _fetchFullPackageMetaWithCache(pkgUrl, globalOptions, cacheFile, 
       }
     }
   }
-  debug('GET %s with etag: %j, status: %s, maxAge: %s',
-    pkgUrl, etag, result.status, maxAge);
+  debug('GET %s with etag: %j, status: %s, maxAge: %s', pkgUrl, etag, result.status, maxAge);
   const expired = Date.now() + maxAge * 1000;
   // etag match
   if (result.status === 304) {
@@ -243,12 +254,15 @@ async function _fetchFullPackageMetaWithCache(pkgUrl, globalOptions, cacheFile, 
     return cache.manifests;
   }
   // 200 status
-  await fs.writeFile(cacheFile, JSON.stringify({
-    etag: headers.etag,
-    expired,
-    headers,
-    manifests: result.data,
-  }));
+  await fs.writeFile(
+    cacheFile,
+    JSON.stringify({
+      etag: headers.etag,
+      expired,
+      headers,
+      manifests: result.data,
+    })
+  );
   if (etag) {
     globalOptions.totalEtagMissCount += 1;
   }
@@ -262,13 +276,17 @@ async function _fetchFullPackageMeta(pkgUrl, globalOptions, etag) {
   if (etag) {
     headers['if-none-match'] = etag;
   }
-  const result = await get(pkgUrl, {
-    headers,
-    timeout: globalOptions.timeout,
-    followRedirect: true,
-    gzip: true,
-    dataType: 'json',
-  }, globalOptions);
+  const result = await get(
+    pkgUrl,
+    {
+      headers,
+      timeout: globalOptions.timeout,
+      followRedirect: true,
+      gzip: true,
+      dataType: 'json',
+    },
+    globalOptions
+  );
   if (result.status === 200) {
     globalOptions.totalJSONSize += result.res.size;
     globalOptions.totalJSONCount += 1;
@@ -359,8 +377,12 @@ async function download(pkg, options) {
     } catch (err) {
       lastErr = err;
       count++;
-      options.console.warn(`[${pkg.name}@${pkg.version}] download %s: %s, fail count: %s`,
-        err.name, err.message, count);
+      options.console.warn(
+        `[${pkg.name}@${pkg.version}] download %s: %s, fail count: %s`,
+        err.name,
+        err.message,
+        count
+      );
       // retry download on any error
       // sleep for a while to wait for server become normal
       if (count < 3) {
@@ -395,13 +417,15 @@ async function download(pkg, options) {
     if (pkg.scripts && pkg.scripts.install && !binaryMirror.replaceHostFiles) {
       // leveldown and sqlite3
       // nodegit
-      if (/prebuild --install/.test(pkg.scripts.install) ||
-          /prebuild --download/.test(pkg.scripts.install) ||
-          /node-pre-gyp install/.test(pkg.scripts.install) ||
-          // utf-8-validate
-          /prebuild-install || node-gyp rebuild/.test(pkg.scripts.install) ||
-          pkg.name === 'nodegit' ||
-          pkg.name === 'fsevents') {
+      if (
+        /prebuild --install/.test(pkg.scripts.install) ||
+        /prebuild --download/.test(pkg.scripts.install) ||
+        /node-pre-gyp install/.test(pkg.scripts.install) ||
+        // utf-8-validate
+        /prebuild-install || node-gyp rebuild/.test(pkg.scripts.install) ||
+        pkg.name === 'nodegit' ||
+        pkg.name === 'fsevents'
+      ) {
         const newBinary = pkg.binary || {};
         for (const key in binaryMirror) {
           newBinary[key] = binaryMirror[key];
@@ -412,22 +436,24 @@ async function download(pkg, options) {
           const versioningFile = path.join(ungzipDir, 'node_modules/node-pre-gyp/lib/util/versioning.js');
           if (await utils.exists(versioningFile)) {
             let content = await fs.readFile(versioningFile, 'utf-8');
-            content = content.replace('if (protocol === \'http:\') {',
-              'if (false && protocol === \'http:\') { // hack by npd');
+            content = content.replace(
+              "if (protocol === 'http:') {",
+              "if (false && protocol === 'http:') { // hack by npd"
+            );
             await fs.writeFile(versioningFile, content);
           }
         }
-        options.console.info('%s download from binary mirror: %j',
-          chalk.gray(`${pkg.name}@${pkg.version}`), newBinary);
+        options.console.info('%s download from binary mirror: %j', chalk.gray(`${pkg.name}@${pkg.version}`), newBinary);
       }
-    } else if ((binaryMirror.replaceHost && binaryMirror.host) || binaryMirror.replaceHostMap || binaryMirror.replaceHostRegExpMap) {
+    } else if (
+      (binaryMirror.replaceHost && binaryMirror.host) ||
+      binaryMirror.replaceHostMap ||
+      binaryMirror.replaceHostRegExpMap
+    ) {
       // use mirror url instead
       // e.g.: pngquant-bin
       // https://github.com/lovell/sharp/blob/master/install/libvips.js#L19
-      const replaceHostFiles = binaryMirror.replaceHostFiles || [
-        'lib/index.js',
-        'lib/install.js',
-      ];
+      const replaceHostFiles = binaryMirror.replaceHostFiles || ['lib/index.js', 'lib/install.js'];
       for (const replaceHostFile of replaceHostFiles) {
         const replaceHostFilePath = path.join(ungzipDir, replaceHostFile);
         await replaceHostInFile(pkg, replaceHostFilePath, binaryMirror, options);
@@ -449,16 +475,21 @@ async function download(pkg, options) {
       }
       const targetPlatform = platforms[os.platform()];
       if (targetPlatform) {
-        options.console.info('%s download from binary mirror: %j, targetPlatform: %s',
-          chalk.gray(`${pkg.name}@${pkg.version}`), binaryMirror, targetPlatform);
+        options.console.info(
+          '%s download from binary mirror: %j, targetPlatform: %s',
+          chalk.gray(`${pkg.name}@${pkg.version}`),
+          binaryMirror,
+          targetPlatform
+        );
         const downloadFile = path.join(ungzipDir, 'lib/tasks/download.js');
         if (await utils.exists(downloadFile)) {
           let content = await fs.readFile(downloadFile, 'utf-8');
           // return version ? prepend('desktop/' + version) : prepend('desktop');
-          const afterContent = 'return "' + binaryMirror.host + '/" + version + "/' + targetPlatform + '/cypress.zip"; // hack by npd\n';
+          const afterContent =
+            'return "' + binaryMirror.host + '/" + version + "/' + targetPlatform + '/cypress.zip"; // hack by npd\n';
           content = content
-            .replace('return version ? prepend(\`desktop/${version}\`) : prepend(\'desktop\')', afterContent)
-            .replace('return version ? prepend(\'desktop/\' + version) : prepend(\'desktop\');', afterContent);
+            .replace("return version ? prepend(`desktop/${version}`) : prepend('desktop')", afterContent)
+            .replace("return version ? prepend('desktop/' + version) : prepend('desktop');", afterContent);
           await fs.writeFile(downloadFile, content);
         }
       }
@@ -474,8 +505,7 @@ async function download(pkg, options) {
     const versioningFile = path.join(ungzipDir, 'lib/util/versioning.js');
     if (await utils.exists(versioningFile)) {
       let content = await fs.readFile(versioningFile, 'utf-8');
-      content = content.replace('if (protocol === \'http:\') {',
-        'if (false && protocol === \'http:\') { // hack by npd');
+      content = content.replace("if (protocol === 'http:') {", "if (false && protocol === 'http:') { // hack by npd");
       await fs.writeFile(versioningFile, content);
     }
   }
@@ -520,11 +550,15 @@ async function getTarballStream(tarballUrl, pkg, options) {
     // sudo don't touch the cacheDir
     // production mode
     debug('[%s@%s] GET streaming %j', pkg.name, pkg.version, tarballUrl);
-    const result = await get(tarballUrl, {
-      timeout: options.streamingTimeout || options.timeout,
-      followRedirect: true,
-      streaming: true,
-    }, options);
+    const result = await get(
+      tarballUrl,
+      {
+        timeout: options.streamingTimeout || options.timeout,
+        followRedirect: true,
+        streaming: true,
+      },
+      options
+    );
 
     if (result.status !== 200) {
       try {
@@ -556,11 +590,15 @@ async function getTarballStream(tarballUrl, pkg, options) {
     await utils.mkdirp(parentDir);
     await utils.mkdirp(tmpDir);
     const tmpFile = path.join(tmpDir, `${name}-${pkg.version}-${randomUUID()}.tgz`);
-    const result = await get(tarballUrl, {
-      timeout: options.streamingTimeout || options.timeout,
-      followRedirect: true,
-      writeStream: createWriteStream(tmpFile),
-    }, options);
+    const result = await get(
+      tarballUrl,
+      {
+        timeout: options.streamingTimeout || options.timeout,
+        followRedirect: true,
+        writeStream: createWriteStream(tmpFile),
+      },
+      options
+    );
 
     if (result.status !== 200) {
       throw new Error(`Download ${tarballUrl} status: ${result.status} error, should be 200`);
@@ -592,8 +630,7 @@ async function getTarballStream(tarballUrl, pkg, options) {
       await fs.rm(tmpFile, { force: true });
     }
     const stat = await fs.stat(tarballFile);
-    debug('[%s@%s] saved %s %s => %s',
-      pkg.name, pkg.version, bytes(stat.size), tarballUrl, tarballFile);
+    debug('[%s@%s] saved %s %s => %s', pkg.name, pkg.version, bytes(stat.size), tarballUrl, tarballFile);
     options.totalTarballSize += stat.size;
   }
 
@@ -636,8 +673,7 @@ function checkShasumAndUngzip(ungzipDir, readstream, pkg, useTarFormat) {
         err.message += ` (${pkg.name}@${pkg.version})`;
         if (readstream.tarballFile && utils.existsSync(readstream.tarballFile)) {
           err.message += ` (${readstream.tarballFile})`;
-          debug('[%s@%s] remove tarball file: %s, because %s',
-            pkg.name, pkg.version, readstream.tarballFile, err);
+          debug('[%s@%s] remove tarball file: %s, because %s', pkg.name, pkg.version, readstream.tarballFile, err);
           // remove tarball cache file
           rmSync(readstream.tarballFile, { force: true });
         }
@@ -662,7 +698,9 @@ function checkShasumAndUngzip(ungzipDir, readstream, pkg, useTarFormat) {
         hashString = shasum;
       }
       if (hashResult !== hashString) {
-        const err = new Error(`real ${algorithmType}:${hashResult} not equal to remote:${hashString}, download url ${readstream.tarballUrl || ''}, download size ${tarballSize}`);
+        const err = new Error(
+          `real ${algorithmType}:${hashResult} not equal to remote:${hashString}, download url ${readstream.tarballUrl || ''}, download size ${tarballSize}`
+        );
         err.name = 'ShasumNotMatchError';
         handleCallback(err);
       }
@@ -704,7 +742,7 @@ async function replaceHostInFile(pkg, filepath, binaryMirror, globalOptions) {
     if (!replaceHostMap) {
       let replaceHosts = binaryMirror.replaceHost;
       if (!Array.isArray(replaceHosts)) {
-        replaceHosts = [ replaceHosts ];
+        replaceHosts = [replaceHosts];
       }
       replaceHostMap = {};
       for (const replaceHost of replaceHosts) {
@@ -717,8 +755,10 @@ async function replaceHostInFile(pkg, filepath, binaryMirror, globalOptions) {
   }
   debug('%s: \n%s', filepath, content);
   await fs.writeFile(filepath, content);
-  globalOptions.console.info('%s download from mirrors: %j, changed file: %s',
+  globalOptions.console.info(
+    '%s download from mirrors: %j, changed file: %s',
     chalk.gray(`${pkg.name}@${pkg.version}`),
     replaceHostMap,
-    filepath);
+    filepath
+  );
 }

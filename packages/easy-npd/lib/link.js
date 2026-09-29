@@ -3,16 +3,11 @@
 const debug = require('debug')('npd:link');
 const utils = require('./utils');
 const path = require('path');
-const {
-  getAliasPackageName,
-} = require('./alias');
+const { getAliasPackageName } = require('./alias');
 
 module.exports = async (parentDir, pkg, realDir, alias) => {
   let linkDir = path.join(parentDir, 'node_modules', pkg.name);
-  const {
-    version,
-    name,
-  } = pkg;
+  const { version, name } = pkg;
   const displayName = getAliasPackageName(alias, name, version);
 
   if (alias) {

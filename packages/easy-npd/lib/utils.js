@@ -49,7 +49,7 @@ exports.hasOwnProp = (target, key) => target.hasOwnProperty(key);
 exports.pruneJSON = async (filepath, depName) => {
   const pkg = await this.readJSON(filepath);
   const depMap = {};
-  const depKeys = [ 'dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies' ];
+  const depKeys = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
   for (const key of depKeys) {
     pkg[key] && (depMap[key] = pkg[key]);
   }
@@ -179,7 +179,7 @@ exports.formatPackageUrl = (registry, name) => {
 };
 
 exports.parseTarballUrls = tarball => {
-  const urls = [ tarball ];
+  const urls = [tarball];
   const parsed = urlparse(tarball);
   const query = parsed.query && querystring.parse(parsed.query);
   if (query && query.other_urls) {
@@ -330,23 +330,20 @@ exports.unpack = (readstream, target, pkg) => {
     const name = pkg.name || pkg.displayName || 'unknown package';
 
     // just support gzip tarball and nacked tarball
-    readstream
-      .on('data', function ondata(data) {
-        // detect what it is.
-        // Then, depending on that, we'll figure out whether it's
-        // gzipped tarball or naked tarball.
-        // gzipped files all start with 1f8b08
-        if (data[0] === 0x1F &&
-          data[1] === 0x8B &&
-          data[2] === 0x08) {
-          readstream.pipe(gunzip).pipe(extracter);
-        } else {
-          readstream.pipe(extracter);
-        }
-        // re-emit
-        readstream.removeListener('data', ondata);
-        readstream.emit('data', data);
-      });
+    readstream.on('data', function ondata(data) {
+      // detect what it is.
+      // Then, depending on that, we'll figure out whether it's
+      // gzipped tarball or naked tarball.
+      // gzipped files all start with 1f8b08
+      if (data[0] === 0x1f && data[1] === 0x8b && data[2] === 0x08) {
+        readstream.pipe(gunzip).pipe(extracter);
+      } else {
+        readstream.pipe(extracter);
+      }
+      // re-emit
+      readstream.removeListener('data', ondata);
+      readstream.emit('data', data);
+    });
 
     extracter.on('end', handleCallback);
     readstream.on('error', handleCallback);
@@ -432,11 +429,15 @@ exports.getPkgFromPaths = async (name, paths) => {
 };
 
 exports.getTarballStream = async (url, options) => {
-  const result = await get(url, {
-    timeout: options.streamingTimeout || options.timeout,
-    followRedirect: true,
-    streaming: true,
-  }, options);
+  const result = await get(
+    url,
+    {
+      timeout: options.streamingTimeout || options.timeout,
+      followRedirect: true,
+      streaming: true,
+    },
+    options
+  );
 
   if (result.status !== 200) {
     destroy(result.res);
@@ -446,7 +447,7 @@ exports.getTarballStream = async (url, options) => {
 };
 
 async function getRemotePackage(name, registry, globalOptions) {
-  const registries = [ registry ].concat([
+  const registries = [registry].concat([
     'https://registry.npmmirror.com',
     'https://r.cnpmjs.org',
     'https://registry.npmjs.com',
@@ -456,12 +457,16 @@ async function getRemotePackage(name, registry, globalOptions) {
   for (const registry of registries) {
     const binaryMirrorUrl = exports.formatPackageUrl(registry, name + '/latest');
     try {
-      const res = await get(binaryMirrorUrl, {
-        dataType: 'json',
-        followRedirect: true,
-        // don't retry
-        retry: 0,
-      }, globalOptions);
+      const res = await get(
+        binaryMirrorUrl,
+        {
+          dataType: 'json',
+          followRedirect: true,
+          // don't retry
+          retry: 0,
+        },
+        globalOptions
+      );
       pkg = res.data;
       break;
     } catch (err) {
@@ -529,12 +534,7 @@ exports.formatPath = pathname => {
 
 exports.fork = (moduleFile, args, options) => {
   options = options || {};
-  options.stdio = options.stdio || [
-    process.stdin,
-    process.stdout,
-    process.stderr,
-    'ipc',
-  ];
+  options.stdio = options.stdio || [process.stdin, process.stdout, process.stderr, 'ipc'];
   return new Promise((resolve, reject) => {
     const child = cp.fork(moduleFile, args, options);
     child.on('exit', code => {
@@ -575,7 +575,7 @@ exports.endsWithX = version => typeof version === 'string' && !!version.match(/^
 exports.getDisplayName = (pkg, ancestors) => {
   return ancestors
     .map(ancestor => ancestor.displayName || ancestor)
-    .concat([ `${pkg.name}@${pkg.version}` ])
+    .concat([`${pkg.name}@${pkg.version}`])
     .join(' › ');
 };
 

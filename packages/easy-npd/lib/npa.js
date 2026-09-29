@@ -3,7 +3,6 @@
 const orginalNpa = require('npm-package-arg');
 const util = require('util');
 
-
 module.exports = function npa(arg, { where, nested } = {}) {
   try {
     return orginalNpa(arg, where);

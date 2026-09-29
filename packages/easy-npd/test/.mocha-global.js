@@ -9,6 +9,8 @@ const fixtures = path.join(__dirname, 'fixtures');
 exports.mochaGlobalTeardown = async () => {
   const names = await fs.readdir(fixtures);
   await Promise.all(
-    names.filter(name => name.startsWith('.tmp_')).map(name => fs.rm(path.join(fixtures, name), { recursive: true, force: true }))
+    names
+      .filter(name => name.startsWith('.tmp_'))
+      .map(name => fs.rm(path.join(fixtures, name), { recursive: true, force: true }))
   );
 };

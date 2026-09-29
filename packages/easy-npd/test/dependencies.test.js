@@ -92,9 +92,7 @@ describe('test/dependencies.test.js', () => {
       { name: 'egg', version: '4', optional: false },
     ]);
     assert.deepEqual(parsed.allMap, { koa: '1', connect: '3', egg: '4' });
-    assert.deepEqual(parsed.prod, [
-      { name: 'koa', version: '1', optional: false },
-    ]);
+    assert.deepEqual(parsed.prod, [{ name: 'koa', version: '1', optional: false }]);
     assert.deepEqual(parsed.prodMap, { koa: '1' });
   });
 
@@ -201,10 +199,13 @@ describe('test/dependencies.test.js', () => {
       dependencies(pkg, {}, nested);
       throw new Error('should not excute');
     } catch (err) {
-      assert(err.message === `duplicate dependencies error, put isomorphic dependency into isomorphicDependencies:
+      assert(
+        err.message ===
+          `duplicate dependencies error, put isomorphic dependency into isomorphicDependencies:
 koa defined multiple times in dependencies,clientDependencies
 express defined multiple times in dependencies,isomorphicDependencies
-vue defined multiple times in clientDependencies,isomorphicDependencies`);
+vue defined multiple times in clientDependencies,isomorphicDependencies`
+      );
     }
   });
 });

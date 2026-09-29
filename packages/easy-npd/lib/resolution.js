@@ -12,7 +12,7 @@ const WRONG_PATTERNS = /\/$|\/{2,}|\*+$/;
 
 // createResolution
 module.exports = (pkg, options) => {
-  const resolutions = pkg && pkg.resolutions || {};
+  const resolutions = (pkg && pkg.resolutions) || {};
   const resolutionMap = new Map();
 
   // parse resolutions, generate resolutionMap:
@@ -54,7 +54,7 @@ module.exports = (pkg, options) => {
     const version = resolutions[path];
 
     if (!resolutionMap.has(endpoint)) resolutionMap.set(endpoint, []);
-    resolutionMap.get(endpoint).push([ packages.join('/'), version ]);
+    resolutionMap.get(endpoint).push([packages.join('/'), version]);
   }
 
   return (pkg, ancestors, nested) => {
@@ -77,13 +77,10 @@ module.exports = (pkg, options) => {
           chalk.magenta(`${path}/${pkg.name}@${version}`),
         ]);
         // alias(npm:lodash@^1) support
-        const [ aliasPackageName, realPackageName ] = parsePackageName(`${pkg.name}@${version}`, nested);
+        const [aliasPackageName, realPackageName] = parsePackageName(`${pkg.name}@${version}`, nested);
 
         if (aliasPackageName) {
-          const {
-            name,
-            fetchSpec,
-          } = npa(realPackageName, { nested });
+          const { name, fetchSpec } = npa(realPackageName, { nested });
 
           return Object.assign({}, pkg, {
             alias: aliasPackageName,

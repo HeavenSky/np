@@ -20,8 +20,8 @@ describe('test/ignoreScripts.test.js', () => {
     });
 
     const dirs = await fs.readdir(path.join(root, 'node_modules'));
-    assert.deepEqual(dirs.sort(), [ '_pkg@1.0.0@pkg', '.package_versions.json', '.tmp', 'pkg' ].sort());
+    assert.deepEqual(dirs.sort(), ['_pkg@1.0.0@pkg', '.package_versions.json', '.tmp', 'pkg'].sort());
     const files = await fs.readdir(path.join(root, 'node_modules/pkg'));
-    assert.deepEqual(files, [ 'index.js', 'package.json' ]);
+    assert.deepEqual(files, ['index.js', 'package.json']);
   });
 });

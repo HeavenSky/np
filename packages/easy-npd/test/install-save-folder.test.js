@@ -8,16 +8,17 @@ const helper = require('./helper');
 const { exists } = require('../lib/utils');
 
 describe('test/install-save-folder.test.js', () => {
-  const [ root, cleanup ] = helper.tmp();
+  const [root, cleanup] = helper.tmp();
   const demo = helper.fixtures('demo-install-save-folder');
 
   beforeEach(cleanup);
   afterEach(cleanup);
 
   it('should --save install work', async () => {
-    await coffee.fork(helper.npminstall, [ '--save', demo ], {
-      cwd: root,
-    })
+    await coffee
+      .fork(helper.npminstall, ['--save', demo], {
+        cwd: root,
+      })
       // .debug()
       .end();
 
@@ -27,9 +28,10 @@ describe('test/install-save-folder.test.js', () => {
   });
 
   it('should --save-dev install work', async () => {
-    await coffee.fork(helper.npminstall, [ '--save-dev', demo ], {
-      cwd: root,
-    })
+    await coffee
+      .fork(helper.npminstall, ['--save-dev', demo], {
+        cwd: root,
+      })
       // .debug()
       .end();
 
@@ -39,9 +41,10 @@ describe('test/install-save-folder.test.js', () => {
   });
 
   it('should --save-client install work', async () => {
-    await coffee.fork(helper.npminstall, [ '--save-client', demo ], {
-      cwd: root,
-    })
+    await coffee
+      .fork(helper.npminstall, ['--save-client', demo], {
+        cwd: root,
+      })
       // .debug()
       .end();
 
@@ -51,9 +54,10 @@ describe('test/install-save-folder.test.js', () => {
   });
 
   it('should --save-build install work', async () => {
-    await coffee.fork(helper.npminstall, [ '--save-build', demo ], {
-      cwd: root,
-    })
+    await coffee
+      .fork(helper.npminstall, ['--save-build', demo], {
+        cwd: root,
+      })
       // .debug()
       .end();
 
@@ -63,9 +67,10 @@ describe('test/install-save-folder.test.js', () => {
   });
 
   it('should --save-isomorphic install work', async () => {
-    await coffee.fork(helper.npminstall, [ '--save-isomorphic', demo ], {
-      cwd: root,
-    })
+    await coffee
+      .fork(helper.npminstall, ['--save-isomorphic', demo], {
+        cwd: root,
+      })
       // .debug()
       .end();
 

@@ -25,9 +25,10 @@ describe('test/link-to-global.test.js', () => {
   afterEach(cleanup);
 
   it('should link without bin', async () => {
-    await coffee.fork(npmlink, [ `--prefix=${prefix}` ], {
-      cwd: path.join(root, 'linked-package'),
-    })
+    await coffee
+      .fork(npmlink, [`--prefix=${prefix}`], {
+        cwd: path.join(root, 'linked-package'),
+      })
       .debug()
       .end();
 
@@ -35,9 +36,10 @@ describe('test/link-to-global.test.js', () => {
   });
 
   it('should link with bin', async () => {
-    await coffee.fork(npmlink, [ `--prefix=${prefix}` ], {
-      cwd: path.join(root, 'linked-package-2'),
-    })
+    await coffee
+      .fork(npmlink, [`--prefix=${prefix}`], {
+        cwd: path.join(root, 'linked-package-2'),
+      })
       .debug()
       .end();
 

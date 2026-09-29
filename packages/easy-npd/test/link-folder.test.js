@@ -21,20 +21,22 @@ describe('test/link-folder.test.js', () => {
   afterEach(cleanup);
 
   it('should link one folder work', async () => {
-    await coffee.fork(npmlink, [ './linked-package' ], {
-      cwd: root,
-    })
+    await coffee
+      .fork(npmlink, ['./linked-package'], {
+        cwd: root,
+      })
       .debug()
-      .expect('stderr', /npm_rootpath:.+link\-folder!!!!!/)
+      .expect('stderr', /npm_rootpath:.+link-folder!!!!!/)
       .end();
 
     assert(await exists(path.join(root, 'node_modules/linked-package')));
   });
 
   it('should link two folder work', async () => {
-    await coffee.fork(npmlink, [ './linked-package', './linked-package-2', '-d' ], {
-      cwd: root,
-    })
+    await coffee
+      .fork(npmlink, ['./linked-package', './linked-package-2', '-d'], {
+        cwd: root,
+      })
       .debug()
       .end();
 

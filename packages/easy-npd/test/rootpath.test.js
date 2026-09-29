@@ -11,7 +11,8 @@ describe('test/rootpath.test.js', () => {
   afterEach(cleanup);
 
   it('should run preinstall and postinstall', () => {
-    return coffee.fork(helper.npminstall, [ '-d' ], { cwd })
+    return coffee
+      .fork(helper.npminstall, ['-d'], { cwd })
       .debug()
       .expect('code', 0)
       .expect('stdout', /hello process\.env\.npm_rootpath is true/)

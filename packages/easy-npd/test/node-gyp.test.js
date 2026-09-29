@@ -10,7 +10,7 @@ const { exists } = require('../lib/utils');
 
 if (process.platform !== 'win32' && semver.satisfies(process.version, '< 12.0.0')) {
   describe('test/node-gyp.test.js', () => {
-    const [ tmp, cleanup ] = helper.tmp();
+    const [tmp, cleanup] = helper.tmp();
 
     beforeEach(cleanup);
     afterEach(cleanup);
@@ -22,9 +22,7 @@ if (process.platform !== 'win32' && semver.satisfies(process.version, '< 12.0.0'
       try {
         await npminstall({
           root: tmp,
-          pkgs: [
-            { name: 'node-icu-charset-detector', version: '0.2.0' },
-          ],
+          pkgs: [{ name: 'node-icu-charset-detector', version: '0.2.0' }],
         });
       } catch (err) {
         // ignore

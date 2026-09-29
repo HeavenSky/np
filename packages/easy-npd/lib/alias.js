@@ -4,12 +4,7 @@ const npa = require('./npa');
 
 exports.parsePackageName = (pkgName, nested) => {
   const p = npa(pkgName, { nested });
-  const {
-    name,
-    type,
-    raw,
-    subSpec,
-  } = p;
+  const { name, type, raw, subSpec } = p;
 
   const isAlias = type === 'alias';
 
@@ -17,7 +12,7 @@ exports.parsePackageName = (pkgName, nested) => {
   // normal package name `aliasPackageName` should be undefined
   const aliasPackageName = isAlias ? name : undefined;
 
-  return [ aliasPackageName, realPackageName ];
+  return [aliasPackageName, realPackageName];
 };
 
 exports.getAliasPackageName = (aliasPackageName, name, version) => {

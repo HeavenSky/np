@@ -2,18 +2,40 @@
   "name": "easy-npd",
   "version": "0.0.0",
   "description": "Fast npm installer forked from npminstall 6.8.0, with flat _name@version@name layout, latest-version hoisting and node 16 support",
-  "main": "lib/index.js",
+  "keywords": [
+    "dedup",
+    "hoist",
+    "installer",
+    "npm",
+    "npm install",
+    "npminstall"
+  ],
+  "homepage": "https://github.com/HeavenSky/np/tree/main/packages/easy-npd#readme",
+  "bugs": {
+    "url": "https://github.com/HeavenSky/np/issues"
+  },
+  "license": "MIT",
+  "author": "HeavenSky",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HeavenSky/np.git",
+    "directory": "packages/easy-npd"
+  },
+  "bin": {
+    "npd": "bin/install.js",
+    "npd-link": "bin/link.js",
+    "npd-uninstall": "bin/uninstall.js",
+    "npd-update": "bin/update.js"
+  },
   "files": [
     "lib",
     "bin",
     "node-gyp-bin",
     "CHANGELOG.md"
   ],
-  "bin": {
-    "npd": "bin/install.js",
-    "npd-link": "bin/link.js",
-    "npd-uninstall": "bin/uninstall.js",
-    "npd-update": "bin/update.js"
+  "main": "lib/index.js",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "test": "npm run lint && mocha 'test/*.test.js'",
@@ -64,29 +86,7 @@
     "oxfmt": "^0.70.0",
     "oxlint": "^1.85.0"
   },
-  "homepage": "https://github.com/HeavenSky/np/tree/main/packages/easy-npd#readme",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/HeavenSky/np.git",
-    "directory": "packages/easy-npd"
-  },
-  "bugs": {
-    "url": "https://github.com/HeavenSky/np/issues"
-  },
-  "publishConfig": {
-    "registry": "https://registry.npmjs.org/"
-  },
-  "keywords": [
-    "dedup",
-    "hoist",
-    "installer",
-    "npm",
-    "npm install",
-    "npminstall"
-  ],
   "engines": {
     "node": ">=16.14.0"
-  },
-  "author": "HeavenSky",
-  "license": "MIT"
+  }
 }

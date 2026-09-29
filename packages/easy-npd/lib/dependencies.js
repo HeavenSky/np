@@ -1,9 +1,7 @@
 'use strict';
 
 const npa = require('./npa');
-const {
-  parsePackageName,
-} = require('./alias');
+const { parsePackageName } = require('./alias');
 
 module.exports = function dependencies(pkg, options, nested) {
   const all = {};
@@ -90,18 +88,12 @@ function mergeOptional(deps, optional, nested) {
     };
 
     const raw = `${name}@${version}`;
-    nested.update([ raw ]);
+    nested.update([raw]);
 
-    const [
-      aliasPackageName,
-      realPackageName,
-    ] = parsePackageName(raw, nested);
+    const [aliasPackageName, realPackageName] = parsePackageName(raw, nested);
 
     if (aliasPackageName) {
-      const {
-        name,
-        fetchSpec,
-      } = npa(realPackageName, { nested });
+      const { name, fetchSpec } = npa(realPackageName, { nested });
       pkg.alias = aliasPackageName;
       pkg.name = name;
       pkg.version = fetchSpec;

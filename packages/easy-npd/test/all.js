@@ -44,12 +44,8 @@ const names = [
 ];
 
 const semvers = {
-  '>= 6': [
-    'egg',
-  ],
-  '<= 8': [
-    'strongloop',
-  ],
+  '>= 6': ['egg'],
+  '<= 8': ['strongloop'],
 };
 
 for (const version in semvers) {
@@ -72,7 +68,7 @@ for (const version in semvers) {
     detail: true,
   });
 
-  const installer = spawn('sh', [ path.join(__dirname, 'git-clone-install.sh') ], {
+  const installer = spawn('sh', [path.join(__dirname, 'git-clone-install.sh')], {
     stdio: 'inherit',
   });
   installer.on('exit', code => process.exit(code));

@@ -6,7 +6,7 @@ const npminstall = require('./npminstall');
 const helper = require('./helper');
 
 describe('test/linkRoot.test.js', () => {
-  const [ root, cleanup ] = helper.tmp();
+  const [root, cleanup] = helper.tmp();
 
   beforeEach(cleanup);
   afterEach(cleanup);

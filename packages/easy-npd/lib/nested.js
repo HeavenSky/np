@@ -1,6 +1,5 @@
 'use strict';
 
-
 class Nested {
   constructor(pkgs, parent) {
     this.depMap = new Map();
@@ -14,7 +13,7 @@ class Nested {
   }
 
   showPath(raw) {
-    const raws = [ raw ];
+    const raws = [raw];
     let currentRaw = raw;
 
     while (this.depMap.has(currentRaw)) {

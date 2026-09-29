@@ -25,13 +25,16 @@ describe('test/resolutions.test.js', () => {
     afterEach(cleanup);
 
     it('should install error', () => {
-      return coffee.fork(helper.npminstall, {
-        cwd: root,
-      })
-        // .debug()
-        .expect('code', 1)
-        .expect('stderr', /resolution package foo\/\*\* format error/)
-        .end();
+      return (
+        coffee
+          .fork(helper.npminstall, {
+            cwd: root,
+          })
+          // .debug()
+          .expect('code', 1)
+          .expect('stderr', /resolution package foo\/\*\* format error/)
+          .end()
+      );
     });
   });
 
@@ -43,13 +46,16 @@ describe('test/resolutions.test.js', () => {
     afterEach(cleanup);
 
     it('should install error', () => {
-      return coffee.fork(helper.npminstall, {
-        cwd: root,
-      })
-        // .debug()
-        .expect('code', 1)
-        .expect('stderr', /resolution package foo\/bar-\* format error/)
-        .end();
+      return (
+        coffee
+          .fork(helper.npminstall, {
+            cwd: root,
+          })
+          // .debug()
+          .expect('code', 1)
+          .expect('stderr', /resolution package foo\/bar-\* format error/)
+          .end()
+      );
     });
   });
 
@@ -61,9 +67,10 @@ describe('test/resolutions.test.js', () => {
     afterEach(cleanup);
 
     it('should work', async () => {
-      await coffee.fork(helper.npminstall, {
-        cwd: root,
-      })
+      await coffee
+        .fork(helper.npminstall, {
+          cwd: root,
+        })
         // .debug()
         .expect('code', 0)
         .end();
@@ -85,9 +92,10 @@ describe('test/resolutions.test.js', () => {
     afterEach(cleanup);
 
     it('should work', async () => {
-      await coffee.fork(helper.npminstall, {
-        cwd: root,
-      })
+      await coffee
+        .fork(helper.npminstall, {
+          cwd: root,
+        })
         .debug()
         .expect('code', 0)
         .end();

@@ -64,12 +64,14 @@ module.exports = function formatInstallOptions(options) {
   }
   options.timeout = options.timeout || 60000;
   options.streamingTimeout = options.streamingTimeout || 120000;
-  const customConsole = options.detail ? console : {
-    info: debug,
-    log: debug,
-    error: console.error,
-    warn: console.warn,
-  };
+  const customConsole = options.detail
+    ? console
+    : {
+        info: debug,
+        log: debug,
+        error: console.error,
+        warn: console.warn,
+      };
   options.console = options.console || customConsole;
   options.env = options.env || {};
   options.start = Date.now();

@@ -6,7 +6,7 @@ const helper = require('./helper');
 
 if (semver.satisfies(process.version, '< 12.0.0')) {
   describe('test/node-pre-gyp.test.js', () => {
-    const [ tmp, cleanup ] = helper.tmp();
+    const [tmp, cleanup] = helper.tmp();
 
     beforeEach(cleanup);
     afterEach(cleanup);
@@ -14,9 +14,7 @@ if (semver.satisfies(process.version, '< 12.0.0')) {
     it('should download from http mirror work fine', async () => {
       await npminstall({
         root: tmp,
-        pkgs: [
-          { name: 'sqlite3', version: '4' },
-        ],
+        pkgs: [{ name: 'sqlite3', version: '4' }],
         production: true,
         cacheDir: '',
         customBinaryMirrors: {

@@ -27,9 +27,7 @@ describe('test/bin.test.js', () => {
   it('should create bin folders for scoped pkg', async () => {
     await npminstall({
       root,
-      pkgs: [
-        { name: '@bigfunger/decompress-zip' },
-      ],
+      pkgs: [{ name: '@bigfunger/decompress-zip' }],
     });
     const pkg = await readJSON(path.join(root, 'node_modules', '@bigfunger/decompress-zip', 'package.json'));
     assert(pkg.name === '@bigfunger/decompress-zip');
@@ -52,47 +50,36 @@ describe('test/bin.test.js', () => {
     if (process.platform !== 'win32') {
       assert.equal(
         fs.readFileSync(path.join(root, 'node_modules/.bin/crlf'), 'utf-8'),
-        '#!/usr/bin/env node\nconsole.log(\'crlf\');\r\n'
+        "#!/usr/bin/env node\nconsole.log('crlf');\r\n"
       );
       assert.equal(
         fs.readFileSync(path.join(root, 'node_modules/.bin/lf'), 'utf-8'),
-        '#!/usr/bin/env node\nconsole.log(\'lf\');\n'
+        "#!/usr/bin/env node\nconsole.log('lf');\n"
       );
       // make sense for `jscodeshift`
       assert(
-        fs.readFileSync(path.join(root, 'node_modules/.bin/jscodeshift'), 'utf-8').startsWith(
-          '#!/usr/bin/env node\n'
-        )
+        fs.readFileSync(path.join(root, 'node_modules/.bin/jscodeshift'), 'utf-8').startsWith('#!/usr/bin/env node\n')
       );
 
-      assert.equal(
-        fs.statSync(path.join(root, 'node_modules/.bin/crlf')).mode.toString(8),
-        '100755'
-      );
-      assert.equal(
-        fs.statSync(path.join(root, 'node_modules/.bin/lf')).mode.toString(8),
-        '100755'
-      );
-      assert.equal(
-        fs.statSync(path.join(root, 'node_modules/.bin/jscodeshift')).mode.toString(8),
-        '100755'
-      );
+      assert.equal(fs.statSync(path.join(root, 'node_modules/.bin/crlf')).mode.toString(8), '100755');
+      assert.equal(fs.statSync(path.join(root, 'node_modules/.bin/lf')).mode.toString(8), '100755');
+      assert.equal(fs.statSync(path.join(root, 'node_modules/.bin/jscodeshift')).mode.toString(8), '100755');
     } else {
       assert(
-        fs.readFileSync(path.join(root, 'node_modules/windows-shebang/bin/crlf.js'), 'utf-8').startsWith(
-          '#!/usr/bin/env node\n'
-        )
+        fs
+          .readFileSync(path.join(root, 'node_modules/windows-shebang/bin/crlf.js'), 'utf-8')
+          .startsWith('#!/usr/bin/env node\n')
       );
       assert(
-        fs.readFileSync(path.join(root, 'node_modules/windows-shebang/bin/lf.js'), 'utf-8').startsWith(
-          '#!/usr/bin/env node\n'
-        )
+        fs
+          .readFileSync(path.join(root, 'node_modules/windows-shebang/bin/lf.js'), 'utf-8')
+          .startsWith('#!/usr/bin/env node\n')
       );
       // make sense for `jscodeshift`
       assert(
-        fs.readFileSync(path.join(root, 'node_modules/jscodeshift/bin/jscodeshift.js'), 'utf-8').startsWith(
-          '#!/usr/bin/env node\n'
-        )
+        fs
+          .readFileSync(path.join(root, 'node_modules/jscodeshift/bin/jscodeshift.js'), 'utf-8')
+          .startsWith('#!/usr/bin/env node\n')
       );
     }
   });

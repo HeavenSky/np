@@ -19,9 +19,10 @@ describe('test/install-save-bin-name.test.js', () => {
   afterEach(cleanup);
 
   it('should install work', async () => {
-    await coffee.fork(helper.npminstall, [ 'webpack-parallel-uglify-plugin@1.0.0' ], {
-      cwd: root,
-    })
+    await coffee
+      .fork(helper.npminstall, ['webpack-parallel-uglify-plugin@1.0.0'], {
+        cwd: root,
+      })
       .debug()
       .expect('code', 0)
       .end();

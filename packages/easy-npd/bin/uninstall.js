@@ -14,19 +14,8 @@ const utils = require('../lib/utils');
 const uninstall = require('../lib/uninstall');
 
 const argv = parseArgs(process.argv.slice(2), {
-  string: [
-    'root',
-    'prefix',
-  ],
-  boolean: [
-    'version',
-    'help',
-    'global',
-    'save',
-    'save-dev',
-    'save-optional',
-    'ignore-scripts',
-  ],
+  string: ['root', 'prefix'],
+  boolean: ['version', 'help', 'global', 'save', 'save-dev', 'save-optional', 'ignore-scripts'],
   alias: {
     v: 'version',
     h: 'help',
@@ -122,8 +111,7 @@ Options:
   -S, --save, -D, --save-dev, -O, --save-optional: also remove the packages from dependencies, devDependencies or optionalDependencies in package.json
   -v, --version: show version
   -h, --help: show help
-`
-  );
+`);
   process.exit(0);
 }
 

@@ -9,7 +9,7 @@ const { exists } = require('../lib/utils');
 
 describe('test/installGlobal.test.js', () => {
   const registry = process.env.npm_registry || 'https://r.cnpmjs.org';
-  const [ tmp, cleanup ] = helper.tmp();
+  const [tmp, cleanup] = helper.tmp();
 
   let binDir = path.join(tmp, 'bin');
   let libDir = path.join(tmp, 'lib');
@@ -21,14 +21,15 @@ describe('test/installGlobal.test.js', () => {
   beforeEach(cleanup);
   afterEach(cleanup);
   it('should global install work', async () => {
-    await coffee.fork(helper.npminstall, [
-      `--prefix=${tmp}`,
-      '-g',
-      'contributors',
-      `${registry}/pedding/-/pedding-1.0.0.tgz`,
-      `${registry}/taffydb/-/taffydb-2.7.2.tgz`,
-      `${registry}/egg-bin/-/egg-bin-1.6.0.tgz`,
-    ])
+    await coffee
+      .fork(helper.npminstall, [
+        `--prefix=${tmp}`,
+        '-g',
+        'contributors',
+        `${registry}/pedding/-/pedding-1.0.0.tgz`,
+        `${registry}/taffydb/-/taffydb-2.7.2.tgz`,
+        `${registry}/egg-bin/-/egg-bin-1.6.0.tgz`,
+      ])
       .debug()
       .expect('stdout', /All packages installed/)
       .expect('code', 0)
@@ -42,13 +43,14 @@ describe('test/installGlobal.test.js', () => {
     assert(await exists(path.join(libDir, 'node_modules/egg-bin')));
     assert(!(await exists(path.join(libDir, 'node_modules/.contributors_npd/node_modules'))));
 
-    await coffee.fork(require.resolve('../bin/install.js'), [
-      `--prefix=${tmp}`,
-      '-g',
-      'contributors',
-      'b',
-      `${registry}/egg-bin/-/egg-bin-1.7.0.tgz`,
-    ])
+    await coffee
+      .fork(require.resolve('../bin/install.js'), [
+        `--prefix=${tmp}`,
+        '-g',
+        'contributors',
+        'b',
+        `${registry}/egg-bin/-/egg-bin-1.7.0.tgz`,
+      ])
       .debug()
       .expect('stdout', /All packages installed/)
       .expect('code', 0)
@@ -61,11 +63,8 @@ describe('test/installGlobal.test.js', () => {
     assert(await exists(path.join(libDir, 'node_modules/b')));
     assert(await exists(path.join(libDir, 'node_modules/egg-bin')));
 
-    await coffee.fork(require.resolve('../bin/install.js'), [
-      `--prefix=${tmp}`,
-      '-g',
-      'contributors@0',
-    ])
+    await coffee
+      .fork(require.resolve('../bin/install.js'), [`--prefix=${tmp}`, '-g', 'contributors@0'])
       .debug()
       .expect('stdout', /All packages installed/)
       .expect('code', 0)
@@ -76,11 +75,8 @@ describe('test/installGlobal.test.js', () => {
   });
 
   it('should install success with alias package', async () => {
-    await coffee.fork(helper.npminstall, [
-      `--prefix=${tmp}`,
-      '-g',
-      'lodash-has@npm:lodash.has@4',
-    ])
+    await coffee
+      .fork(helper.npminstall, [`--prefix=${tmp}`, '-g', 'lodash-has@npm:lodash.has@4'])
       .debug()
       .expect('stdout', /Downloading lodash-has\(lodash.has\) to /)
       .expect('stdout', /Installing lodash.has's dependencies to /)

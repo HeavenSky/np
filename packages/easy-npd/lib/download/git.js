@@ -8,14 +8,12 @@ const Arborist = require('@npmcli/arborist');
 const utils = require('../utils');
 
 module.exports = async (pkg, options) => {
-  const {
-    name,
-    raw,
-    displayName,
-  } = pkg;
+  const { name, raw, displayName } = pkg;
 
   options.gitPackages++;
-  options.console.warn(chalk.yellow(`[${displayName}] install ${name || ''} from git ${raw}, may be very slow, please keep patience`));
+  options.console.warn(
+    chalk.yellow(`[${displayName}] install ${name || ''} from git ${raw}, may be very slow, please keep patience`)
+  );
   // 外层 npm/npx 会把 allow-scripts 导出为该环境变量, pacote 为 git 依赖执行 npm install 时继承它会被 npm 12 以 EALLOWSCRIPTS 拒绝;
   // 删除后子进程 npm 改从 .npmrc 读取同一配置
   delete process.env.npm_config_allow_scripts;
@@ -32,7 +30,9 @@ module.exports = async (pkg, options) => {
     });
     const res = await utils.copyInstall(cloneDir, options);
     if (name && name !== res.package.name) {
-      options.console.warn(chalk.yellow(`[${displayName}] Package name unmatched: expected ${name} but found ${res.package.name}`));
+      options.console.warn(
+        chalk.yellow(`[${displayName}] Package name unmatched: expected ${name} but found ${res.package.name}`)
+      );
       res.package.name = name;
     }
     // record package name
@@ -40,9 +40,7 @@ module.exports = async (pkg, options) => {
     return res;
   } catch (err) {
     // pacote 的 spawn 错误只在 stderr 里带真实原因(例如子进程 npm 的错误码), 附上末尾便于定位
-    const stderr = err.stderr ? `\n${String(err.stderr).trim().split('\n')
-      .slice(-5)
-      .join('\n')}` : '';
+    const stderr = err.stderr ? `\n${String(err.stderr).trim().split('\n').slice(-5).join('\n')}` : '';
     throw new Error(`[${displayName}] ${err.message}${stderr}`, { cause: err });
   } finally {
     // clean up

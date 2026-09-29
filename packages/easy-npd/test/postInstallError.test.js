@@ -8,7 +8,7 @@ const npminstall = require('./npminstall');
 const { rimraf } = require('../lib/utils');
 
 describe('test/postInstallError.test.js', () => {
-  const [ root, cleanup ] = helper.tmp();
+  const [root, cleanup] = helper.tmp();
 
   beforeEach(cleanup);
   afterEach(cleanup);
@@ -18,9 +18,7 @@ describe('test/postInstallError.test.js', () => {
     try {
       await npminstall({
         root,
-        pkgs: [
-          { name: 'install-error', version: '1.0.0' },
-        ],
+        pkgs: [{ name: 'install-error', version: '1.0.0' }],
       });
     } catch (err) {
       assert(err.message.indexOf('post install error, please remove node_modules before retry!') >= 0);
@@ -33,7 +31,8 @@ describe('test/postInstallError.test.js', () => {
     const cwd = helper.fixtures('optional-dep-postinstall');
     await rimraf(path.join(cwd, 'node_modules'));
 
-    await coffee.fork(helper.npminstall, [ '--production' ], { cwd })
+    await coffee
+      .fork(helper.npminstall, ['--production'], { cwd })
       .debug()
       .expect('code', 0)
       .expect('stderr', /httpsync@\* optional error: .*Error: Run ".*?build\.sh" error/)

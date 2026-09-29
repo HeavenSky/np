@@ -6,16 +6,15 @@ const chalk = require('chalk');
 const utils = require('../utils');
 
 module.exports = async (pkg, options) => {
-  const {
-    name,
-    raw,
-    fetchSpec,
-    displayName,
-  } = pkg;
+  const { name, raw, fetchSpec, displayName } = pkg;
 
   options.remotePackages++;
   const remoteUrl = fetchSpec;
-  options.console.warn(chalk.yellow(`[${displayName}] install ${name || ''} from remote ${remoteUrl}, may be very slow, please keep patience`));
+  options.console.warn(
+    chalk.yellow(
+      `[${displayName}] install ${name || ''} from remote ${remoteUrl}, may be very slow, please keep patience`
+    )
+  );
   const readstream = await utils.getTarballStream(remoteUrl, options);
   const ungzipDir = path.join(options.storeDir, '.tmp', randomUUID());
   await utils.mkdirp(ungzipDir);

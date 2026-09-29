@@ -10,7 +10,7 @@ describe('test/install-cache-strict.test.js', () => {
   // Fixme: mock Windows homedir
   if (process.platform === 'win32') return;
 
-  const [ homedir, cleanupTmp ] = helper.tmp();
+  const [homedir, cleanupTmp] = helper.tmp();
   const demo = helper.fixtures('demo-install-cache-strict');
   // 外部 shell 设置的缓存变量会覆盖 HOME 推导出的默认缓存目录, 使断言落空
   const baseEnv = Object.assign({}, process.env);
@@ -27,51 +27,55 @@ describe('test/install-cache-strict.test.js', () => {
   afterEach(cleanup);
 
   it('should read disk cache on --cache-strict --production', async () => {
-    await coffee.fork(helper.npminstall, [ '--cache-strict', '--production' ], {
-      cwd: demo,
-      env: Object.assign({}, baseEnv, {
-        HOME: homedir,
-      }),
-    })
+    await coffee
+      .fork(helper.npminstall, ['--cache-strict', '--production'], {
+        cwd: demo,
+        env: Object.assign({}, baseEnv, {
+          HOME: homedir,
+        }),
+      })
       .debug()
       .end();
     assert(await fs.stat(path.join(homedir, '.npd_tarball/np-tgz/debug')));
   });
 
   it('should read disk cache from npm_config_cache env', async () => {
-    await coffee.fork(helper.npminstall, [], {
-      cwd: demo,
-      env: Object.assign({}, baseEnv, {
-        HOME: homedir,
-        npm_config_cache: path.join(homedir, 'foocache/.npd_tarball'),
-      }),
-    })
+    await coffee
+      .fork(helper.npminstall, [], {
+        cwd: demo,
+        env: Object.assign({}, baseEnv, {
+          HOME: homedir,
+          npm_config_cache: path.join(homedir, 'foocache/.npd_tarball'),
+        }),
+      })
       .debug()
       .end();
     assert(await fs.stat(path.join(homedir, 'foocache/.npd_tarball/np-tgz/debug')));
   });
 
   it('should read disk cache on --cache-strict NODE_ENV=production', async () => {
-    await coffee.fork(helper.npminstall, [ '--cache-strict' ], {
-      cwd: demo,
-      env: Object.assign({}, baseEnv, {
-        HOME: homedir,
-        NODE_ENV: 'production',
-      }),
-    })
+    await coffee
+      .fork(helper.npminstall, ['--cache-strict'], {
+        cwd: demo,
+        env: Object.assign({}, baseEnv, {
+          HOME: homedir,
+          NODE_ENV: 'production',
+        }),
+      })
       .debug()
       .end();
     assert(await fs.stat(path.join(homedir, '.npd_tarball/np-tgz/debug')));
   });
 
   it('should read disk cache from npd_cache env', async () => {
-    await coffee.fork(helper.npminstall, [], {
-      cwd: demo,
-      env: Object.assign({}, baseEnv, {
-        HOME: homedir,
-        npd_cache: path.join(homedir, 'foocache/.npd_tarball'),
-      }),
-    })
+    await coffee
+      .fork(helper.npminstall, [], {
+        cwd: demo,
+        env: Object.assign({}, baseEnv, {
+          HOME: homedir,
+          npd_cache: path.join(homedir, 'foocache/.npd_tarball'),
+        }),
+      })
       .debug()
       .end();
     assert(await fs.stat(path.join(homedir, 'foocache/.npd_tarball/np-tgz/debug')));

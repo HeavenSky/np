@@ -35,7 +35,7 @@ exports.tmp = name => {
     }
     await mkdirp(dir);
   };
-  return [ dir, cleanup ];
+  return [dir, cleanup];
 };
 
 exports.npminstall = path.join(__dirname, '..', 'bin', 'install.js');

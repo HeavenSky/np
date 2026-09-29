@@ -44,11 +44,14 @@ async function bin(parentDir, pkg, pkgDir, options) {
     // windows line-endings(CRLF) on the hashbang line
     await fixBin(srcBin, 0o755);
     if (showBinLog) {
-      options.console.info('[%s] link %s@ -> %s',
-        chalk.green(pkg.name + '@' + pkg.version), chalk.magenta(destBin), srcBin);
+      options.console.info(
+        '[%s] link %s@ -> %s',
+        chalk.green(pkg.name + '@' + pkg.version),
+        chalk.magenta(destBin),
+        srcBin
+      );
     } else {
-      debug('[%s@%s] link %s@ -> %s',
-        pkg.name, pkg.version, destBin, srcBin);
+      debug('[%s@%s] link %s@ -> %s', pkg.name, pkg.version, destBin, srcBin);
     }
   }
 }

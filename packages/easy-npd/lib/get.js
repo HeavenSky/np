@@ -24,11 +24,13 @@ async function get(url, options, globalOptions) {
   }
   // need auth
   const registryUrl = cnpmConfig.get('registry');
-  const registryUri = registryUrl && registryUrl.replace(urlParser.parse(registryUrl).protocol, '') || '';
-  const hasUserSettings = typeof cnpmConfig.get(registryUri + ':username') === 'string' && typeof cnpmConfig.get(registryUri + ':_password') === 'string';
+  const registryUri = (registryUrl && registryUrl.replace(urlParser.parse(registryUrl).protocol, '')) || '';
+  const hasUserSettings =
+    typeof cnpmConfig.get(registryUri + ':username') === 'string' &&
+    typeof cnpmConfig.get(registryUri + ':_password') === 'string';
   // 凭据只发给与 registry 同 host 的请求, always-auth 也不例外; 放宽会把凭据泄露给备用 registry, tarball CDN 与二进制镜像
   if (hasUserSettings && isSameHost(url, registryUrl)) {
-    const authToken = (`${cnpmConfig.get(registryUri + ':username')}:${Buffer.from(cnpmConfig.get(registryUri + ':_password'), 'base64').toString()}`);
+    const authToken = `${cnpmConfig.get(registryUri + ':username')}:${Buffer.from(cnpmConfig.get(registryUri + ':_password'), 'base64').toString()}`;
     options.headers.Authorization = `Basic ${Buffer.from(authToken).toString('base64')}`;
   }
   const retry = options.retry || options.retry === 0 ? options.retry : MAX_RETRY;
@@ -41,7 +43,7 @@ async function get(url, options, globalOptions) {
       try {
         destroy(result.res);
       } catch (err) {
-        const logger = globalOptions && globalOptions.console || console;
+        const logger = (globalOptions && globalOptions.console) || console;
         logger.warn('[npd:get] ignore destroy response stream error: %s', err);
       }
     }
@@ -75,9 +77,17 @@ async function _get(url, options, retry, globalOptions) {
     retry--;
     if (retry > 0) {
       const delay = 100 * (MAX_RETRY - retry);
-      const logger = globalOptions && globalOptions.console || console;
-      logger.warn('[npd:get] retry GET %s after %sms, retry left %s, %s: %s, status: %s, headers: %j',
-        url, delay, retry, err.name, err.message, err.status, err.headers);
+      const logger = (globalOptions && globalOptions.console) || console;
+      logger.warn(
+        '[npd:get] retry GET %s after %sms, retry left %s, %s: %s, status: %s, headers: %j',
+        url,
+        delay,
+        retry,
+        err.name,
+        err.message,
+        err.status,
+        err.headers
+      );
       await utils.sleep(delay);
       return await _get(url, options, retry, globalOptions);
     }
