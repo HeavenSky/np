@@ -103,6 +103,8 @@ describe('test/install-dedup-latest.test.js', () => {
     assert.equal(await version('ms'), '2.0.0');
     await install(['-w', 'b']);
     assert.equal(await version('ms'), '2.0.0');
-    assert.equal(await fs.readlink(path.join(tmp, 'node_modules/b')), '../packages/b');
+    // Windows 的 junction 读出来是绝对路径, 末尾可能带分隔符
+    const link = await fs.readlink(path.join(tmp, 'node_modules/b'));
+    assert.equal(path.resolve(tmp, 'node_modules', link).replace(/[\\/]$/, ''), path.join(tmp, 'packages/b'));
   });
 });

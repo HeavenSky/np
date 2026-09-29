@@ -155,7 +155,7 @@ describe('test/install-workspaces-edge.test.js', () => {
     });
     await run(helper.npminstall)
       .expect('code', 0)
-      .expect('stderr', /workspace package pkg-b@1\.0\.0 does not satisfy \^2\.0\.0 required by packages\/a/)
+      .expect('stderr', /workspace package pkg-b@1\.0\.0 does not satisfy \^2\.0\.0 required by packages[\\/]a/)
       .end();
   });
 
