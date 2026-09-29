@@ -10,15 +10,6 @@ describe('test/installGit.test.js', () => {
   beforeEach(cleanup);
   afterEach(cleanup);
 
-  it.skip('should install ikt@git+http://ikt.pm2.io/ikt.git#master', async () => {
-    await npminstall({
-      root: tmp,
-      pkgs: [{ name: 'ikt', version: 'git+http://ikt.pm2.io/ikt.git#master' }],
-    });
-    const pkg = await helper.readJSON(path.join(tmp, 'node_modules/ikt/package.json'));
-    assert.equal(pkg.name, 'ikt');
-  });
-
   it('should install github repo `node-modules/pedding` ok', async () => {
     await npminstall({
       root: tmp,
