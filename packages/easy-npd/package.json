@@ -23,6 +23,7 @@
   },
   "bin": {
     "npd": "bin/install.js",
+    "npd-fetch": "bin/fetch.js",
     "npd-link": "bin/link.js",
     "npd-uninstall": "bin/uninstall.js",
     "npd-update": "bin/update.js"

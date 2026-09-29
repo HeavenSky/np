@@ -102,6 +102,12 @@ exports.isInstallDone = async pkgRoot => {
   return !!pkg[INSTALL_DONE_KEY];
 };
 
+// 只认显式的 false: fetch-only 解压或安装失败留下的包; 不带标记的包可能由 npm 等其他工具装出, 不算未完成
+exports.isInstallUnfinished = async pkgRoot => {
+  const pkg = await exports.readJSON(path.join(pkgRoot, 'package.json'));
+  return pkg[INSTALL_DONE_KEY] === false;
+};
+
 exports.addMetaToJSONFile = async (filepath, meta) => {
   await fs.chmod(filepath, '644');
   const pkg = await exports.readJSON(filepath);

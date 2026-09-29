@@ -13,12 +13,14 @@ easy-npd 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 6.8.0, 上
 
 ### 新功能
 
+- `npd-fetch` / `npd --fetch-only`: 只下载解压列出的包, 不安装依赖, 不执行脚本, 不链接 bin, 不修改 `package.json`.
 - 根目录提升链接始终指向最高版本; 完整安装时依赖变化后重装会更新上次的提升链接; 根 `package.json` 声明的包不覆盖.
 - 缓存目录改为 `np-manifests/<name>/<hash>.json`, `np-tgz/<name>/`, `np-tmp/<YYYYMMDD>/`; 旧布局的缓存不再读取, 不再自动清理过期临时目录.
 - 全部命令的 `--help` 列出所有支持的参数.
 
 ### 修复
 
+- 根目录已存在但完成标记为 false 的包(`npd-fetch` 解压或上次安装失败留下)不再因版本满足而跳过, 完整安装会重新处理并补齐依赖.
 - `--lockfile-path` 加载失败时报错退出, 不再静默回退为联网解析.
 - 在 `npm run` / `npx` 下安装需要 prepare 的 git 依赖时, 不再因继承 `npm_config_allow_scripts` 被 npm 12 以 `EALLOWSCRIPTS` 拒绝; git 依赖安装失败时报错附带子进程 stderr.
 - `npd-uninstall` 等待 `package.json` 写回完成后再返回.

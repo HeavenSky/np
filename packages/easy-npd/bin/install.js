@@ -10,7 +10,7 @@ const { execSync } = require('child_process');
 const fs = require('fs/promises');
 const { writeFileSync } = require('fs');
 const parseArgs = require('minimist');
-const { installLocal, installGlobal } = require('..');
+const { installLocal, installGlobal, fetchOnly } = require('..');
 const npa = require('../lib/npa');
 const utils = require('../lib/utils');
 const globalConfig = require('../lib/config');
@@ -78,6 +78,7 @@ Object.assign(
       'fix-bug-versions',
       // --prune 已移除: 按固定名单跳过解压文件会误删 tsconfig.json 等运行时文件
       'save-dependencies-tree',
+      'fetch-only',
       // --force-link-latest 已移除: 提升到根目录时始终链接最高版本
     ],
     default: {
@@ -101,6 +102,29 @@ Object.assign(
 
 if (argv.version) {
   console.log(`npd v${require('../package.json').version}`);
+  process.exit(0);
+}
+
+if (argv.help && argv['fetch-only']) {
+  console.log(`
+Usage:
+
+  npd-fetch <pkg> [<pkg> ...]
+
+Only download, verify and extract the listed packages, then link them to node_modules/<name>.
+Dependencies are not installed, no lifecycle scripts run, no bin links are created and package.json is not changed.
+A later full npd install processes these packages again and installs their dependencies.
+git packages are not supported, fetching them runs their prepare script.
+
+Options:
+
+  -r, --registry: specify custom registry
+  --root: install root directory, default is current working directory
+  --no-cache: don't use the tarball disk cache
+  -c, --china: specify in china, will automatically using chinese npm registry
+  -v, --version: show version
+  -h, --help: show help
+`);
   process.exit(0);
 }
 
@@ -153,6 +177,7 @@ Options:
   --fix-bug-versions: auto fix bug version of package.
   --high-speed-store: specify high speed store script to cache tgz files, and so on. Should export '* getStream(url)' function.
   --dependencies-tree: install with dependencies tree to restore the last install.
+  --fetch-only: same as npd-fetch, only download and extract the listed packages without their dependencies and scripts
 `);
   process.exit(0);
 }
@@ -339,6 +364,14 @@ debug('argv: %j, env: %j', argv, env);
 
   if (argv['high-speed-store']) {
     config.highSpeedStore = require(argv['high-speed-store']);
+  }
+
+  if (argv['fetch-only']) {
+    if (argv.global || pkgs.length === 0) {
+      throw new Error('npd-fetch needs at least one package and does not support -g');
+    }
+    await fetchOnly(config, context);
+    return;
   }
 
   // -g install to npm's global prefix

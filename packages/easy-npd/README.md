@@ -1,6 +1,6 @@
 # easy-npd
 
-[cnpm/npminstall](https://github.com/cnpm/npminstall) 6.8.0 的 fork, 提供 `npd`, `npd-link`, `npd-uninstall`, `npd-update` 四个命令, 分别对应上游的 `npminstall`, `npmlink`, `npmuninstall`, `npmupdate`. 使用 `npd` 或需要判断它与上游的行为差异时读本页; 未提到的用法(含作为库调用, `--flatten`, resolutions)同上游 [6.x README](https://github.com/cnpm/npminstall/blob/6.x/README.md), 相对上游的全部变更见 [CHANGELOG.md](./CHANGELOG.md).
+[cnpm/npminstall](https://github.com/cnpm/npminstall) 6.8.0 的 fork, 提供 `npd`, `npd-link`, `npd-uninstall`, `npd-update`, 分别对应上游的 `npminstall`, `npmlink`, `npmuninstall`, `npmupdate`, 另有上游没有的 `npd-fetch`. 使用 `npd` 或需要判断它与上游的行为差异时读本页; 未提到的用法(含作为库调用, `--flatten`, resolutions)同上游 [6.x README](https://github.com/cnpm/npminstall/blob/6.x/README.md), 相对上游的全部变更见 [CHANGELOG.md](./CHANGELOG.md).
 
 ## 安装
 
@@ -41,6 +41,8 @@ npm i -g easy-npd
 | 开发工具                                                                   | eslint, egg-bin                                                                                                               | oxlint, oxfmt, mocha 11, c8                                                                                                                                     |
 
 ## 安装范围
+
+`npd-fetch <pkg> [<pkg> ...]`(等同 `npd --fetch-only`)只下载, 校验并解压列出的包, 链接到 `node_modules/<name>`; 不安装依赖, 不执行生命周期脚本, 不链接 bin, 不修改 `package.json`, 不支持 git 包与 `-g`. 这些包标记为未完成, 之后的完整 `npd` 会重新处理并补齐依赖.
 
 | 命令        | 安装内容                                                                                               |
 | ----------- | ------------------------------------------------------------------------------------------------------ |
