@@ -11,7 +11,7 @@ const tar = require('tar');
 const zlib = require('zlib');
 const destroy = require('destroy');
 const chalk = require('chalk');
-const moment = require('moment');
+const dayjs = require('dayjs');
 const os = require('os');
 const semver = require('semver');
 const utility = require('utility');
@@ -568,7 +568,7 @@ async function getTarballStream(tarballUrl, pkg, options, mirrored = false) {
     throw offlineError(`Can't find tarball ${pkg.name}@${pkg.version} in the disk cache on offline mode`);
   }
   if (!exists) {
-    const tmpDir = path.join(options.cacheDir, 'np-tmp', moment().format('YYYYMMDD'));
+    const tmpDir = path.join(options.cacheDir, 'np-tmp', dayjs().format('YYYYMMDD'));
     await utils.mkdirp(parentDir);
     await utils.mkdirp(tmpDir);
     const tmpFile = path.join(tmpDir, `${name}-${pkg.version}-${randomUUID()}.tgz`);
