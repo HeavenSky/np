@@ -8,7 +8,12 @@ const { exists } = require('../lib/utils');
 
 describe('test/install-save-bin-name.test.js', () => {
   const root = helper.fixtures('same-bin-name');
-  const cleanup = helper.cleanup(root);
+  const cleanupModules = helper.cleanup(root);
+  const restorePkg = helper.restoreFile(path.join(root, 'package.json'));
+  async function cleanup() {
+    await cleanupModules();
+    await restorePkg();
+  }
 
   beforeEach(cleanup);
   afterEach(cleanup);

@@ -10,7 +10,12 @@ const { existsSync } = require('../lib/utils');
 describe('test/peer.test.js', () => {
   describe('unmet root and link', () => {
     const tmp = helper.fixtures('antd-tools-ts');
-    const cleanup = helper.cleanup(tmp);
+    const cleanupModules = helper.cleanup(tmp);
+    const restorePkg = helper.restoreFile(path.join(tmp, 'package.json'));
+    async function cleanup() {
+      await cleanupModules();
+      await restorePkg();
+    }
 
     beforeEach(cleanup);
     afterEach(cleanup);

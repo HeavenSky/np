@@ -10,8 +10,8 @@ describe('test/install-cache-strict.test.js', () => {
   // Fixme: mock Windows homedir
   if (process.platform === 'win32') return;
 
-  const [ homedir, cleanupTmp ] = helper.tmp('.tmp');
-  const demo = helper.fixtures('demo');
+  const [ homedir, cleanupTmp ] = helper.tmp();
+  const demo = helper.fixtures('demo-install-cache-strict');
   // 外部 shell 设置的缓存变量会覆盖 HOME 推导出的默认缓存目录, 使断言落空
   const baseEnv = Object.assign({}, process.env);
   delete baseEnv.npd_cache;

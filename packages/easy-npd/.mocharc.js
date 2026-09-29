@@ -3,7 +3,8 @@
 
 module.exports = {
   timeout: 2000000,
-  // 用例共用 fixture 目录, 并行会互相清理对方的 node_modules
-  parallel: false,
+  // 每个测试文件只能写自己的 fixture 目录或 helper.tmp() 生成的唯一目录, 共用目录会在并行时互相清理
+  parallel: true,
   exit: true,
+  require: ['test/.mocha-global.js'],
 };

@@ -8,7 +8,12 @@ const helper = require('./helper');
 
 describe('test/local-install-pkgs.test.js', () => {
   const cwd = helper.fixtures('local-install-pkgs');
-  const cleanup = helper.cleanup(cwd);
+  const cleanupModules = helper.cleanup(cwd);
+  const restorePkg = helper.restoreFile(path.join(cwd, 'package.json'));
+  async function cleanup() {
+    await cleanupModules();
+    await restorePkg();
+  }
 
   beforeEach(cleanup);
   afterEach(cleanup);
