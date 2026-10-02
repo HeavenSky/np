@@ -3,6 +3,7 @@
 const path = require('path');
 const fs = require('fs/promises');
 const chalk = require('chalk');
+const normalize = require('npm-normalize-package-bin');
 const utils = require('./utils');
 const preUninstall = require('./preuninstall');
 const postUninstall = require('./postuninstall');
@@ -141,14 +142,18 @@ async function uninstall(pkg, options) {
     chalk.gray(realRoot.replace(options.root, '.'))
   );
 
-  for (const file in pkgInfo.bin) {
+  // 与 lib/bin.js 一致先规范化, 字符串形式的 bin 也能按包名删除; 用副本避免改动返回给调用方的 pkgInfo
+  const { bin: bins = {} } = normalize({ ...pkgInfo });
+  for (const file of Object.keys(bins)) {
     const binPath = path.join(options.binDir, file);
-    await utils.rimraf(binPath);
-    options.console.log(
-      '- %s %s',
-      chalk.yellow(`${pkgInfo.name}@${pkgInfo.version}`),
-      chalk.gray(binPath.replace(options.root, '.'))
-    );
+    for (const target of await utils.listBinShims(binPath)) {
+      await utils.rimraf(target);
+      options.console.log(
+        '- %s %s',
+        chalk.yellow(`${pkgInfo.name}@${pkgInfo.version}`),
+        chalk.gray(target.replace(options.root, '.'))
+      );
+    }
   }
   return pkgInfo;
 }

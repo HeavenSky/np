@@ -9,6 +9,7 @@ const fixBin = require('bin-links/lib/fix-bin');
 const utils = require('./utils');
 
 module.exports = bin;
+module.exports.getBinDir = getBinDir;
 
 async function bin(parentDir, pkg, pkgDir, options) {
   // security fix
@@ -26,14 +27,8 @@ async function bin(parentDir, pkg, pkgDir, options) {
   }
 
   // root package link to options.binDir first
-  let binDir;
-  let showBinLog = false;
-  if (options.binDir && parentDir === options.targetDir) {
-    binDir = options.binDir;
-    showBinLog = true;
-  } else {
-    binDir = path.join(parentDir, 'node_modules', '.bin');
-  }
+  const binDir = getBinDir(parentDir, options);
+  const showBinLog = binDir === options.binDir;
   await utils.mkdirp(binDir);
 
   for (const name of names) {
@@ -67,4 +62,10 @@ async function linkBin(src, dest) {
   }
 
   await utils.forceSymlink(src, dest);
+}
+
+// 根包的 bin 链接到 options.binDir, 其余链接到所在目录的 node_modules/.bin
+function getBinDir(parentDir, options) {
+  if (options.binDir && parentDir === options.targetDir) return options.binDir;
+  return path.join(parentDir, 'node_modules', '.bin');
 }

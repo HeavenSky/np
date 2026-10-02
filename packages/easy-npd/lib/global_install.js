@@ -55,6 +55,7 @@ module.exports = async (options, context) => {
     // add `node_modules` in the last to ensure `module.paths` contains storeDir
     const targetDir = path.join(globalTargetDir, `node_modules/${alias || realPkg.name}`);
     console.info(chalk.gray(`Copying ${result.dir} to ${targetDir}`));
+    await utils.removePackageBins(targetDir, globalBinDir);
     await utils.rimraf(targetDir);
     await fs.rename(result.dir, targetDir);
     await utils.rimraf(tmpDir);

@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('assert');
+const fs = require('fs/promises');
 const path = require('path');
 const coffee = require('coffee');
 const helper = require('./helper');
@@ -82,5 +83,35 @@ describe('test/installGlobal.test.js', () => {
       .expect('stdout', /All packages installed/)
       .expect('code', 0)
       .end();
+  });
+
+  it('should remove old bins when reinstall global package', async () => {
+    await coffee
+      .fork(helper.npminstall, [`--prefix=${tmp}`, '-g', 'mocha@11'])
+      .debug()
+      .expect('code', 0)
+      .end();
+
+    // 模拟旧版本声明了新版本没有的命令, 以及在非 Windows 上遗留的 shim
+    const pkgFile = path.join(libDir, 'node_modules/mocha/package.json');
+    const pkg = JSON.parse(await fs.readFile(pkgFile, 'utf8'));
+    pkg.bin['old-mocha'] = pkg.bin.mocha;
+    await fs.writeFile(pkgFile, JSON.stringify(pkg));
+    for (const name of ['old-mocha', 'old-mocha.cmd', 'old-mocha.ps1', 'mocha.cmd', 'mocha.ps1']) {
+      await fs.writeFile(path.join(binDir, name), '');
+    }
+
+    await coffee
+      .fork(helper.npminstall, [`--prefix=${tmp}`, '-g', 'mocha@11'])
+      .debug()
+      .expect('code', 0)
+      .end();
+
+    const names = await fs.readdir(binDir);
+    assert(!names.some(name => name.startsWith('old-mocha')), names.join(','));
+    assert(names.includes('mocha'));
+    if (process.platform !== 'win32') {
+      assert(!names.some(name => /\.(cmd|ps1)$/i.test(name)), names.join(','));
+    }
   });
 });

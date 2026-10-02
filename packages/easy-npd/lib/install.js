@@ -389,6 +389,8 @@ function forceFlatten(pkg) {
 // link module and bin files
 async function linkModule(pkg, parentDir, realPkg, realPkgDir, options) {
   if (!pkg.peer) {
+    const linkDir = path.join(parentDir, 'node_modules', pkg.alias || realPkg.name);
+    await utils.removeStaleBins(linkDir, realPkg, bin.getBinDir(parentDir, options));
     // fix concurrent install same bin name error
     try {
       await bin(parentDir, realPkg, realPkgDir, options);
