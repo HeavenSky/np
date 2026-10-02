@@ -1,6 +1,7 @@
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const chalk = require('chalk');
+const normalize = require('npm-normalize-package-bin');
 const utils = require('./utils');
 
 module.exports = async options => {
@@ -80,15 +81,19 @@ async function uninstall(pkg, options) {
   const rootPrefix = options.workspaceRoot || options.root;
   options.console.log('%s %s %s', chalk.red('-'), chalk.yellow(pkg.name), chalk.gray(pkgRoot.replace(rootPrefix, '.')));
 
-  for (const file in pkgInfo.bin) {
+  // 与 lib/bin.js 一致先规范化, 字符串形式的 bin 也能按包名删除
+  normalize(pkgInfo);
+  for (const file of Object.keys(pkgInfo.bin || {})) {
     const binPath = path.join(options.binDir, file);
-    await utils.rimraf(binPath);
-    options.console.log(
-      '%s %s %s',
-      chalk.red('-'),
-      chalk.yellow(pkg.name),
-      chalk.gray(binPath.replace(rootPrefix, '.'))
-    );
+    for (const target of await utils.listBinShims(binPath)) {
+      await utils.rimraf(target);
+      options.console.log(
+        '%s %s %s',
+        chalk.red('-'),
+        chalk.yellow(pkg.name),
+        chalk.gray(target.replace(rootPrefix, '.'))
+      );
+    }
   }
   return true;
 }

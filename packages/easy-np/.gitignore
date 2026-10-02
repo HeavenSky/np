@@ -17,6 +17,7 @@ coverage/
 .postisntall*
 .tmp
 .tmp_*
+test/fixtures/.home
 test/fixtures/tmp
 .idea
 npm-debug.log.*

@@ -2,6 +2,15 @@
 
 easy-np 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1, 上游历史版本见 [npminstall CHANGELOG](https://github.com/cnpm/npminstall/blob/master/CHANGELOG.md).
 
+## 0.0.1 (2026-10-02)
+
+### 修复
+
+- 非 Windows 平台安装时不再为每个命令额外生成 `.cmd` 与 `.ps1` 入口.
+- `np-uninstall` 同时删除命令的 `.cmd` 与 `.ps1` 入口, 旧版本在 macOS / Linux 上遗留的这两类文件也一并清理; 字符串形式的 `bin` 字段不再按字符下标删除错误路径.
+- `np -g` 重装或升级已安装的全局包, 以及 `np-link` 覆盖同名全局包时, 先删除旧版本声明的全部命令入口, 新版本不再提供的命令不再残留.
+- 局部安装时依赖换了版本, 旧版本声明而新版本不再声明的命令从 `node_modules/.bin` 删除; 只删确实指向旧版本目录的入口, 其他包的同名命令保留.
+
 ## 0.0.0 (2026-09-29)
 
 首个版本, 相对 npminstall 8.0.1 的全部变更如下.

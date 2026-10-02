@@ -8,6 +8,7 @@ const fixBin = require('bin-links/lib/fix-bin');
 const utils = require('./utils');
 
 module.exports = bin;
+module.exports.getBinDir = getBinDir;
 
 async function bin(parentDir, pkg, pkgDir, options, displayName = '') {
   // security fix
@@ -25,14 +26,8 @@ async function bin(parentDir, pkg, pkgDir, options, displayName = '') {
   }
   displayName = displayName || `${pkg.name}@${pkg.version}`;
   // root package link to options.binDir first
-  let binDir;
-  let showBinLog = false;
-  if (options.binDir && parentDir === options.targetDir) {
-    binDir = options.binDir;
-    showBinLog = true;
-  } else {
-    binDir = path.join(parentDir, 'node_modules', '.bin');
-  }
+  const binDir = getBinDir(parentDir, options);
+  const showBinLog = binDir === options.binDir;
   await utils.mkdirp(binDir);
 
   for (const name of names) {
@@ -70,9 +65,17 @@ async function bin(parentDir, pkg, pkgDir, options, displayName = '') {
 }
 
 async function linkBin(src, dest, nodePath) {
+  // .cmd 与 .ps1 只在 Windows 上有用, 其他平台只生成 sh shim
+  const isWindows = process.platform === 'win32';
   await cmdShim.ifExists(src, dest, {
     nodePath,
-    createCmdFile: true,
-    createPwshFile: true,
+    createCmdFile: isWindows,
+    createPwshFile: isWindows,
   });
+}
+
+// 根包的 bin 链接到 options.binDir, 其余链接到所在目录的 node_modules/.bin
+function getBinDir(parentDir, options) {
+  if (options.binDir && parentDir === options.targetDir) return options.binDir;
+  return path.join(parentDir, 'node_modules', '.bin');
 }

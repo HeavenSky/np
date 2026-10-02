@@ -1,6 +1,6 @@
 {
   "name": "easy-np",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Fast npm installer forked from npminstall, with npm@6 style --dedup hoisting, npm workspaces fixes and node 16 support",
   "keywords": [
     "dedup",

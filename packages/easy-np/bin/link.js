@@ -73,6 +73,7 @@ const folders = argv._.map(name => utils.formatPath(name));
     await utils.fork(installBin, installArgs, {
       cwd: root,
     });
+    await utils.removePackageBins(linkDir, globalMeta.binDir);
     await utils.forceSymlink(root, linkDir);
     console.info(`link ${chalk.magenta(linkDir)}@ -> ${root}`);
     await bin(root, pkg, linkDir, {

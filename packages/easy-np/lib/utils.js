@@ -16,6 +16,7 @@ const homedir = require('node-homedir');
 const fse = require('fs-extra');
 const destroy = require('destroy');
 const normalizeData = require('normalize-package-data');
+const normalizeBin = require('npm-normalize-package-bin');
 const semver = require('semver');
 const globalConfig = require('./config');
 const get = require('./get');
@@ -28,6 +29,95 @@ exports.exists = async filepath => {
     return false;
   }
 };
+
+// bin 入口及其可能存在的 .cmd / .ps1 shim; 主入口总是返回, 其余用 lstat 判定以覆盖失效链接
+exports.listBinShims = async binPath => {
+  const targets = [binPath];
+  for (const ext of ['.cmd', '.ps1']) {
+    try {
+      await fs.lstat(`${binPath}${ext}`);
+      targets.push(`${binPath}${ext}`);
+    } catch {
+      // 不存在则跳过
+    }
+  }
+  return targets;
+};
+
+// 删除 pkgDir 中已安装包在 binDir 下的全部入口, 用于覆盖旧包前清掉新版本不再声明的命令与遗留的 shim
+exports.removePackageBins = async (pkgDir, binDir) => {
+  const pkgFile = path.join(pkgDir, 'package.json');
+  if (!binDir || !(await exports.exists(pkgFile))) return;
+  const { bin: bins = {} } = normalizeBin(await exports.readJSON(pkgFile));
+  for (const name of Object.keys(bins)) {
+    for (const target of await exports.listBinShims(path.join(binDir, name))) {
+      await exports.rimraf(target);
+      debug('remove old bin %s', target);
+    }
+  }
+};
+
+// 根依赖换版本时, 删除旧版本声明而新版本不再声明, 且确实指向旧版本目录的 bin 入口; 其他包的同名入口不动
+exports.removeStaleBins = async (linkDir, newPkg, binDir) => {
+  let oldDir;
+  try {
+    oldDir = path.resolve(path.dirname(linkDir), await fs.readlink(linkDir));
+  } catch {
+    return;
+  }
+  const pkgFile = path.join(oldDir, 'package.json');
+  if (!(await exports.exists(pkgFile))) return;
+  const oldPkg = await exports.readJSON(pkgFile);
+  if (oldPkg.name === newPkg.name && oldPkg.version === newPkg.version) return;
+  const { bin: oldBins = {} } = normalizeBin(oldPkg);
+  const { bin: newBins = {} } = normalizeBin({ ...newPkg });
+  const oldDirs = [oldDir];
+  try {
+    oldDirs.push(await fs.realpath(oldDir));
+  } catch {
+    // 旧目录已不存在时只按链接路径比对
+  }
+  const tokens = new Set();
+  for (const dir of oldDirs) {
+    const relative = path.relative(binDir, dir);
+    for (const p of [dir, relative]) {
+      tokens.add(p.split(path.sep).join('/'));
+      tokens.add(p.split(path.sep).join('\\'));
+    }
+  }
+  for (const name of Object.keys(oldBins)) {
+    if (name in newBins) continue;
+    for (const target of await exports.listBinShims(path.join(binDir, name))) {
+      if (await binPointsTo(target, oldDirs, tokens)) {
+        await exports.rimraf(target);
+        debug('remove stale bin %s', target);
+      }
+    }
+  }
+};
+
+// 软链接按解析后的路径判断, shim 文件按内容中是否出现旧包目录判断
+async function binPointsTo(target, dirs, tokens) {
+  let stat;
+  try {
+    stat = await fs.lstat(target);
+  } catch {
+    return false;
+  }
+  const inside = p => dirs.some(dir => p === dir || p.startsWith(dir + path.sep));
+  if (stat.isSymbolicLink()) {
+    const dest = path.resolve(path.dirname(target), await fs.readlink(target));
+    if (inside(dest)) return true;
+    try {
+      return inside(await fs.realpath(target));
+    } catch {
+      return false;
+    }
+  }
+  if (!stat.isFile() || stat.size > 64 * 1024) return false;
+  const content = await fs.readFile(target, 'utf8');
+  return [...tokens].some(token => content.includes(token));
+}
 
 exports.existsSync = filepath => {
   try {
