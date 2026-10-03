@@ -28,8 +28,8 @@ exports.tmp = name => {
   return [dir, cleanup];
 };
 
-exports.npminstall = path.join(__dirname, '..', 'bin', 'install.js');
-exports.npmuninstall = path.join(__dirname, '..', 'bin', 'uninstall.js');
-exports.npmupdate = path.join(__dirname, '..', 'bin', 'update.js');
+exports.npminstall = path.join(__dirname, '..', 'bin', 'i.js');
+// 子命令用法: coffee.fork(helper.x, ['uninstall', ...args])
+exports.x = path.join(__dirname, '..', 'bin', 'x.js');
 
 exports.readJSON = require('../lib/utils').readJSON;

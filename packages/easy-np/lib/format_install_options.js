@@ -20,6 +20,12 @@ module.exports = function formatInstallOptions(options) {
   options.events.setMaxListeners(0);
   options.events.await = awaitEvent;
   options.runscriptCount = 0;
+  // 失败的包不中止安装: { displayName, error }, 安装结束时汇总
+  options.failures = [];
+  // 失败后被跳过的可选依赖: { displayName, error, name? }, 带 name 的是脚本失败, 可用 rebuild 重跑
+  options.optionalFailures = [];
+  // 本次运行完成了自身步骤的包目录, 运行没有失败时统一清除阶段标记
+  options.stagedDirs = new Set();
   options.runscriptTime = 0;
   // [
   //    {package: pkg, parentDir: 'parentDir', packageDir: 'packageDir'},

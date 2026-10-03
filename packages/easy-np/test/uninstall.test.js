@@ -7,7 +7,7 @@ const helper = require('./helper');
 const { rimraf } = require('../lib/utils');
 
 describe('test/uninstall.test.js', () => {
-  const npmuninstall = path.join(__dirname, '../bin/uninstall.js');
+  const npmuninstall = path.join(__dirname, '../bin/x.js');
   const root = helper.fixtures('uninstall');
   const cleanupModules = helper.cleanup(root);
 
@@ -31,7 +31,7 @@ describe('test/uninstall.test.js', () => {
 
   it('should uninstall ok', async () => {
     await coffee
-      .fork(npmuninstall, ['koa', 'pkg@1.0.0'], {
+      .fork(npmuninstall, ['uninstall', 'koa', 'pkg@1.0.0'], {
         cwd: root,
         stdio: 'pipe',
       })
@@ -44,7 +44,7 @@ describe('test/uninstall.test.js', () => {
 
   it('should uninstall --save', async () => {
     await coffee
-      .fork(npmuninstall, ['pkg@1.0.0', '--save'], {
+      .fork(npmuninstall, ['uninstall', 'pkg@1.0.0', '--save'], {
         cwd: root,
         stdio: 'pipe',
       })
@@ -61,7 +61,7 @@ describe('test/uninstall.test.js', () => {
 
   it('should prune package.json by default', async () => {
     await coffee
-      .fork(npmuninstall, ['pkg@1.0.0'], {
+      .fork(npmuninstall, ['uninstall', 'pkg@1.0.0'], {
         cwd: root,
         stdio: 'pipe',
       })

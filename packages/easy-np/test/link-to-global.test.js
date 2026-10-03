@@ -3,7 +3,7 @@ const path = require('node:path');
 const coffee = require('coffee');
 const { rimraf, exists } = require('../lib/utils');
 
-const npmlink = path.join(__dirname, '../bin/link.js');
+const npmlink = path.join(__dirname, '../bin/x.js');
 
 describe('test/link-to-global.test.js', () => {
   const root = path.join(__dirname, 'fixtures', 'link-demo');
@@ -24,7 +24,7 @@ describe('test/link-to-global.test.js', () => {
 
   it('should link without bin', async () => {
     await coffee
-      .fork(npmlink, [`--prefix=${prefix}`], {
+      .fork(npmlink, ['link', `--prefix=${prefix}`], {
         cwd: path.join(root, 'linked-package'),
       })
       .debug()
@@ -35,7 +35,7 @@ describe('test/link-to-global.test.js', () => {
 
   it('should link with bin', async () => {
     await coffee
-      .fork(npmlink, [`--prefix=${prefix}`], {
+      .fork(npmlink, ['link', `--prefix=${prefix}`], {
         cwd: path.join(root, 'linked-package-2'),
       })
       .debug()

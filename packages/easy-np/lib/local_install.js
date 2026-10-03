@@ -39,10 +39,11 @@ const { runLifecycleScripts } = require('./lifecycle_scripts');
  *  	if `production` mode enable, `cacheDir` will be disable.
  *  - {Object} [binaryMirrors] - binary mirror config, default is `{}`
  *  - {Boolean} [ignoreScripts] - ignore pre / post install scripts, default is `false`
- *  - {Array} [forbiddenLicenses] - forbit install packages which used these licenses
- *  - {Boolean} [trace] - show memory and cpu usages traces of installation
+ *  - {Array} [forbiddenLicenses] - forbid installing packages that use these licenses
+ *  - {Boolean} [trace] - show memory and CPU usage traces of the installation
  *  - {Boolean} [flatten] - flatten dependencies by matching ancestors' dependencies
  *  - {Boolean} [offline] - offline mode, default is `false`
+ *  - {Boolean} [rebuild] - install every installed package again from its first stage and rerun its scripts, default is `false`
  * @param {Object} context - install context
  */
 module.exports = async (options, context = new Context()) => {
@@ -92,10 +93,15 @@ module.exports = async (options, context = new Context()) => {
   try {
     await _install(options, context);
   } catch (err) {
+    // 失败汇总由调用方输出, 这里只给一行结论
+    const message =
+      err.code === utils.INSTALL_FAILURES_CODE
+        ? `Install finished with ${err.failures.length} failed package(s)`
+        : `Install failed! ${err}`;
     if (options.spinner) {
-      options.spinner.fail(`Install fail! ${err}`);
+      options.spinner.fail(message);
     } else {
-      options.console.error(`Install fail! ${err}`);
+      options.console.error(message);
     }
     throw err;
   } finally {
@@ -182,7 +188,20 @@ async function _install(options, context) {
   }
 
   if (options.installRoot && !options.ignoreScripts) {
-    await runLifecycleScripts(rootPkg, options.root, { optional: false }, displayName, options);
+    if (options.failures.length > 0) {
+      // 根包脚本通常依赖已安装的依赖, 有依赖失败时跳过, 下次运行成功后再执行
+      options.console.warn(
+        chalk.yellow('[np:runscript] skip %s lifecycle scripts because %s package(s) failed'),
+        displayName,
+        options.failures.length
+      );
+    } else {
+      try {
+        await runLifecycleScripts(rootPkg, options.root, { optional: false }, displayName, options);
+      } catch (err) {
+        options.failures.push({ displayName, error: err });
+      }
+    }
   }
 
   // link peerDependencies if not match the version in target directory
@@ -204,6 +223,12 @@ async function _install(options, context) {
 
   // record dependencies tree resolved from npm
   recordDependenciesTree(options);
+
+  printOptionalFailures(options);
+  if (options.failures.length > 0) {
+    throw utils.installFailuresError(options.failures);
+  }
+  await utils.clearInstallStages(options);
 
   if (!options.ignoreScripts && options.runscriptCount > 0) {
     const runscriptInfo = util.format('Run %s script(s) in %s.', options.runscriptCount, ms(options.runscriptTime));
@@ -275,7 +300,7 @@ async function needInstall(parentDir, childPkg, options) {
     throw new Error(`${childPkg.name} uses the workspace: protocol but no workspace named ${childPkg.name} was found`);
   }
   // always install if not install from package.json
-  if (!options.installRoot) return true;
+  if (!options.installRoot || options.rebuild) return true;
 
   const pkgDir = path.join(parentDir, 'node_modules', childPkg.name);
   const pkg = await utils.readJSON(path.join(pkgDir, 'package.json'));
@@ -362,7 +387,9 @@ async function linkAllLatestVersionToFallbackDir(rootPkgsMap, options) {
     };
     await pMap(options.latestVersions, mapper, 20);
     const fallbackStoreDir = path.join(options.storeDir, '.store/node_modules');
-    options.spinner?.succeed(`Linked ${options.latestVersions.size} latest versions fallback to ${fallbackStoreDir}`);
+    options.spinner?.succeed(
+      `Linked ${options.latestVersions.size} latest versions as fallback to ${fallbackStoreDir}`
+    );
   }
 }
 
@@ -512,6 +539,20 @@ async function linkLatestVersion(pkg, storeDir, options, isFallback = false) {
   );
 }
 
+// 可选依赖失败不影响安装结果, 也不会被之后的 np 重试, 结束时集中提示
+function printOptionalFailures(options) {
+  const items = options.optionalFailures;
+  if (items.length === 0) return;
+  options.console.warn(chalk.yellow('%s optional package(s) failed and were skipped:'), items.length);
+  for (const { displayName, error } of items) {
+    options.console.warn(chalk.yellow('  - %s: %s'), displayName, String(error.message).split('\n')[0]);
+  }
+  const names = [...new Set(items.filter(item => item.name).map(item => item.name))];
+  if (names.length > 0) {
+    options.console.warn(chalk.yellow('rerun their scripts with: np-x rebuild %s'), names.join(' '));
+  }
+}
+
 function printPendingMessages(options) {
   for (const item of options.pendingMessages) {
     if (options.console[item[0]] && options.console[item[0]] !== debug) {
@@ -542,7 +583,7 @@ function recordRecentlyUpdates(options) {
       '%s: %s %s',
       chalk.gray(recentlyUpdatesText),
       `${chalk.green(options.recentlyUpdates.size)} packages`,
-      chalk.gray(`(detail see file ${recentlyUpdatesTextFile})`)
+      chalk.gray(`(see details in ${recentlyUpdatesTextFile})`)
     );
     const displays = {};
     for (const item of options.recentlyUpdates) {

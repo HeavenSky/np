@@ -22,8 +22,9 @@ describe('test/cleanup.test.js', () => {
     }
     assert(throwError);
 
-    const dirs = await fs.readdir(path.join(tmp, 'node_modules'));
-    assert.deepEqual(dirs, ['.store']);
+    // 子依赖失败不中止安装, install-error 照常链接, 但保留阶段标记, 下次运行经由它找到失败的子依赖
+    const pkg = JSON.parse(await fs.readFile(path.join(tmp, 'node_modules/install-error/package.json'), 'utf8'));
+    assert.equal(pkg.__np_stage, 'finish');
 
     // install again will try to download
     throwError = false;

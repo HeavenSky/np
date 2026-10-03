@@ -39,7 +39,7 @@ async function bin(parentDir, pkg, pkgDir, options, displayName = '') {
         '%s %s %s',
         chalk.yellow('WARN'),
         chalk.gray(displayName),
-        `Failed to create bin at '${destBin}', the source file '${srcBin}' not exist`,
+        `Failed to create bin at '${destBin}', the source file '${srcBin}' does not exist`,
       ]);
       continue;
     }

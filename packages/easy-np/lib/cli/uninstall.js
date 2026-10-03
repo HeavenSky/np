@@ -1,46 +1,53 @@
-#!/usr/bin/env node
-
-const debug = require('node:util').debuglog('np:bin:uninstall');
+const debug = require('node:util').debuglog('np:cli:uninstall');
 const path = require('node:path');
 const npa = require('npm-package-arg');
 const parseArgs = require('minimist');
-const utils = require('../lib/utils');
-const uninstall = require('../lib/uninstall');
+const utils = require('../utils');
+const uninstall = require('../uninstall');
+const help = require('./help');
 
-const argv = parseArgs(process.argv.slice(2), {
-  string: ['root', 'prefix', 'workspace'],
-  boolean: [
-    'version',
-    'help',
-    'global',
-    // --ignore-scripts 已移除: uninstall 不执行任何生命周期脚本
-    'workspaces',
-  ],
-  alias: {
-    v: 'version',
-    h: 'help',
-    g: 'global',
-    w: 'workspace',
-  },
-});
+module.exports = async function uninstallCommand(args) {
+  try {
+    await main(args);
+  } catch (err) {
+    utils.exitWithError('np-x uninstall', err);
+  }
+};
 
-if (argv.version) {
-  console.log('v%s', require('../package.json').version);
-  process.exit(0);
-}
+async function main(args) {
+  const argv = parseArgs(args, {
+    string: ['root', 'prefix', 'workspace'],
+    boolean: [
+      'version',
+      'help',
+      'global',
+      // --ignore-scripts 已移除: uninstall 不执行任何生命周期脚本
+      'workspaces',
+    ],
+    alias: {
+      v: 'version',
+      h: 'help',
+      g: 'global',
+      w: 'workspace',
+    },
+  });
 
-if (argv.help) help();
+  if (argv.version) {
+    console.log('v%s', require('../../package.json').version);
+    process.exit(0);
+  }
 
-const pkgs = [];
+  if (argv.help) printHelp();
 
-for (const name of argv._) {
-  const p = npa(String(name));
-  pkgs.push({ name: p.name, version: p.rawSpec });
-}
+  const pkgs = [];
 
-if (!pkgs.length) help();
+  for (const name of argv._) {
+    const p = npa(String(name));
+    pkgs.push({ name: p.name, version: p.rawSpec });
+  }
 
-(async () => {
+  if (!pkgs.length) printHelp();
+
   const root = argv.root || process.cwd();
   const config = {
     root,
@@ -104,27 +111,9 @@ if (!pkgs.length) help();
     pkgs.map(pkg => pkg.name)
   );
   console.log('');
-})().catch(err => {
-  utils.exitWithError('np-uninstall', err);
-});
+}
 
-function help() {
-  console.log(`
-Usage:
-
-  np-uninstall <pkg>
-  np-uninstall <pkg>@<version>
-  np-uninstall <pkg>@<version> [<pkg>@<version>]
-
-Options:
-
-  --root: project root directory, default is current working directory
-  -g, --global: uninstall from the global directory
-  --prefix: global install prefix used with -g, default is '$npm config get prefix'
-  -w, --workspace: uninstall on one workspace only, e.g.: np-uninstall koa -w a
-  --workspaces: uninstall on all workspaces
-  -v, --version: show version
-  -h, --help: show help
-`);
+function printHelp() {
+  console.log(help.uninstall());
   process.exit(0);
 }

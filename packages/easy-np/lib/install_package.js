@@ -27,8 +27,15 @@ async function install(parentDir, pkg, ancestors, options, context) {
         return;
       }
       options.console.error(chalk.yellow(`[${pkg.name}@${pkg.version}] optional install error: ${err.stack}`));
-    } else {
+      options.optionalFailures.push({ displayName: `${pkg.name}@${pkg.version}`, error: err });
+    } else if (ancestors.some(ancestor => ancestor.optional)) {
+      // 可选依赖子树中的失败交给最近的可选祖先处理, 与 npm 一样整体跳过该可选依赖
       throw err;
+    } else {
+      // 不中止整次安装: 记下后继续安装其余包, 安装结束时汇总并以失败退出
+      const displayName = utils.getDisplayName(pkg, ancestors);
+      options.failures.push({ displayName, error: err });
+      options.console.error(chalk.red('[np:install:error] %s: %s'), displayName, err.message);
     }
   }
 }
@@ -61,7 +68,7 @@ async function _install(parentDir, pkg, ancestors, options, context) {
   const displayName = (p.displayName = utils.getDisplayName(pkg, ancestors));
 
   if (options.registryOnly && REGISTRY_TYPES.includes(p.type)) {
-    throw new Error(`Only allow install package from registry, but "${displayName}" is ${p.type}`);
+    throw new Error(`Only registry packages are allowed, but "${displayName}" is ${p.type}`);
   }
 
   if (options.flatten || forceFlatten(pkg)) {
@@ -72,7 +79,7 @@ async function _install(parentDir, pkg, ancestors, options, context) {
       if (res.childResolved !== res.ancestorResolved && res.childSpec !== '*') {
         options.pendingMessages.push([
           'warn',
-          "%s %s delcares %s(resolved as %s) but using ancestor(%s)'s dependency %s(resolved as %s)",
+          "%s %s declares %s(resolved as %s) but uses ancestor(%s)'s dependency %s(resolved as %s)",
           chalk.magenta('anti semver'),
           chalk.gray(res.displayName),
           chalk.yellow(`${res.name}@${res.childSpec}`),
@@ -161,13 +168,22 @@ async function _install(parentDir, pkg, ancestors, options, context) {
     }
   }
 
-  if (info.exists) {
+  if (info.exists && !info.stage) {
     // make sure bins will be links to ${parentDir}/node_modules/.bin
     await linkModule(pkg, parentDir, realPkg, realPkgDir, options, displayName);
     return {
       exists: true,
       dir: realPkgDir,
     };
+  }
+  const stage = info.stage || utils.FIRST_INSTALL_STAGE;
+  if (info.stage) {
+    options.console.warn(
+      chalk.yellow('[np:resume] %s continue from %s, root: %j'),
+      displayName,
+      options.rebuild ? 'the beginning (--rebuild)' : stage,
+      realPkgDir
+    );
   }
 
   // install steps:
@@ -177,45 +193,46 @@ async function _install(parentDir, pkg, ancestors, options, context) {
   // 4. link bin files
   // 5. link package to node_modules dir
 
-  try {
-    if (realPkg.publish_time && realPkg.publish_time >= options.recentlyUpdateMinDateTime) {
-      options.recentlyUpdates.set(`${displayName}(${chalk.green(realPkg.version)})`, new Date(realPkg.publish_time));
-    }
+  if (realPkg.publish_time && realPkg.publish_time >= options.recentlyUpdateMinDateTime) {
+    options.recentlyUpdates.set(`${displayName}(${chalk.green(realPkg.version)})`, new Date(realPkg.publish_time));
+  }
 
-    if (realPkg.deprecated) {
-      options.pendingMessages.push([
-        'warn',
-        '%s %s %s',
-        chalk.red('deprecate'),
-        chalk.gray(displayName),
-        realPkg.deprecated,
-      ]);
-    }
+  if (realPkg.deprecated) {
+    options.pendingMessages.push([
+      'warn',
+      '%s %s %s',
+      chalk.red('deprecate'),
+      chalk.gray(displayName),
+      realPkg.deprecated,
+    ]);
+  }
 
-    if (realPkg.license && options.forbiddenLicensesRegex && options.forbiddenLicensesRegex.test(realPkg.license)) {
-      options.pendingMessages.push([
-        'warn',
-        '%s %s %s',
-        chalk.magenta('license forbidden'),
-        chalk.gray(displayName),
-        `package ${realPkg.name}'s license(${realPkg.license}) is not allowed`,
-      ]);
-    }
+  if (realPkg.license && options.forbiddenLicensesRegex && options.forbiddenLicensesRegex.test(realPkg.license)) {
+    options.pendingMessages.push([
+      'warn',
+      '%s %s %s',
+      chalk.magenta('license forbidden'),
+      chalk.gray(displayName),
+      `package ${realPkg.name}'s license(${realPkg.license}) is not allowed`,
+    ]);
+  }
 
-    // https://docs.npmjs.com/files/package.json#engines
-    const nodeVersion = realPkg.engines && realPkg.engines.node;
-    if (nodeVersion && !utils.fastSemverSatisfies(process.version, nodeVersion)) {
-      const err = new Error(
-        `"node@${process.version}" is incompatible with ${displayName}, expected node@${nodeVersion}`
-      );
-      err.name = 'UnSupportedNodeError';
-      if (options.engineStrict) {
-        throw err;
-      } else {
-        options.console.warn('\n%s %s', chalk.magenta('WARN node unsupported'), err.message);
-      }
+  // https://docs.npmjs.com/files/package.json#engines
+  const nodeVersion = realPkg.engines && realPkg.engines.node;
+  if (nodeVersion && !utils.fastSemverSatisfies(process.version, nodeVersion)) {
+    const err = new Error(
+      `"node@${process.version}" is incompatible with ${displayName}, expected node@${nodeVersion}`
+    );
+    err.name = 'UnSupportedNodeError';
+    if (options.engineStrict) {
+      throw err;
+    } else {
+      options.console.warn('\n%s %s', chalk.magenta('WARN node unsupported'), err.message);
     }
+  }
 
+  // 停在 deps 或 finish 时重新遍历子依赖, 已完成的子依赖只做链接, 不再重新解压
+  if (stage === utils.FIRST_INSTALL_STAGE || stage === utils.FINISH_INSTALL_STAGE) {
     // link bundleDependencies' bin
     // np fsevents
     const bundledDependencies = await getBundleDependencies(realPkg, realPkgDir);
@@ -279,6 +296,7 @@ async function _install(parentDir, pkg, ancestors, options, context) {
             displayName: `${realPkg.name}@${realPkg.version}`,
             name: realPkg.name,
             dependencies: deps.prodMap,
+            optional: !!pkg.optional,
           }),
           options,
           context
@@ -310,17 +328,9 @@ async function _install(parentDir, pkg, ancestors, options, context) {
         }
       }
     }
-    // FIXME: run postinstall before link may cause incompatible error. see
-    // arborist/reify.js#steps._build, npm runs postinstall after unpacking.
-  } catch (err) {
-    // delete donefile when install error, make sure this package won't be skipped during next installation.
-    try {
-      await utils.unsetInstallDone(realPkgDir);
-    } catch (e) {
-      options.console.warn(chalk.yellow(`unsetInstallDone: ${realPkgDir} error: ${e}, ignore it`));
-    }
-    throw err;
   }
+  // FIXME: run postinstall before link may cause incompatible error. see
+  // arborist/reify.js#steps._build, npm runs postinstall after unpacking.
 
   // from here, a package is already downloaded and unpacked into
   // <root>/.store/<name>/node_modules/<name>. but there is no sub-dependencies
@@ -337,12 +347,20 @@ async function _install(parentDir, pkg, ancestors, options, context) {
     realPkgDir
   );
 
-  if (!options.ignoreScripts) {
-    await runLifecycleScripts(realPkg, realPkgDir, pkg, displayName, options);
+  // 可选依赖的脚本失败时阶段停在失败的脚本, 不随本次运行清除, 下次运行重试
+  const failedScript =
+    options.ignoreScripts || stage === utils.FINISH_INSTALL_STAGE
+      ? undefined
+      : await runLifecycleScripts(realPkg, realPkgDir, pkg, displayName, options, stage);
+  await utils.setInstallStage(realPkgDir, failedScript || utils.FINISH_INSTALL_STAGE);
+  if (failedScript) {
+    options.optionalFailures.push({ displayName, error: new Error(`run ${failedScript} error`), name: realPkg.name });
+  } else {
+    options.stagedDirs.add(realPkgDir);
   }
 
   return {
-    exists: false,
+    exists: !!info.exists,
     dir: realPkgDir,
   };
 }
@@ -400,7 +418,7 @@ async function satisfiesRange(childPkg, ancestorPkg, options) {
   if (!satisfies) return;
 
   debug(
-    "%s delcares %s(resolved as %s) but using ancestor(%s)'s dependency %s(resolved as %s)",
+    "%s declares %s(resolved as %s) but uses ancestor(%s)'s dependency %s(resolved as %s)",
     childPkg.displayName,
     `${childPkg.name}@${childPkg.rawSpec}`,
     resolveChildPkg.version || '-',

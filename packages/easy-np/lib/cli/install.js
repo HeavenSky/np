@@ -1,6 +1,4 @@
-#!/usr/bin/env node
-
-const debug = require('node:util').debuglog('np:bin:install');
+const debug = require('node:util').debuglog('np:cli:install');
 const path = require('node:path');
 const util = require('node:util');
 const { execSync } = require('node:child_process');
@@ -9,287 +7,229 @@ const fs = require('node:fs/promises');
 const { writeFileSync } = require('node:fs');
 const chalk = require('chalk');
 const parseArgs = require('minimist');
-const { installLocal, installGlobal, validatePendingPeerDependencies, fetchOnly } = require('..');
-const npa = require('../lib/npa');
-const utils = require('../lib/utils');
-const globalConfig = require('../lib/config');
-const { parsePackageName } = require('../lib/alias');
-const { LOCAL_TYPES, REMOTE_TYPES, ALIAS_TYPES } = require('../lib/npa_types');
-const Context = require('../lib/context');
-const mirror = require('../lib/mirror');
-const { lockfileConverter } = require('../lib/lockfile_resolver');
+const { installLocal, installGlobal, validatePendingPeerDependencies, fetchOnly, rebuild } = require('..');
+const npa = require('../npa');
+const utils = require('../utils');
+const globalConfig = require('../config');
+const { parsePackageName } = require('../alias');
+const { LOCAL_TYPES, REMOTE_TYPES, ALIAS_TYPES } = require('../npa_types');
+const Context = require('../context');
+const mirror = require('../mirror');
+const { lockfileConverter } = require('../lockfile_resolver');
+const help = require('./help');
 
-const originalArgv = process.argv.slice(2);
-
-// since minimist consider --no-xx is xx:false, we handle it manually here
-const argv = { 'no-save': originalArgv.includes('--no-save') };
-Object.assign(
-  argv,
-  parseArgs(originalArgv, {
-    string: [
-      'root',
-      'registry',
-      'prefix',
-      'forbidden-licenses',
-      // {"http://a.com":"http://b.com"}
-      'tarball-url-mapping',
-      // --proxy 已移除: urllib 3 不支持 proxy / enableProxy 参数, 传入后请求仍直连
-      'dependencies-tree',
-      // np foo --workspace=aa
-      // np foo -w aa
-      'workspace',
-      /**
-       * set package-lock.json path
-       *
-       * 1. only support package lock v2 and v3.
-       * 2. np doesn't inspect <cwd>/package-lock.json by default.
-       * 3. because arborist doesn't support client/build/isomorphic dependencies,
-       *    these kinds of dependencies will all be ignored.
-       * 4. this option doesn't do extra check for the equivalence of package-lock.json and package.json
-       *    simply behaves like `npm ci` but doesn't remove the node_modules in advance.
-       * 5. you're not supposed to install extra dependencies along with a lockfile.
-       */
-      'lockfile-path',
-      'public-hoist-pattern',
-    ],
-    boolean: [
-      'version',
-      'help',
-      'production',
-      'client',
-      'global',
-      'save',
-      'save-dev',
-      'save-optional',
-      'save-client',
-      'save-build',
-      'save-isomorphic',
-      // Saved dependencies will be configured with an exact version rather than using npm's default semver range operator.
-      'save-exact',
-      'ignore-scripts',
-      // run scripts on foreground, default is background
-      'foreground-scripts',
-      // install ignore optionalDependencies
-      'optional',
-      'detail',
-      'trace',
-      'engine-strict',
-      'flatten',
-      'registry-only',
-      'cache-strict',
-      'fix-bug-versions',
-      // --prune 已移除: 按固定名单跳过解压文件会误删 tsconfig.json 等运行时文件
-      'save-dependencies-tree',
-      'fetch-only',
-      // --force-link-latest 已移除: 提升到根目录时始终链接最高版本
-      'dedup',
-      'workspaces',
-      'offline',
-      'refresh-cache',
-    ],
-    default: {
-      optional: true,
-    },
-    alias: {
-      // npm install [-S|--save|-D|--save-dev|-O|--save-optional] [-E|--save-exact] [-d|--detail] [-w|--workspace]
-      S: 'save',
-      D: 'save-dev',
-      O: 'save-optional',
-      E: 'save-exact',
-      v: 'version',
-      h: 'help',
-      g: 'global',
-      r: 'registry',
-      d: 'detail',
-      w: 'workspace',
-    },
-  })
-);
-
-if (argv.version) {
-  console.log(`np v${require('../package.json').version}`);
-  process.exit(0);
-}
-
-if (argv.help && argv['fetch-only']) {
-  console.log(`
-Usage:
-
-  np-fetch <pkg> [<pkg> ...]
-
-Only download, verify and extract the listed packages, then link them to node_modules/<name>.
-Dependencies are not installed, no lifecycle scripts run, no bin links are created and package.json is not changed.
-A later full np install processes these packages again and installs their dependencies.
-git packages are not supported, fetching them runs their prepare script.
-
-Options:
-
-  -r, --registry: specify custom registry
-  --root: install root directory, default is current working directory
-  --no-cache: don't use the tarball disk cache
-  --refresh-cache: ignore cached manifests and tarballs, download again and overwrite the cache
-  --offline: only use the disk cache and never request the network
-  -v, --version: show version
-  -h, --help: show help
-`);
-  process.exit(0);
-}
-
-if (argv.help) {
-  console.log(`
-Usage:
-
-  np
-  np <pkg>
-  np <pkg> --workspace=<workspace>
-  np <pkg> -w <workspace>
-  np <pkg> --workspaces
-  np <pkg>@<tag>
-  np <pkg>@<version>
-  np <pkg>@<version range>
-  np <folder>
-  np <tarball file>
-  np <tarball url>
-  np <git:// url>
-  np <github username>/<github project>
-  np --lockfile-path=</path/to/package-lock.json>
-
-Can specify one or more: np ./foo.tgz bar@stable /some/folder
-If no argument is supplied, installs dependencies from ./package.json.
-With <pkg>, only the given packages are installed: other dependencies in package.json are not refreshed and root lifecycle scripts are not run.
-
-Options:
-
-  --production: won't install devDependencies
-  --client: install clientDependencies and buildDependencies
-  --save, --save-dev, --save-optional, --save-exact, --save-client, --save-build, --save-isomorphic: save installed dependencies into package.json
-  --no-save: Prevents saving to dependencies
-  -g, --global: install devDependencies to global directory which specified in '$npm config get prefix'
-  -r, --registry: specify custom registry
-  --root: install root directory, default is current working directory
-  --prefix: global install prefix used with -g, default is '$npm config get prefix'
-  --no-cache: don't use the tarball disk cache, ignored when --cache-strict is set
-  --tarball-url-mapping: JSON object to rewrite tarball urls before request, redirect targets are not rewritten, e.g.: --tarball-url-mapping='{"https://a.com":"https://b.com"}'
-  --lockfile-path: install from package-lock.json (lockfileVersion >= 2), optionalDependencies in lockfile are ignored, not supported with workspaces, fail if the lockfile can't be loaded
-  --save-dependencies-tree: save the resolved dependencies tree to node_modules/.dependencies_tree.json
-  -v, --version: show version
-  -h, --help: show help
-  --refresh-cache: ignore cached manifests and tarballs, download again and overwrite the cache
-  -d, --detail: show detail log of installation
-  -w, --workspace: install on one workspace only, e.g.: np koa -w a
-  --workspaces: install on all workspaces, e.g: np foo --workspaces; without <pkg> the workspace root's own dependencies are not installed
-  --trace: show memory and cpu usages traces of installation
-  --ignore-scripts: ignore all preinstall / install and postinstall scripts during the installation
-  --foreground-scripts: scripts run in the background by default, to see the output, run with: --foreground-scripts
-  --no-optional: ignore all optionalDependencies during the installation
-  --forbidden-licenses: forbidden install packages which used these licenses
-  --engine-strict: refuse to install (or even consider installing) any package that claims to not be compatible with the current Node.js version.
-  --flatten: flatten dependencies by matching ancestors' dependencies
-  --registry-only: make sure all packages install from registry. Any package is installed from remote(e.g.: git, remote url) cause install fail.
-  --cache-strict: use disk cache even on production env.
-  --fix-bug-versions: automatically fix bug version of packages.
-  --dependencies-tree: install with dependencies tree to restore the last install.
-  --fetch-only: same as np-fetch, only download and extract the listed packages without their dependencies and scripts
-  --public-hoist-pattern: regexp of package names to link into <root>/node_modules with their latest version, fallback to config.np.publicHoistPattern in package.json, default is none.
-  --dedup: link every package's latest version into <root>/node_modules like npminstall@6, overrides --public-hoist-pattern.
-  --offline: only use the disk cache and never request the network, fail when a manifest or tarball is not cached. git and remote url packages are not supported.
-`);
-  process.exit(0);
-}
-
-const pkgs = [];
-
-if (process.env.NP_BY_UPDATE) {
-  // ignore all package names on update
-  argv._ = [];
-}
-
-const context = new Context();
-for (const name of argv._) {
-  context.nested.update([name]);
-  const [aliasPackageName] = parsePackageName(name, context.nested);
-  const p = npa(name, { where: argv.root, nested: context.nested });
-  pkgs.push({
-    name: p.name,
-    // `mozilla/nunjucks#0f8b21b8df7e8e852b2e1889388653b7075f0d09` should be rawSpec
-    version: p.fetchSpec || p.rawSpec,
-    type: p.type,
-    alias: aliasPackageName,
-    arg: p,
-  });
-}
-
-let root = argv.root || process.cwd();
-if (Array.isArray(root)) {
-  // use last one, e.g.: $ np --root=abc --root=def
-  root = root[root.length - 1];
-}
-let installOnAllWorkspaces = argv.workspaces;
-let installWorkspaceNames = utils.formatWorkspaceNames(argv);
-const production = argv.production || process.env.NODE_ENV === 'production';
-const cacheStrict = argv['cache-strict'];
-// support npm_config_cache to change default cache dir
-const defaultCacheDir = process.env.npm_config_cache || path.join(os.homedir(), '.np_tarball');
-let cacheDir = defaultCacheDir;
-if (!cacheStrict && (production || argv.cache === false)) {
-  cacheDir = '';
-}
-if (process.env.np_cache) {
-  cacheDir = process.env.np_cache;
-}
-
-let forbiddenLicenses = argv['forbidden-licenses'];
-forbiddenLicenses = forbiddenLicenses ? forbiddenLicenses.split(',') : null;
-
-const flatten = argv.flatten;
-
-// example: np --registry xx --registry xxxx
-let registry = (Array.isArray(argv.registry) ? argv.registry[0] : argv.registry) || process.env.npm_registry;
-const offline = !!argv.offline;
-if (offline && !cacheDir) {
-  console.error(
-    chalk.red(
-      'np ERROR --offline needs the disk cache, it can not be used with --no-cache, or --production without --cache-strict'
-    )
-  );
-  process.exit(1);
-}
-// 未指定 registry 或指定的是 npmmirror / npmjs 时自动换源, 指定私有源时全部关闭; 指定公共源时跳过测速并以它优先
-const preferSource = registry ? mirror.sourceOf(registry) : null;
-const autoMirror = !registry || !!preferSource;
-// for env.npm_config_registry
-registry = registry || 'https://registry.npmjs.com';
-
-const env = {
-  npm_config_registry: registry,
-  // set npm_config_argv
-  // see https://github.com/cnpm/npminstall/issues/121#issuecomment-247836741
-  npm_config_argv: JSON.stringify({
-    remain: [],
-    cooked: originalArgv,
-    original: originalArgv,
-  }),
-  // user-agent
-  npm_config_user_agent: globalConfig.userAgent,
-  // https://github.com/sass/node-sass/blob/master/lib/extensions.js#L270
-  // make sure npm_config_cache env exists
-  npm_config_cache: defaultCacheDir,
-};
-// https://github.com/npm/npm/blob/2005f4ce11f6cdf142f8a77f4f7ee4996000fb57/lib/utils/lifecycle.js#L67
-env.npm_node_execpath = env.NODE = process.env.NODE || process.execPath;
-env.npm_execpath = require.main.filename;
-
-// npm cli will auto set options to npm_xx env.
-for (const key in argv) {
-  const value = argv[key];
-  if (value && typeof value === 'string') {
-    env['npm_config_' + key] = value;
+module.exports = async function install(args, { ignorePkgNames = false } = {}) {
+  try {
+    await main(args, { ignorePkgNames });
+  } catch (err) {
+    utils.exitWithError('np', err);
   }
-}
+};
 
-debug('argv: %j, env: %j', argv, env);
+async function main(args, { ignorePkgNames = false } = {}) {
+  const originalArgv = args;
 
-(async () => {
+  // since minimist consider --no-xx is xx:false, we handle it manually here
+  const argv = { 'no-save': originalArgv.includes('--no-save') };
+  Object.assign(
+    argv,
+    parseArgs(originalArgv, {
+      string: [
+        'root',
+        'registry',
+        'prefix',
+        'forbidden-licenses',
+        // {"http://a.com":"http://b.com"}
+        'tarball-url-mapping',
+        // --proxy 已移除: urllib 3 不支持 proxy / enableProxy 参数, 传入后请求仍直连
+        'dependencies-tree',
+        // np foo --workspace=aa
+        // np foo -w aa
+        'workspace',
+        /**
+         * set package-lock.json path
+         *
+         * 1. only support package lock v2 and v3.
+         * 2. np doesn't inspect <cwd>/package-lock.json by default.
+         * 3. because arborist doesn't support client/build/isomorphic dependencies,
+         *    these kinds of dependencies will all be ignored.
+         * 4. this option doesn't do extra check for the equivalence of package-lock.json and package.json
+         *    simply behaves like `npm ci` but doesn't remove the node_modules in advance.
+         * 5. you're not supposed to install extra dependencies along with a lockfile.
+         */
+        'lockfile-path',
+        'public-hoist-pattern',
+      ],
+      boolean: [
+        'version',
+        'help',
+        'production',
+        'client',
+        'global',
+        'save',
+        'save-dev',
+        'save-optional',
+        'save-client',
+        'save-build',
+        'save-isomorphic',
+        // Saved dependencies will be configured with an exact version rather than using npm's default semver range operator.
+        'save-exact',
+        'ignore-scripts',
+        // run scripts on foreground, default is background
+        'foreground-scripts',
+        // install ignore optionalDependencies
+        'optional',
+        'detail',
+        'trace',
+        'engine-strict',
+        'flatten',
+        'registry-only',
+        'cache-strict',
+        'fix-bug-versions',
+        // --prune 已移除: 按固定名单跳过解压文件会误删 tsconfig.json 等运行时文件
+        'save-dependencies-tree',
+        'fetch-only',
+        // --force-link-latest 已移除: 提升到根目录时始终链接最高版本
+        'dedup',
+        'workspaces',
+        'offline',
+        'refresh-cache',
+        'rebuild',
+      ],
+      default: {
+        optional: true,
+      },
+      alias: {
+        // npm install [-S|--save|-D|--save-dev|-O|--save-optional] [-E|--save-exact] [-d|--detail] [-w|--workspace]
+        S: 'save',
+        D: 'save-dev',
+        O: 'save-optional',
+        E: 'save-exact',
+        v: 'version',
+        h: 'help',
+        g: 'global',
+        r: 'registry',
+        d: 'detail',
+        w: 'workspace',
+      },
+    })
+  );
+
+  if (argv.version) {
+    console.log(`np v${require('../../package.json').version}`);
+    process.exit(0);
+  }
+
+  if (argv.help && argv['fetch-only']) {
+    console.log(help.fetch());
+    process.exit(0);
+  }
+
+  if (argv.help && argv.rebuild) {
+    console.log(help.rebuild());
+    process.exit(0);
+  }
+
+  if (argv.help) {
+    console.log(help.install());
+    process.exit(0);
+  }
+
+  const pkgs = [];
+
+  if (ignorePkgNames) {
+    // ignore all package names on update
+    argv._ = [];
+  }
+
+  const context = new Context();
+  for (const name of argv._) {
+    context.nested.update([name]);
+    const [aliasPackageName] = parsePackageName(name, context.nested);
+    const p = npa(name, { where: argv.root, nested: context.nested });
+    pkgs.push({
+      name: p.name,
+      // `mozilla/nunjucks#0f8b21b8df7e8e852b2e1889388653b7075f0d09` should be rawSpec
+      version: p.fetchSpec || p.rawSpec,
+      type: p.type,
+      alias: aliasPackageName,
+      arg: p,
+    });
+  }
+
+  let root = argv.root || process.cwd();
+  if (Array.isArray(root)) {
+    // use last one, e.g.: $ np --root=abc --root=def
+    root = root[root.length - 1];
+  }
+  let installOnAllWorkspaces = argv.workspaces;
+  let installWorkspaceNames = utils.formatWorkspaceNames(argv);
+  const production = argv.production || process.env.NODE_ENV === 'production';
+  const cacheStrict = argv['cache-strict'];
+  // support npm_config_cache to change default cache dir
+  const defaultCacheDir = process.env.npm_config_cache || path.join(os.homedir(), '.np_tarball');
+  let cacheDir = defaultCacheDir;
+  if (!cacheStrict && (production || argv.cache === false)) {
+    cacheDir = '';
+  }
+  if (process.env.np_cache) {
+    cacheDir = process.env.np_cache;
+  }
+
+  let forbiddenLicenses = argv['forbidden-licenses'];
+  forbiddenLicenses = forbiddenLicenses ? forbiddenLicenses.split(',') : null;
+
+  const flatten = argv.flatten;
+
+  // example: np --registry xx --registry xxxx
+  let registry = (Array.isArray(argv.registry) ? argv.registry[0] : argv.registry) || process.env.npm_registry;
+  const offline = !!argv.offline;
+  // rebuild 优先用磁盘缓存中的 manifest 与 tgz, 缓存缺失时才联网
+  const preferOffline = !!argv.rebuild && !offline;
+  if (offline && !cacheDir) {
+    console.error(
+      chalk.red(
+        'np ERROR --offline needs the disk cache, it can not be used with --no-cache, or --production without --cache-strict'
+      )
+    );
+    process.exit(1);
+  }
+  // 未指定 registry 或指定的是 npmmirror / npmjs 时自动换源, 指定私有源时全部关闭; 指定公共源时跳过测速并以它优先
+  const preferSource = registry ? mirror.sourceOf(registry) : null;
+  const autoMirror = !registry || !!preferSource;
+  // for env.npm_config_registry
+  registry = registry || 'https://registry.npmjs.com';
+
+  const env = {
+    npm_config_registry: registry,
+    // set npm_config_argv
+    // see https://github.com/cnpm/npminstall/issues/121#issuecomment-247836741
+    npm_config_argv: JSON.stringify({
+      remain: [],
+      cooked: originalArgv,
+      original: originalArgv,
+    }),
+    // user-agent
+    npm_config_user_agent: globalConfig.userAgent,
+    // https://github.com/sass/node-sass/blob/master/lib/extensions.js#L270
+    // make sure npm_config_cache env exists
+    npm_config_cache: defaultCacheDir,
+  };
+  // https://github.com/npm/npm/blob/2005f4ce11f6cdf142f8a77f4f7ee4996000fb57/lib/utils/lifecycle.js#L67
+  env.npm_node_execpath = env.NODE = process.env.NODE || process.execPath;
+  // 固定为 np 命令入口: 经 np-x 分派时 require.main 是 x.js, 依赖脚本用 npm_execpath 执行 install 会被当作子命令解析
+  env.npm_execpath = path.join(__dirname, '../../bin/i.js');
+
+  // npm cli will auto set options to npm_xx env.
+  for (const key in argv) {
+    const value = argv[key];
+    if (value && typeof value === 'string') {
+      env['npm_config_' + key] = value;
+    }
+  }
+
+  debug('argv: %j, env: %j', argv, env);
+
   const { workspaceRoots, workspacesMap } = await utils.readWorkspaces(root);
   // don't enable workspace on global install
   const enableWorkspace = !argv.global && workspacesMap.size > 0;
@@ -310,14 +250,15 @@ debug('argv: %j, env: %j', argv, env);
   let mirrorState;
 
   if (autoMirror) {
-    // offline 时不测速, 但仍按公共源处理, 使缓存键与在线时一致
-    const probed = offline
-      ? mirror.defaultOrder({ prefer: preferSource })
-      : await mirror.probe({ prefer: preferSource, globalOptions: { console } });
+    // offline 与 rebuild 优先离线时不测速, 但仍按公共源处理, 使缓存键与在线时一致
+    const probed =
+      offline || preferOffline
+        ? mirror.defaultOrder({ prefer: preferSource })
+        : await mirror.probe({ prefer: preferSource, globalOptions: { console } });
     binaryMirrors = probed.binaryMirrorConfig?.mirrors?.china;
     if (!binaryMirrors) {
       try {
-        binaryMirrors = await utils.getBinaryMirrors(registry, { offline, cacheDir });
+        binaryMirrors = await utils.getBinaryMirrors(registry, { offline, preferOffline, cacheDir });
       } catch (err) {
         console.warn(chalk.yellow('np WARN load binary mirror config error: %s'), err.message);
         binaryMirrors = {};
@@ -355,6 +296,7 @@ debug('argv: %j, env: %j', argv, env);
     // install on one workspace package
     isWorkspacePackage: false,
     offline,
+    preferOffline,
     deferPeerCheck: enableWorkspace,
     // 本次只安装部分依赖树, 已提升的链接只允许升级不允许降级
     partialInstall: pkgs.length > 0 || installWorkspaceNames.length > 0 || !!installOnAllWorkspaces,
@@ -364,6 +306,7 @@ debug('argv: %j, env: %j', argv, env);
   // get config from npm settings instead of following user's specification,
   // should migrate to ?? or typeof.
   config.ignoreScripts = argv['ignore-scripts'] || getIgnoreScripts();
+  config.rebuild = argv.rebuild;
   config.foregroundScripts = argv['foreground-scripts'];
   config.ignoreOptionalDependencies = !argv.optional;
   config.detail = argv.detail;
@@ -388,7 +331,7 @@ debug('argv: %j, env: %j', argv, env);
   }
 
   if (argv['fix-bug-versions']) {
-    const packageVersionMapping = await utils.getBugVersions(registry, { offline, cacheDir });
+    const packageVersionMapping = await utils.getBugVersions(registry, { offline, preferOffline, cacheDir });
     config.autoFixVersion = function autoFixVersion(name, version) {
       const fixVersions = packageVersionMapping[name];
       return (fixVersions && fixVersions[version]) || null;
@@ -432,14 +375,32 @@ debug('argv: %j, env: %j', argv, env);
   });
 
   if (config.offline) {
-    console.warn(chalk.yellow('np WARN running on offline mode'));
+    console.warn(chalk.yellow('np WARN running in offline mode'));
   }
 
   if (argv['fetch-only']) {
     if (argv.global || pkgs.length === 0 || installOnAllWorkspaces || installWorkspaceNames.length > 0) {
-      throw new Error('np-fetch needs at least one package and does not support -g, -w or --workspaces');
+      throw new Error('np-x fetch needs at least one package and does not support -g, -w or --workspaces');
     }
     await fetchOnly(config, context);
+    return;
+  }
+
+  if (argv.rebuild && pkgs.length > 0) {
+    if (argv.global || installOnAllWorkspaces || installWorkspaceNames.length > 0) {
+      throw new Error('np-x rebuild <pkg> does not support -g, -w or --workspaces');
+    }
+    config.rebuildSpecs = pkgs.map(pkg => {
+      // 只接受包名与版本范围: <name>, <name>@<version>, <name>@<range>
+      const bare = pkg.type === 'tag' && !pkg.arg.rawSpec;
+      if (!pkg.name || (!bare && pkg.type !== 'version' && pkg.type !== 'range')) {
+        throw new Error(`np-x rebuild only accepts <name>[@<version range>], got ${pkg.arg.raw}`);
+      }
+      return { raw: pkg.arg.raw, name: pkg.name, range: bare ? null : pkg.version };
+    });
+    config.env.npm_rootpath = process.env.npm_rootpath || root;
+    config.env.INIT_CWD = process.env.INIT_CWD || root;
+    await rebuild(config);
     return;
   }
 
@@ -471,7 +432,7 @@ debug('argv: %j, env: %j', argv, env);
       }
     }
     if (!(await utils.exists(path.join(root, 'package.json')))) {
-      console.warn(chalk.yellow(`np WARN package.json not exists: ${path.join(root, 'package.json')}`));
+      console.warn(chalk.yellow(`np WARN package.json does not exist: ${path.join(root, 'package.json')}`));
     }
   }
 
@@ -536,10 +497,19 @@ debug('argv: %j, env: %j', argv, env);
   }
 
   // main installation logic
+  // 一个 workspace 有包失败时继续安装其余 workspace, 最后统一汇总
+  const failures = [];
   for (const installConfig of installRootConfigs) {
     installConfig.env.npm_rootpath = process.env.npm_rootpath || installConfig.root;
     installConfig.env.INIT_CWD = process.env.INIT_CWD || installConfig.root;
-    await installLocal(installConfig, context);
+    try {
+      await installLocal(installConfig, context);
+    } catch (err) {
+      if (err.code !== utils.INSTALL_FAILURES_CODE) throw err;
+      failures.push(...err.failures);
+      console.log('');
+      continue;
+    }
     console.log('');
 
     if (pkgs.length > 0) {
@@ -565,9 +535,8 @@ debug('argv: %j, env: %j', argv, env);
     }
   }
   await validatePendingPeerDependencies(context);
-})().catch(err => {
-  utils.exitWithError('np', err);
-});
+  if (failures.length > 0) throw utils.installFailuresError(failures);
+}
 
 let _versionSavePrefix = null;
 function getVersionSavePrefix() {

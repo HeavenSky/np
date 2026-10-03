@@ -2,7 +2,7 @@ const assert = require('node:assert');
 const path = require('node:path');
 const coffee = require('coffee');
 const { rimraf, exists } = require('../lib/utils');
-const npminstall = path.join(__dirname, '..', 'bin', 'install.js');
+const npminstall = path.join(__dirname, '../bin/i.js');
 
 describe('test/install-ignore-optional.test.js', () => {
   let cwd;

@@ -171,12 +171,35 @@ exports.readPackageJSON = async root => {
 };
 
 const INSTALL_DONE_KEY = '__np_done';
+// 包安装中断或失败时停在的阶段: deps, 下一个要执行的生命周期脚本名, 或 finish; 本次运行没有失败时统一删除该键
+const INSTALL_STAGE_KEY = '__np_stage';
+exports.FIRST_INSTALL_STAGE = 'deps';
+// finish: 包自身的步骤已完成, 但同一次运行中有包失败, 下次运行仍要遍历它的子依赖才能找到失败的包
+exports.FINISH_INSTALL_STAGE = 'finish';
 
-// 设置 pkg 安装完成的标记
-exports.setInstallDone = async pkgRoot => {
+// 设置 pkg 解压完成的标记, 同一次写入记下起始阶段, 避免中断在两次写入之间时包被当作已完成
+exports.setInstallDone = async (pkgRoot, stage) => {
   await exports.addMetaToJSONFile(path.join(pkgRoot, 'package.json'), {
     [INSTALL_DONE_KEY]: true,
+    [INSTALL_STAGE_KEY]: stage,
   });
+};
+
+// stage 为 undefined 时删除阶段标记
+exports.setInstallStage = async (pkgRoot, stage) => {
+  await exports.addMetaToJSONFile(path.join(pkgRoot, 'package.json'), {
+    [INSTALL_STAGE_KEY]: stage,
+  });
+};
+
+// 已解压的包要从哪个阶段继续; 无标记表示已完成, --rebuild 时先写回起始阶段再从头执行, 中断后仍能继续
+exports.getResumeStage = async (pkgRoot, options) => {
+  if (options.rebuild) {
+    await exports.setInstallStage(pkgRoot, exports.FIRST_INSTALL_STAGE);
+    return exports.FIRST_INSTALL_STAGE;
+  }
+  const pkg = await exports.readJSON(path.join(pkgRoot, 'package.json'));
+  return pkg[INSTALL_STAGE_KEY];
 };
 
 exports.unsetInstallDone = async pkgRoot => {
@@ -202,10 +225,10 @@ exports.isInstallDone = async pkgRoot => {
   return !!pkg[INSTALL_DONE_KEY];
 };
 
-// 只认显式的 false: fetch-only 解压或安装失败留下的包; 不带标记的包可能由 npm 等其他工具装出, 不算未完成
+// 只认显式的 false 与阶段标记: fetch-only 留下的包与安装中断或失败的包; 不带标记的包可能由 npm 等其他工具装出, 不算未完成
 exports.isInstallUnfinished = async pkgRoot => {
   const pkg = await exports.readJSON(path.join(pkgRoot, 'package.json'));
-  return pkg[INSTALL_DONE_KEY] === false;
+  return pkg[INSTALL_DONE_KEY] === false || !!pkg[INSTALL_STAGE_KEY];
 };
 
 exports.addMetaToJSONFile = async (filepath, meta) => {
@@ -350,7 +373,7 @@ exports.runScript = async (pkgDir, script, globalOptions, runInForeground = fals
   // replace `npm install xxx` to `np xxx`
   const NPM_INSTALL_RE = /^npm (i|install) /;
   if (NPM_INSTALL_RE.test(script)) {
-    const npBin = path.join(__dirname, '../bin/install.js');
+    const npBin = path.join(__dirname, '../bin/i.js');
     const newScript = script.replace(NPM_INSTALL_RE, `${process.execPath} ${npBin} `);
     globalOptions.console.info('[np:runScript] replace %j to %j', script, newScript);
     script = newScript;
@@ -541,11 +564,11 @@ exports.copyInstall = async (src, options) => {
   // 5. if not installed, copy and return with exists = false
   const pkgpath = path.join(src, 'package.json');
   if (!(await exports.exists(pkgpath))) {
-    throw new Error(`package.json missed(${pkgpath})`);
+    throw new Error(`package.json is missing (${pkgpath})`);
   }
   const realPkg = await exports.readPackageJSON(src);
   if (!realPkg.name || !realPkg.version) {
-    throw new Error(`package.json must contains name and version(${pkgpath})`);
+    throw new Error(`package.json must contain name and version (${pkgpath})`);
   }
 
   const targetdir = options.ungzipDir || exports.getPackageStorePath(options.storeDir, realPkg, options);
@@ -573,8 +596,11 @@ exports.copyInstall = async (src, options) => {
   if (!(await exports.isInstallDone(targetdir))) {
     await fse.emptyDir(targetdir);
     await fse.copy(src, targetdir);
-    await exports.setInstallDone(targetdir);
+    await exports.setInstallDone(targetdir, exports.FIRST_INSTALL_STAGE);
     result.exists = false;
+  } else {
+    // 只有本次运行第一个到达的调用方带回阶段, 由它继续安装; 其余调用方只做链接
+    result.stage = await exports.getResumeStage(targetdir, options);
   }
 
   options.cache[key].done = true;
@@ -620,11 +646,11 @@ async function getRemotePackage(name, registry, globalOptions) {
   if (globalOptions?.cacheDir) {
     cachePkgFile = path.join(globalOptions.cacheDir, cachePkgFileName);
   }
-  if (globalOptions?.offline) {
-    if (cachePkgFile && (await exports.exists(cachePkgFile))) {
-      pkg = await exports.readJSON(cachePkgFile);
-    }
-  } else {
+  // preferOffline: 有缓存就用缓存, 没有才联网
+  const cacheFirst = globalOptions?.offline || globalOptions?.preferOffline;
+  if (cacheFirst && cachePkgFile && (await exports.exists(cachePkgFile))) {
+    pkg = await exports.readJSON(cachePkgFile);
+  } else if (!globalOptions?.offline) {
     const registries = [registry].concat([
       'https://registry.npmmirror.com',
       'https://r.cnpmjs.org',
@@ -902,8 +928,28 @@ exports.getWorkspaceInfos = async (root, workspaceNameOrPaths, workspacesMap = n
   return workspaceInfos;
 };
 
+// 安装结束时汇总本次失败的包; 失败的包与它们的上层包都保留阶段标记, 再次运行从停下的地方继续
+exports.installFailuresError = (failures, hint = 'run np again to continue from where they stopped') => {
+  const lines = failures.map(({ displayName, error }) => `  - ${displayName}: ${String(error.message).split('\n')[0]}`);
+  const err = new Error(`${failures.length} package(s) failed, ${hint}:\n${lines.join('\n')}`);
+  err.code = INSTALL_FAILURES_CODE;
+  err.failures = failures;
+  return err;
+};
+const INSTALL_FAILURES_CODE = 'NP_INSTALL_FAILURES';
+exports.INSTALL_FAILURES_CODE = INSTALL_FAILURES_CODE;
+
+// 本次运行写过阶段标记且没有失败的包, 在整次运行没有失败时统一清除标记
+exports.clearInstallStages = async options => {
+  for (const dir of options.stagedDirs) {
+    await exports.setInstallStage(dir);
+  }
+  options.stagedDirs.clear();
+};
+
 exports.exitWithError = (cmd, err, code = 1) => {
-  console.error(chalk.red(err.stack));
+  // 失败汇总已列出每个包的错误, 不再打印调用栈
+  console.error(chalk.red(err.code === INSTALL_FAILURES_CODE ? err.message : err.stack));
   console.error(chalk.yellow(`${cmd} version: %s`), require('../package.json').version);
   console.error(chalk.yellow(`${cmd} argv: %s`), process.argv.join(' '));
   console.log('');

@@ -1,0 +1,8 @@
+{
+  "name": "resume-scripts",
+  "version": "1.0.0",
+  "scripts": {
+    "preinstall": "node log.js preinstall",
+    "postinstall": "node log.js postinstall"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "keep-going-ok",
+  "version": "1.0.0",
+  "scripts": {
+    "postinstall": "node log.js ok-postinstall"
+  }
+}

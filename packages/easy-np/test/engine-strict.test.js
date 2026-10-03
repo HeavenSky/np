@@ -28,7 +28,7 @@ describe('test/engine-strict.test.js', () => {
           cwd: tmp,
         })
         // .debug()
-        .expect('stderr', /Install fail! UnSupportedNodeError/)
+        .expect('stderr', /1 package\(s\) failed[\s\S]*is incompatible with express@1/)
         .expect('code', 1)
         .end()
     );

@@ -4,7 +4,7 @@ const assertFile = require('assert-file');
 const helper = require('./helper');
 
 describe('test/update.test.js', () => {
-  const npmupdate = path.join(__dirname, '../bin/update.js');
+  const npmupdate = path.join(__dirname, '../bin/x.js');
   const cwd = helper.fixtures('update');
   const cleanup = helper.cleanup(cwd);
 
@@ -22,7 +22,7 @@ describe('test/update.test.js', () => {
 
   it('should update ok', async () => {
     await coffee
-      .fork(npmupdate, [], {
+      .fork(npmupdate, ['update'], {
         cwd,
         stdio: 'pipe',
       })
@@ -34,7 +34,7 @@ describe('test/update.test.js', () => {
 
   it('should update --clean-only', async () => {
     await coffee
-      .fork(npmupdate, ['--clean-only'], {
+      .fork(npmupdate, ['update', '--clean-only'], {
         cwd,
         stdio: 'pipe',
       })
@@ -46,7 +46,7 @@ describe('test/update.test.js', () => {
 
   it('should update pedding ok', async () => {
     await coffee
-      .fork(npmupdate, ['pedding'], {
+      .fork(npmupdate, ['update', 'pedding'], {
         cwd,
         stdio: 'pipe',
       })

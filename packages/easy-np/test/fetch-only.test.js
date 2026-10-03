@@ -1,4 +1,4 @@
-// np-fetch 只下载解压指定的包, 不装依赖, 不跑脚本, 不改 package.json
+// np-x fetch 只下载解压指定的包, 不装依赖, 不跑脚本, 不改 package.json
 
 const assert = require('node:assert');
 const path = require('node:path');
@@ -6,7 +6,7 @@ const fs = require('node:fs/promises');
 const coffee = require('coffee');
 const helper = require('./helper');
 
-const npdfetch = path.join(__dirname, '../bin/fetch.js');
+const npdfetch = path.join(__dirname, '../bin/x.js');
 
 describe('test/fetch-only.test.js', () => {
   const [tmp, cleanup] = helper.tmp();
@@ -28,7 +28,7 @@ describe('test/fetch-only.test.js', () => {
   }
 
   function fetch(...args) {
-    return coffee.fork(npdfetch, args, { cwd: tmp }).debug();
+    return coffee.fork(npdfetch, ['fetch', ...args], { cwd: tmp }).debug();
   }
 
   it('should only extract the listed packages without dependencies or package.json changes', async () => {
@@ -82,14 +82,14 @@ describe('test/fetch-only.test.js', () => {
   it('should reject git packages', async () => {
     await fetch('github:debug-js/debug')
       .expect('code', 1)
-      .expect('stderr', /np-fetch does not support git package/)
+      .expect('stderr', /np-x fetch does not support git package/)
       .end();
   });
 
   it('should fail without packages', async () => {
     await fetch()
       .expect('code', 1)
-      .expect('stderr', /np-fetch needs at least one package/)
+      .expect('stderr', /np-x fetch needs at least one package/)
       .end();
   });
 });

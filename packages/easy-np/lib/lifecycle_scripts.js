@@ -22,7 +22,16 @@ exports.DEFAULT_ROOT_SCRIPTS = [
 // scripts that should run in dependencies
 exports.DEFAULT_DEP_SCRIPTS = ['preinstall', 'install', 'postinstall'];
 
-exports.runLifecycleScripts = async function runLifecycleScripts(pkg, root, originPkg, displayName, globalOptions) {
+// stage: 依赖包上次停在的阶段, 从该脚本继续并逐个推进阶段标记; 根包不传, 不写标记
+// 返回可选依赖第一个失败的脚本名, 其余失败直接抛出
+exports.runLifecycleScripts = async function runLifecycleScripts(
+  pkg,
+  root,
+  originPkg,
+  displayName,
+  globalOptions,
+  stage
+) {
   const scripts = pkg.scripts || {};
 
   // https://docs.npmjs.com/misc/scripts#default-values
@@ -52,12 +61,15 @@ exports.runLifecycleScripts = async function runLifecycleScripts(pkg, root, orig
   const mirrorState = scriptList === exports.DEFAULT_DEP_SCRIPTS && globalOptions.mirror;
   const binarySource = { current: mirrorState && mirrorState.binaryOrder[0] };
 
-  for (const script of scriptList) {
+  // 可选依赖的脚本失败后继续执行后续脚本, 但阶段停在第一个失败的脚本, 下次运行重试
+  let failedScript;
+  for (const script of scriptList.slice(Math.max(scriptList.indexOf(stage), 0))) {
     const cmd = scripts[script];
     if (!cmd) {
       continue;
     }
 
+    if (stage) await utils.setInstallStage(root, script);
     if (runInForeground) console.info('> %s %s %s %s> %s', displayName, script, root, os.EOL, cmd);
     const startTime = Date.now();
     try {
@@ -70,17 +82,12 @@ exports.runLifecycleScripts = async function runLifecycleScripts(pkg, root, orig
         cmd,
         error
       );
-      // If post install execute error, make sure this package won't be skipped during next installation.
-      try {
-        await utils.unsetInstallDone(root);
-      } catch (e) {
-        globalOptions.console.warn(chalk.yellow(`unsetInstallDone: ${root} error: ${e}, ignore it`));
-      }
       if (originPkg.optional) {
         globalOptions.console.warn(chalk.red('%s optional error: %s'), displayName, error.stack);
+        failedScript = failedScript || script;
         continue;
       }
-      error.message = `run ${script} error, please remove node_modules before retry!\n${error.message}`;
+      error.message = `run ${script} error\n${error.message}`;
       throw error;
     } finally {
       const ts = Date.now() - startTime;
@@ -89,6 +96,7 @@ exports.runLifecycleScripts = async function runLifecycleScripts(pkg, root, orig
       globalOptions.runscriptTime += ts;
     }
   }
+  return failedScript;
 };
 
 async function runScriptWithMirrors(root, cmd, displayName, script, binarySource, globalOptions, runInForeground) {

@@ -61,13 +61,13 @@ describe('test/install-workspaces-edge.test.js', () => {
       .end();
   });
 
-  it('should keep other workspaces working after np-update -w', async () => {
+  it('should keep other workspaces working after np-x update -w', async () => {
     await workspace({
       'packages/x': { name: 'pkg-x', dependencies: { ms: '2.1.3' } },
       'packages/y': { name: 'pkg-y', dependencies: { pedding: '1.1.0' } },
     });
     await run(helper.npminstall).expect('code', 0).end();
-    await run(helper.npmupdate, ['-w', 'pkg-x']).expect('code', 0).end();
+    await run(helper.x, ['update', '-w', 'pkg-x']).expect('code', 0).end();
     assert.equal(require(path.join(tmp, 'packages/y/node_modules/pedding/package.json')).version, '1.1.0');
     assert.equal(require(path.join(tmp, 'packages/x/node_modules/ms/package.json')).version, '2.1.3');
   });
@@ -190,7 +190,7 @@ describe('test/install-workspaces-edge.test.js', () => {
     });
   });
 
-  describe('np-uninstall hoisted links', () => {
+  describe('np-x uninstall hoisted links', () => {
     const rootLink = name => path.join(tmp, 'node_modules', name);
 
     it('should remove hoisted link when no workspace uses the package', async () => {
@@ -200,7 +200,7 @@ describe('test/install-workspaces-edge.test.js', () => {
       });
       await run(helper.npminstall, ['--dedup']).expect('code', 0).end();
       assert(await exists(rootLink('pedding')));
-      await run(helper.npmuninstall, ['pedding', '-w', 'pkg-x']).expect('code', 0).end();
+      await run(helper.x, ['uninstall', 'pedding', '-w', 'pkg-x']).expect('code', 0).end();
       assert(!(await exists(rootLink('pedding'))));
     });
 
@@ -210,7 +210,7 @@ describe('test/install-workspaces-edge.test.js', () => {
         'packages/y': { name: 'pkg-y', dependencies: { pedding: '1.1.0' } },
       });
       await run(helper.npminstall, ['--dedup']).expect('code', 0).end();
-      await run(helper.npmuninstall, ['pedding', '-w', 'pkg-x']).expect('code', 0).end();
+      await run(helper.x, ['uninstall', 'pedding', '-w', 'pkg-x']).expect('code', 0).end();
       assert(await exists(rootLink('pedding')));
     });
 
@@ -220,7 +220,7 @@ describe('test/install-workspaces-edge.test.js', () => {
         'packages/y': { name: 'pkg-y', dependencies: { debug: '4.4.3' } },
       });
       await run(helper.npminstall, ['--dedup']).expect('code', 0).end();
-      await run(helper.npmuninstall, ['ms', '-w', 'pkg-x']).expect('code', 0).end();
+      await run(helper.x, ['uninstall', 'ms', '-w', 'pkg-x']).expect('code', 0).end();
       assert(await exists(rootLink('ms')));
     });
   });

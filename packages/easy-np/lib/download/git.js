@@ -7,13 +7,13 @@ const utils = require('../utils');
 
 module.exports = async (pkg, options) => {
   if (options.offline) {
-    throw new Error(`Can't install ${pkg.raw} on offline mode: git packages are always fetched from the network`);
+    throw new Error(`Can't install ${pkg.raw} in offline mode: git packages are always fetched from the network`);
   }
   const { name, raw, displayName } = pkg;
 
   options.gitPackages++;
   options.console.warn(
-    chalk.yellow(`[${displayName}] install ${name || ''} from git ${raw}, may be very slow, please keep patience`)
+    chalk.yellow(`[${displayName}] install ${name || ''} from git ${raw}, may be very slow, please be patient`)
   );
   // 外层 npm/npx 会把 allow-scripts 导出为该环境变量, pacote 为 git 依赖执行 npm install 时继承它会被 npm 12 以 EALLOWSCRIPTS 拒绝;
   // 删除后子进程 npm 改从 .npmrc 读取同一配置

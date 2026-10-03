@@ -20,14 +20,14 @@ describe('test/uninstallGlobal.test.js', () => {
 
     if (process.platform === 'win32') {
       await coffee
-        .fork(require.resolve('../bin/uninstall'), [`--prefix=${tmp}`, '-g', 'mocha'])
+        .fork(require.resolve('../bin/x'), ['uninstall', `--prefix=${tmp}`, '-g', 'mocha'])
         .debug()
         .expect('stdout', /- mocha /)
         .expect('code', 0)
         .end();
     } else {
       await coffee
-        .fork(require.resolve('../bin/uninstall'), [`--prefix=${tmp}`, '-g', 'mocha'])
+        .fork(require.resolve('../bin/x'), ['uninstall', `--prefix=${tmp}`, '-g', 'mocha'])
         .debug()
         .expect('stdout', /- mocha \.[/\\]test[/\\]fixtures[/\\]\.tmp_[\w-]+[/\\]lib[/\\]node_modules[/\\]mocha/)
         .expect('stdout', /- mocha \.[/\\]test[/\\]fixtures[/\\]\.tmp_[\w-]+[/\\]bin[/\\]mocha/)
@@ -55,7 +55,7 @@ describe('test/uninstallGlobal.test.js', () => {
     }
 
     await coffee
-      .fork(require.resolve('../bin/uninstall'), [`--prefix=${tmp}`, '-g', 'mocha'])
+      .fork(require.resolve('../bin/x'), ['uninstall', `--prefix=${tmp}`, '-g', 'mocha'])
       .debug()
       .expect('code', 0)
       .end();

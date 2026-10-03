@@ -5,7 +5,7 @@ const utils = require('../utils');
 
 module.exports = async (pkg, options) => {
   if (options.offline) {
-    throw new Error(`Can't install ${pkg.raw} on offline mode: remote packages are always fetched from the network`);
+    throw new Error(`Can't install ${pkg.raw} in offline mode: remote packages are always fetched from the network`);
   }
   const { name, raw, fetchSpec, displayName } = pkg;
 
@@ -13,7 +13,7 @@ module.exports = async (pkg, options) => {
   const remoteUrl = fetchSpec;
   options.console.warn(
     chalk.yellow(
-      `[${displayName}] install ${name || '-'} from remote ${remoteUrl}, may be very slow, please keep patience`
+      `[${displayName}] install ${name || '-'} from remote ${remoteUrl}, may be very slow, please be patient`
     )
   );
   const readstream = await utils.getTarballStream(remoteUrl, options);

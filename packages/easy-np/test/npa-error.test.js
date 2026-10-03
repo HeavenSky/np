@@ -24,7 +24,7 @@ describe('test/npa-error.test.js', () => {
       .debug()
       .expect(
         'stderr',
-        /Error: Invalid tag name ">=\^16.0.0": Tags may not have any characters that encodeURIComponent encodes. package: root › create-table-picker@0.1.2 › react-hovertable@\^0.3.0 › react@>=\^16.0.0/
+        /package\(s\) failed[\s\S]*: Invalid tag name ">=\^16.0.0": Tags may not have any characters that encodeURIComponent encodes. package: root › create-table-picker@0.1.2 › react-hovertable@\^0.3.0 › react@>=\^16.0.0/
       )
       .expect('code', 1)
       .end();
@@ -40,7 +40,7 @@ describe('test/npa-error.test.js', () => {
       .debug()
       .expect(
         'stderr',
-        /Error: Invalid tag name ">=\^16.0.0": Tags may not have any characters that encodeURIComponent encodes. package: root › create-table-picker@0.1.2 › react-hovertable@\^0.3.0 › react@>=\^16.0.0/
+        /package\(s\) failed[\s\S]*: Invalid tag name ">=\^16.0.0": Tags may not have any characters that encodeURIComponent encodes. package: root › create-table-picker@0.1.2 › react-hovertable@\^0.3.0 › react@>=\^16.0.0/
       )
       .expect('code', 1)
       .end();

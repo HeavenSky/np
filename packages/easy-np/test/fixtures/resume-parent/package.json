@@ -1,0 +1,7 @@
+{
+  "name": "resume-parent",
+  "version": "1.0.0",
+  "dependencies": {
+    "resume-scripts": "file:../resume-scripts"
+  }
+}

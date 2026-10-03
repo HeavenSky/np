@@ -132,7 +132,7 @@ describe('test/install-workpsaces.test.js', () => {
     assertFile(path.join(tmp, 'core/foo/node_modules/pedding'));
 
     // uninstall --workspaces
-    await coffee.fork(helper.npmuninstall, ['pedding', '--workspaces'], { cwd: tmp }).debug().expect('code', 0).end();
+    await coffee.fork(helper.x, ['uninstall', 'pedding', '--workspaces'], { cwd: tmp }).debug().expect('code', 0).end();
     pkg = await helper.readJSON(path.join(tmp, 'packages/a/package.json'));
     assert.equal(pkg.name, 'aa');
     assert.equal(pkg.devDependencies.pedding, undefined);
@@ -143,7 +143,7 @@ describe('test/install-workpsaces.test.js', () => {
     assert.equal(pkg.name, 'foo');
     assert.equal(pkg.devDependencies.pedding, undefined);
     assertFile.fail(path.join(tmp, 'core/foo/node_modules/pedding'));
-    await coffee.fork(helper.npmuninstall, ['pedding'], { cwd: tmp }).debug().expect('code', 0).end();
+    await coffee.fork(helper.x, ['uninstall', 'pedding'], { cwd: tmp }).debug().expect('code', 0).end();
   });
 
   it('should install workspace-package on one workspace', async () => {
@@ -227,7 +227,7 @@ describe('test/install-workpsaces.test.js', () => {
     assert.equal(typeof pkg.dependencies['is-number'], 'string');
     // uninstall should work
     await coffee
-      .fork(helper.npmuninstall, ['is-number', '--save', '--workspace', 'core'], { cwd: root })
+      .fork(helper.x, ['uninstall', 'is-number', '--save', '--workspace', 'core'], { cwd: root })
       .debug()
       .expect('code', 0)
       .end();
@@ -247,10 +247,10 @@ describe('test/install-workpsaces.test.js', () => {
 
   it('should update all on root', async () => {
     await coffee
-      .fork(helper.npmupdate, [], { cwd: root })
+      .fork(helper.x, ['update'], { cwd: root })
       .debug()
       .expect('code', 0)
-      .expect('stdout', /\[np-update] removing/)
+      .expect('stdout', /\[np-x update] removing/)
       .end();
 
     let pkg = await helper.readJSON(path.join(root, 'node_modules/aa/package.json'));
@@ -262,10 +262,10 @@ describe('test/install-workpsaces.test.js', () => {
 
   it('should update one workspace', async () => {
     await coffee
-      .fork(helper.npmupdate, ['-w', 'aa'], { cwd: root })
+      .fork(helper.x, ['update', '-w', 'aa'], { cwd: root })
       .debug()
       .expect('code', 0)
-      .expect('stdout', /\[np-update] removing/)
+      .expect('stdout', /\[np-x update] removing/)
       .end();
 
     let pkg = await helper.readJSON(path.join(root, 'node_modules/aa/package.json'));
@@ -278,10 +278,10 @@ describe('test/install-workpsaces.test.js', () => {
 
     // support workpsace-path
     await coffee
-      .fork(helper.npmupdate, ['-w', 'packages/a'], { cwd: root })
+      .fork(helper.x, ['update', '-w', 'packages/a'], { cwd: root })
       .debug()
       .expect('code', 0)
-      .expect('stdout', /\[np-update] removing/)
+      .expect('stdout', /\[np-x update] removing/)
       .end();
     pkg = await helper.readJSON(path.join(root, 'node_modules/aa/node_modules/abbrev/package.json'));
     assert.equal(pkg.name, 'abbrev');

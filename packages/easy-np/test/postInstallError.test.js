@@ -19,7 +19,8 @@ describe('test/postInstallError.test.js', () => {
         pkgs: [{ name: 'install-error', version: '1.0.0' }],
       });
     } catch (err) {
-      assert(err.message.indexOf('run postinstall error, please remove node_modules before retry!') >= 0);
+      assert(err.message.includes('run np again to continue from where they stopped'));
+      assert(err.message.includes('run postinstall error'));
       throwError = true;
     }
     assert.equal(throwError, true);
@@ -35,6 +36,8 @@ describe('test/postInstallError.test.js', () => {
       .expect('code', 0)
       .expect('stderr', /httpsync@\* optional error: .*Error: Command failed with exit code \d+: sh build\.sh/)
       .expect('stderr', /httpsync@\* run install sh build.sh/)
+      .expect('stderr', /1 optional package\(s\) failed and were skipped/)
+      .expect('stderr', /rerun their scripts with: np-x rebuild httpsync/)
       .expect('stdout', /All packages installed/)
       .end();
   });

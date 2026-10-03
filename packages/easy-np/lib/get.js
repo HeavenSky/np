@@ -135,7 +135,7 @@ async function _get(url, options, retry, globalOptions, hasCache) {
       return await _get(url, options, retry, globalOptions);
     }
     logger.warn(
-      chalk.yellow('[np:get:error] GET %s %s: %s after %s reties, status: %s, headers: %j'),
+      chalk.yellow('[np:get:error] GET %s %s: %s after %s retries, status: %s, headers: %j'),
       url,
       err.name,
       err.message,

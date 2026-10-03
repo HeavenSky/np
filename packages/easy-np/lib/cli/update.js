@@ -1,29 +1,24 @@
-#!/usr/bin/env node
-
 const path = require('node:path');
 const parseArgs = require('minimist');
-const { rimraf, readWorkspaces, getWorkspaceInfos, formatWorkspaceNames, exitWithError } = require('../lib/utils');
+const { rimraf, readWorkspaces, getWorkspaceInfos, formatWorkspaceNames, exitWithError } = require('../utils');
+const help = require('./help');
+const install = require('./install');
 
-function help(root) {
-  console.log(`
-Usage:
-
-  np-update [--root=${root}]
-
-Remove node_modules of root and workspaces, then reinstall.
-
-Options:
-
-  --root: project root directory, default is current working directory
-  -w, --workspace: only clean the given workspace's node_modules then reinstall it, root node_modules and the shared store are kept
-  --clean-only: only remove node_modules, don't reinstall
-  -h, --help: show help
-`);
+function printHelp(root) {
+  console.log(help.update(root));
   process.exit(0);
 }
 
-(async () => {
-  const argv = parseArgs(process.argv.slice(2), {
+module.exports = async function update(args) {
+  try {
+    await main(args);
+  } catch (err) {
+    exitWithError('np-x update', err);
+  }
+};
+
+async function main(args) {
+  const argv = parseArgs(args, {
     string: ['root', 'workspace'],
     boolean: ['help', 'clean-only'],
     alias: {
@@ -33,7 +28,7 @@ Options:
   });
 
   const root = argv.root || process.cwd();
-  if (argv.help) return help(root);
+  if (argv.help) return printHelp(root);
   const installWorkspaceNames = formatWorkspaceNames(argv);
   const { workspaceRoots, workspacesMap } = await readWorkspaces(root);
   let cleanRoots = [];
@@ -49,7 +44,7 @@ Options:
   }
   for (const rootDir of cleanRoots) {
     const nodeModules = path.join(rootDir, 'node_modules');
-    console.log('[np-update] removing %s', nodeModules);
+    console.log('[np-x update] removing %s', nodeModules);
     await rimraf(nodeModules);
   }
   if (argv['clean-only']) {
@@ -57,10 +52,6 @@ Options:
     return;
   }
 
-  console.log('[np-update] reinstall on %s', root);
-  // make sure install ignore all package names
-  process.env.NP_BY_UPDATE = 'true';
-  require('./install');
-})().catch(err => {
-  exitWithError('np-update', err);
-});
+  console.log('[np-x update] reinstall on %s', root);
+  await install(args, { ignorePkgNames: true });
+}

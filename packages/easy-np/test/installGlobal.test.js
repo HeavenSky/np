@@ -18,6 +18,16 @@ describe('test/installGlobal.test.js', () => {
 
   beforeEach(cleanup);
   afterEach(cleanup);
+  it('should keep installing other global packages when one fails', async () => {
+    await coffee
+      .fork(helper.npminstall, [`--prefix=${tmp}`, '-g', 'easy-np-not-exists-test-pkg', 'contributors@0'])
+      .debug()
+      .expect('stderr', /1 package\(s\) failed[\s\S]*easy-np-not-exists-test-pkg/)
+      .expect('code', 1)
+      .end();
+    assert(await exists(path.join(libDir, 'node_modules/contributors')));
+  });
+
   it('should global install work', async () => {
     await coffee
       .fork(helper.npminstall, [
@@ -41,7 +51,7 @@ describe('test/installGlobal.test.js', () => {
     assert(await exists(path.join(libDir, 'node_modules/egg-bin')));
 
     await coffee
-      .fork(require.resolve('../bin/install.js'), [
+      .fork(require.resolve('../bin/i.js'), [
         `--prefix=${tmp}`,
         '-g',
         'contributors',
@@ -61,7 +71,7 @@ describe('test/installGlobal.test.js', () => {
     assert(await exists(path.join(libDir, 'node_modules/egg-bin')));
 
     await coffee
-      .fork(require.resolve('../bin/install.js'), [`--prefix=${tmp}`, '-g', 'contributors@0'])
+      .fork(require.resolve('../bin/i.js'), [`--prefix=${tmp}`, '-g', 'contributors@0'])
       .debug()
       .expect('stdout', /All packages installed/)
       .expect('code', 0)

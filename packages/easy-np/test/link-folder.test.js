@@ -4,7 +4,7 @@ const coffee = require('coffee');
 const helper = require('./helper');
 const { rimraf, exists } = require('../lib/utils');
 
-const npmlink = path.join(__dirname, '../bin/link.js');
+const npmlink = path.join(__dirname, '../bin/x.js');
 
 describe('test/link-folder.test.js', () => {
   const root = helper.fixtures('link-folder');
@@ -20,7 +20,7 @@ describe('test/link-folder.test.js', () => {
 
   it('should link one folder work', async () => {
     await coffee
-      .fork(npmlink, ['./linked-package'], {
+      .fork(npmlink, ['link', './linked-package'], {
         cwd: root,
       })
       .debug()
@@ -32,7 +32,7 @@ describe('test/link-folder.test.js', () => {
 
   it('should link two folder work', async () => {
     await coffee
-      .fork(npmlink, ['./linked-package', './linked-package-2', '-d'], {
+      .fork(npmlink, ['link', './linked-package', './linked-package-2', '-d'], {
         cwd: root,
       })
       .debug()
