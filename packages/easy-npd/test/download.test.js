@@ -6,6 +6,7 @@ const urllib = require('urllib');
 const { MockAgent, setGlobalDispatcher, getGlobalDispatcher } = require('urllib');
 const install = require('./npminstall');
 const helper = require('./helper');
+const utils = require('../lib/utils');
 
 describe('test/download.test.js', () => {
   const [tmp, cleanup] = helper.tmp();
@@ -133,11 +134,16 @@ describe('test/download.test.js', () => {
         });
         throw new Error('should not run this');
       } catch (err) {
-        assert(err.name === 'ShasumNotMatchError');
+        // 失败的包不中止安装, 结束时汇总抛出; 原始错误在 err.failures 中
+        assert.equal(err.code, utils.INSTALL_FAILURES_CODE, err.message);
+        assert.equal(err.failures.length, 1);
+        const { error } = err.failures[0];
+        assert.equal(error.name, 'ShasumNotMatchError');
         assert(
           /real sha1:7f5098d60307b4ef7240c3d693cb20a9473c6074 not equal to remote:00098d60307b4ef7240c3d693cb20a9473c111, download url https:\/\/registry.npmmirror.com\/pedding\/-\/pedding-1.0.0.tgz, download size 2107 \(pedding@1.0.0\)/.test(
-            err.message
-          )
+            error.message
+          ),
+          error.message
         );
       }
     });
@@ -222,7 +228,7 @@ describe('test/download.test.js', () => {
         })
         .debug()
         .beforeScript(path.join(__dirname, 'download.mockScript.js'))
-        .expect('stderr', /skip download for reason darwin dont includes your platform/)
+        .expect('stderr', /skip download because darwin does not include your platform/)
         .expect('code', 1)
         .end();
     });
@@ -236,7 +242,7 @@ describe('test/download.test.js', () => {
         })
         .debug()
         .beforeScript(path.join(__dirname, 'download.mockArchScript.js'))
-        .expect('stderr', /skip download for reason x64 dont includes your arch/)
+        .expect('stderr', /skip download because x64 does not include your arch/)
         .expect('code', 1)
         .end();
     });

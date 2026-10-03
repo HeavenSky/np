@@ -23,6 +23,12 @@ module.exports = function formatInstallOptions(options) {
   options.events.await = awaitEvent;
 
   options.postInstallTasks = [];
+  // 本次运行写过阶段标记的包目录, 脚本全部成功后统一清除
+  options.stagedDirs = new Set();
+  // 失败的包不中止安装: { displayName, error }, 安装结束时汇总
+  options.failures = [];
+  // 失败后被跳过的可选依赖: { displayName, error, name? }, 带 name 的是脚本失败, 可用 rebuild 重跑
+  options.optionalFailures = [];
   // [
   //    {package: pkg, parentDir: 'parentDir', packageDir: 'packageDir'},
   //   ...

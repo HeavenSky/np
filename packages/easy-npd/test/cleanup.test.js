@@ -29,8 +29,11 @@ describe('test/cleanup.test.js', () => {
       path.join(tmp, 'node_modules/_install-error@1.0.1@install-error/package.json')
     );
     assert.equal(done, false);
+    // 子依赖失败不中止安装, install-error 照常链接, 但保留阶段标记, 下次运行经由它找到失败的子依赖
     const dirs = await fs.readdir(path.join(tmp, 'node_modules'));
-    assert.deepEqual(dirs, ['_install-error@1.0.1@install-error']);
+    assert.deepEqual(dirs.sort(), ['_install-error@1.0.1@install-error', 'install-error']);
+    const pkg = await utils.readJSON(path.join(tmp, 'node_modules/_install-error@1.0.1@install-error/package.json'));
+    assert(pkg.__npd_stage);
 
     // install again will try to download
     throwError = false;

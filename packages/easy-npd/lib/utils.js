@@ -172,12 +172,40 @@ exports.readPackageJSON = async root => {
 };
 
 const INSTALL_DONE_KEY = '__npd_done';
+// 包安装中断或失败时停在的阶段, 按 INSTALL_STAGES 的顺序推进; 本次运行的脚本全部成功后删除该键
+const INSTALL_STAGE_KEY = '__npd_stage';
+// finish: 包自身的步骤已完成, 但子依赖延后执行的脚本可能还没跑完, 下次运行仍要遍历它的子依赖
+exports.INSTALL_STAGES = ['preinstall', 'deps', 'install', 'postinstall', 'finish'];
+exports.FIRST_INSTALL_STAGE = exports.INSTALL_STAGES[0];
 
-// 设置 pkg 安装完成的标记
-exports.setInstallDone = async pkgRoot => {
+// 设置 pkg 解压完成的标记, 同一次写入记下起始阶段, 避免中断在两次写入之间时包被当作已完成
+exports.setInstallDone = async (pkgRoot, stage) => {
   await exports.addMetaToJSONFile(path.join(pkgRoot, 'package.json'), {
     [INSTALL_DONE_KEY]: true,
+    [INSTALL_STAGE_KEY]: stage,
   });
+};
+
+// stage 为 undefined 时删除阶段标记
+exports.setInstallStage = async (pkgRoot, stage) => {
+  await exports.addMetaToJSONFile(path.join(pkgRoot, 'package.json'), {
+    [INSTALL_STAGE_KEY]: stage,
+  });
+};
+
+// 已解压的包要从哪个阶段继续; 无标记表示已完成, --rebuild 时先写回起始阶段再从头执行, 中断后仍能继续
+exports.getResumeStage = async (pkgRoot, options) => {
+  if (options.rebuild) {
+    await exports.setInstallStage(pkgRoot, exports.FIRST_INSTALL_STAGE);
+    return exports.FIRST_INSTALL_STAGE;
+  }
+  const pkg = await exports.readJSON(path.join(pkgRoot, 'package.json'));
+  return pkg[INSTALL_STAGE_KEY];
+};
+
+// 从 stage 继续时是否还要执行 step; 没有阶段(根包)或无法识别的阶段执行全部步骤
+exports.shouldRunStage = (stage, step) => {
+  return exports.INSTALL_STAGES.indexOf(stage) <= exports.INSTALL_STAGES.indexOf(step);
 };
 
 exports.unsetInstallDone = async pkgRoot => {
@@ -192,10 +220,10 @@ exports.isInstallDone = async pkgRoot => {
   return !!pkg[INSTALL_DONE_KEY];
 };
 
-// 只认显式的 false: fetch-only 解压或安装失败留下的包; 不带标记的包可能由 npm 等其他工具装出, 不算未完成
+// 只认显式的 false 与阶段标记: fetch-only 留下的包与安装中断或失败的包; 不带标记的包可能由 npm 等其他工具装出, 不算未完成
 exports.isInstallUnfinished = async pkgRoot => {
   const pkg = await exports.readJSON(path.join(pkgRoot, 'package.json'));
-  return pkg[INSTALL_DONE_KEY] === false;
+  return pkg[INSTALL_DONE_KEY] === false || !!pkg[INSTALL_STAGE_KEY];
 };
 
 exports.addMetaToJSONFile = async (filepath, meta) => {
@@ -205,6 +233,17 @@ exports.addMetaToJSONFile = async (filepath, meta) => {
     pkg[key] = meta[key];
   }
   await fs.writeFile(filepath, JSON.stringify(pkg, null, 2));
+};
+
+// 安装结束时汇总本次失败的包; 失败的包与本次运行装过的包都保留阶段标记, 再次运行从停下的地方继续
+const INSTALL_FAILURES_CODE = 'NPD_INSTALL_FAILURES';
+exports.INSTALL_FAILURES_CODE = INSTALL_FAILURES_CODE;
+exports.installFailuresError = (failures, hint = 'run npd again to continue from where they stopped') => {
+  const lines = failures.map(({ displayName, error }) => `  - ${displayName}: ${String(error.message).split('\n')[0]}`);
+  const err = new Error(`${failures.length} package(s) failed, ${hint}:\n${lines.join('\n')}`);
+  err.code = INSTALL_FAILURES_CODE;
+  err.failures = failures;
+  return err;
 };
 
 exports.mkdirp = async dir => {
@@ -331,7 +370,7 @@ exports.runScript = async (pkgDir, script, options) => {
   // replace `npm install xxx` to `npd xxx`
   const NPM_INSTALL_RE = /^npm (i|install) /;
   if (NPM_INSTALL_RE.test(script)) {
-    const npd = path.join(__dirname, '../bin/install.js');
+    const npd = path.join(__dirname, '../bin/i.js');
     const newScript = script.replace(NPM_INSTALL_RE, `${process.execPath} ${npd} `);
     options.console.info('[npd:runScript] replace %j to %j', script, newScript);
     script = newScript;
@@ -471,11 +510,11 @@ exports.copyInstall = async (src, options) => {
   // 5. if not installed, copy and return with exists = false
   const pkgpath = path.join(src, 'package.json');
   if (!(await exports.exists(pkgpath))) {
-    throw new Error(`package.json missed(${pkgpath})`);
+    throw new Error(`package.json is missing (${pkgpath})`);
   }
   const realPkg = await exports.readPackageJSON(src);
   if (!realPkg.name || !realPkg.version) {
-    throw new Error(`package.json must contains name and version(${pkgpath})`);
+    throw new Error(`package.json must contain name and version (${pkgpath})`);
   }
 
   const targetdir = options.ungzipDir || exports.getPackageStorePath(options.storeDir, realPkg);
@@ -503,8 +542,11 @@ exports.copyInstall = async (src, options) => {
   if (!(await exports.isInstallDone(targetdir))) {
     await fse.emptyDir(targetdir);
     await fse.copy(src, targetdir);
-    await exports.setInstallDone(targetdir);
+    await exports.setInstallDone(targetdir, exports.FIRST_INSTALL_STAGE);
     result.exists = false;
+  } else {
+    // 只有本次运行第一个到达的调用方带回阶段, 由它继续安装; 其余调用方只做链接
+    result.stage = await exports.getResumeStage(targetdir, options);
   }
 
   options.cache[key].done = true;
@@ -543,8 +585,8 @@ exports.getTarballStream = async (url, options) => {
 };
 
 async function getRemotePackage(name, registry, globalOptions) {
-  // 离线时直接用随包安装的同名依赖
-  if (globalOptions && globalOptions.offline) {
+  // 离线与优先离线时直接用随包安装的同名依赖
+  if (globalOptions && (globalOptions.offline || globalOptions.preferOffline)) {
     return require(name + '/package.json');
   }
   const registries = [registry].concat([

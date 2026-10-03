@@ -46,8 +46,8 @@ const Context = require('./context');
  *  	if `production` mode enable, `cacheDir` will be disable.
  *  - {Object} [binaryMirrors] - binary mirror config, default is `{}`
  *  - {Boolean} [ignoreScripts] - ignore pre / post install scripts, default is `false`
- *  - {Array} [forbiddenLicenses] - forbit install packages which used these licenses
- *  - {Boolean} [trace] - show memory and cpu usages traces of installation
+ *  - {Array} [forbiddenLicenses] - forbid installing packages that use these licenses
+ *  - {Boolean} [trace] - show memory and CPU usage traces of the installation
  *  - {Boolean} [flatten] - flatten dependencies by matching ancestors' dependencies
  * @param {Object} context - install context
  */
@@ -98,10 +98,15 @@ module.exports = async (options, context = new Context()) => {
   try {
     await _install(options, context);
   } catch (err) {
+    // 失败汇总由调用方输出, 这里只给一行结论
+    const message =
+      err.code === utils.INSTALL_FAILURES_CODE
+        ? `Install finished with ${err.failures.length} failed package(s)`
+        : `Install failed! ${err}`;
     if (options.spinner) {
-      options.spinner.fail(`Install fail! ${err}`);
+      options.spinner.fail(message);
     } else {
-      options.console.error(`Install fail! ${err}`);
+      options.console.error(message);
     }
     throw err;
   } finally {
@@ -179,8 +184,15 @@ async function _install(options, context) {
   // see:
   // - https://docs.npmjs.com/misc/scripts
   // - https://github.com/npm/npm/issues/3059#issuecomment-32057292
-  if (options.installRoot && !options.production) await prepublish(rootPkg, options.root, options);
-  if (options.installRoot && !options.production) await prepare(rootPkg, options.root, options);
+  // 根包脚本通常依赖已安装的依赖, 有依赖失败时跳过, 下次运行成功后再执行
+  if (options.installRoot && !options.production && options.failures.length === 0) {
+    try {
+      await prepublish(rootPkg, options.root, options);
+      await prepare(rootPkg, options.root, options);
+    } catch (err) {
+      options.failures.push({ displayName, error: err });
+    }
+  }
 
   // link peerDependencies if not match the version in target directory
   await linkPeer(options);
@@ -197,6 +209,11 @@ async function _install(options, context) {
   // record dependencies tree resolved from npm
   recordDependenciesTree(options);
 
+  printOptionalFailures(options);
+  if (options.failures.length > 0) {
+    throw utils.installFailuresError(options.failures);
+  }
+
   // print install finished
   finishInstall(options);
 }
@@ -206,7 +223,7 @@ async function installOne(parentDir, childPkg, options, context) {
     options.progresses.finishedInstallTasks++;
     options.console.info(
       chalk.gray(`[${options.progresses.finishedInstallTasks}/${options.progresses.installTasks}]`),
-      chalk.cyan('Packgage '),
+      chalk.cyan('Package '),
       chalk.gray(childPkg.name + '@' + childPkg.version),
       chalk.cyan('is skipped because it already exists at:'),
       path.join(parentDir, 'node_modules', childPkg.name)
@@ -230,7 +247,7 @@ async function installOne(parentDir, childPkg, options, context) {
 
 async function needInstall(parentDir, childPkg, options) {
   // always install if not install from package.json
-  if (!options.installRoot) return true;
+  if (!options.installRoot || options.rebuild) return true;
 
   const pkgDir = path.join(parentDir, 'node_modules', childPkg.name);
   const pkg = await utils.readJSON(path.join(pkgDir, 'package.json'));
@@ -412,22 +429,33 @@ async function runPostInstallTasks(options) {
   const total = options.postInstallTasks.length;
   if (total && options.ignoreScripts) {
     options.console.warn(chalk.yellow('ignore all post install scripts'));
+    if (options.failures.length === 0) await clearInstallStages(options);
     return;
   }
 
   if (total) {
-    options.console.log(chalk.yellow(`execute post install ${total} scripts...`));
+    options.console.log(chalk.yellow(`execute ${total} postinstall scripts...`));
   }
 
   for (const task of options.postInstallTasks) {
     count++;
+    if (task.root === options.root && options.failures.length > 0) {
+      options.console.warn(
+        chalk.yellow('[npd:runscript] skip %s lifecycle scripts because %s package(s) failed'),
+        task.displayName,
+        options.failures.length
+      );
+      continue;
+    }
     const pkg = task.pkg;
     const root = task.root;
     const displayName = task.displayName;
-    const installScript = pkg.scripts.install;
+    const stage = task.stage;
+    const installScript = utils.shouldRunStage(stage, 'install') && pkg.scripts.install;
     const postinstallScript = pkg.scripts.postinstall;
     try {
       if (installScript) {
+        if (stage) await utils.setInstallStage(root, 'install');
         options.console.warn(
           '%s %s run %j, root: %j',
           chalk.yellow(`[${count}/${total}] scripts.install`),
@@ -445,6 +473,7 @@ async function runPostInstallTasks(options) {
             installScript,
             err
           );
+          err.message = `run install error\n${err.message}`;
           throw err;
         }
         options.console.warn(
@@ -455,6 +484,7 @@ async function runPostInstallTasks(options) {
         );
       }
       if (postinstallScript) {
+        if (stage) await utils.setInstallStage(root, 'postinstall');
         options.console.warn(
           '%s %s run %j, root: %j',
           chalk.yellow(`[${count}/${total}] scripts.postinstall`),
@@ -472,6 +502,7 @@ async function runPostInstallTasks(options) {
             postinstallScript,
             err
           );
+          err.message = `run postinstall error\n${err.message}`;
           throw err;
         }
         options.console.warn(
@@ -481,22 +512,41 @@ async function runPostInstallTasks(options) {
           ms(Date.now() - start)
         );
       }
+      if (stage) await utils.setInstallStage(root, 'finish');
     } catch (err) {
-      // If post install execute error, make sure this package won't be skipped during next installation.
-      try {
-        await utils.unsetInstallDone(root);
-      } catch (e) {
-        options.console.warn(chalk.yellow(`unsetInstallDone: ${root} error: ${e}, ignore it`));
-      }
+      // 阶段停在失败的脚本, 下次运行从这里继续; 失败被忽略的可选依赖不随本次运行清除标记
+      options.stagedDirs.delete(root);
       if (task.optional) {
         console.warn(chalk.red('%s optional error: %s'), displayName, err.stack);
+        options.optionalFailures.push({ displayName, error: err, name: pkg.name });
         continue;
       }
-      err.message = `post install error, please remove node_modules before retry!\n${err.message}`;
-      throw err;
+      // 不中止其余脚本, 安装结束时汇总
+      options.failures.push({ displayName, error: err });
     }
   }
+  // 有失败时保留本次运行全部阶段标记, 下次运行经由上层包找到失败的包
+  if (options.failures.length === 0) await clearInstallStages(options);
   if (options.spinner) options.spinner.succeed(`Run ${options.postInstallTasks.length} scripts`);
+}
+
+async function clearInstallStages(options) {
+  await pMap(options.stagedDirs, dir => utils.setInstallStage(dir), 10);
+  options.stagedDirs.clear();
+}
+
+// 可选依赖失败不影响安装结果, 也不会被之后的 npd 重试, 结束时集中提示
+function printOptionalFailures(options) {
+  const items = options.optionalFailures;
+  if (items.length === 0) return;
+  options.console.warn(chalk.yellow('%s optional package(s) failed and were skipped:'), items.length);
+  for (const { displayName, error } of items) {
+    options.console.warn(chalk.yellow('  - %s: %s'), displayName, String(error.message).split('\n')[0]);
+  }
+  const names = [...new Set(items.filter(item => item.name).map(item => item.name))];
+  if (names.length > 0) {
+    options.console.warn(chalk.yellow('rerun their scripts with: npd-x rebuild %s'), names.join(' '));
+  }
 }
 
 function printPendingMessages(options) {
@@ -528,7 +578,7 @@ function recordRecentlyUpdates(options) {
       '%s: %s %s',
       chalk.gray(recentlyUpdatesText),
       `${chalk.green(options.recentlyUpdates.size)} packages`,
-      chalk.gray(`(detail see file ${recentlyUpdatesTextFile})`)
+      chalk.gray(`(see details in ${recentlyUpdatesTextFile})`)
     );
     const displays = {};
     for (const item of options.recentlyUpdates) {

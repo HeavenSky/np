@@ -4,6 +4,7 @@ const assert = require('assert');
 const path = require('path');
 const npminstall = require('./npminstall');
 const helper = require('./helper');
+const utils = require('../lib/utils');
 
 describe('test/installScope.test.js', () => {
   const [tmp, cleanup] = helper.tmp();
@@ -28,7 +29,13 @@ describe('test/installScope.test.js', () => {
       });
       throw new Error('should not excute here');
     } catch (err) {
-      assert(err.message === "[@rstacruz/tap-spec@3.0.0] Can't find package @rstacruz/tap-spec's version: 3.0.0");
+      // 失败的包不中止安装, 结束时汇总抛出; 原始错误在 err.failures 中
+      assert.equal(err.code, utils.INSTALL_FAILURES_CODE, err.message);
+      assert.equal(err.failures.length, 1);
+      assert.equal(
+        err.failures[0].error.message,
+        "[@rstacruz/tap-spec@3.0.0] Can't find package @rstacruz/tap-spec's version: 3.0.0"
+      );
     }
   });
 

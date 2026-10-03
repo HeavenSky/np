@@ -16,7 +16,7 @@ describe('test/registry-only.test.js', () => {
         cwd,
       })
       .debug()
-      .expect('stderr', /Only allow install package from registry/)
+      .expect('stderr', /Only registry packages are allowed/)
       .expect('code', 1)
       .end();
   });

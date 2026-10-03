@@ -78,6 +78,22 @@ async function resolve(pkg, options) {
   let distTags = packageMeta['dist-tags'];
 
   let realPkgVersion = utils.findMaxSatisfyingVersion(spec, distTags, packageMeta.allVersions);
+  // preferOffline 直接用了缓存的 manifest: 缓存里没有需要的版本时联网重新校验一次
+  if (
+    (!realPkgVersion || !packageMeta.versions[realPkgVersion]) &&
+    options.preferOffline &&
+    !options.offline &&
+    !packageMeta.revalidated
+  ) {
+    try {
+      const fullMeta = await getFullPackageMeta(pkg.name, options, { revalidate: true });
+      Object.assign(packageMeta, fullMeta, { revalidated: true, allVersions: Object.keys(fullMeta.versions) });
+      distTags = packageMeta['dist-tags'];
+      realPkgVersion = utils.findMaxSatisfyingVersion(spec, distTags, packageMeta.allVersions);
+    } catch (err) {
+      debug('[%s] revalidate cached manifests error: %s', pkg.name, err.message);
+    }
+  }
   // 镜像同步滞后时新版本只在官方源上: 找不到版本时绕过缓存向官方源重拉一次
   const missing = !realPkgVersion || !packageMeta.versions[realPkgVersion];
   if (missing && !options.offline && _getMirror(pkg.name, options) && !packageMeta.fromOfficial) {
@@ -223,10 +239,10 @@ async function removeCacheInfo(fullname, globalOptions) {
   }
 }
 
-async function getFullPackageMeta(fullname, globalOptions, fetchOptions) {
+async function getFullPackageMeta(fullname, globalOptions, fetchOptions = {}) {
   const info = await _getCacheInfo(fullname, globalOptions, fetchOptions);
   if (globalOptions.offline && !info.cache) {
-    throw new Error(`Can't find package ${fullname} manifests on offline mode`);
+    throw new Error(`Can't find package ${fullname} manifests in offline mode`);
   }
 
   if (!info.cacheFile) {
@@ -238,8 +254,9 @@ async function getFullPackageMeta(fullname, globalOptions, fetchOptions) {
     return await _fetchFullPackageMetaWithCache(info.pkgUrl, globalOptions, info.cacheFile, null, info.mirrorUrls);
   }
   // check is expired or not
-  // offline should force to use cache manifests
-  if (globalOptions.offline || info.cache.expired > Date.now()) {
+  // offline should force to use cache manifests, preferOffline uses them until a version is missing
+  const preferCache = globalOptions.preferOffline && !fetchOptions.revalidate;
+  if (globalOptions.offline || preferCache || info.cache.expired > Date.now()) {
     globalOptions.totalCacheJSONCount += 1;
     return info.cache.manifests;
   }
@@ -332,14 +349,14 @@ async function _fetchFullPackageMeta(pkgUrl, globalOptions, etag, mirrorUrls = n
 async function download(pkg, options) {
   // dont download pkg in not matched os
   if (!utils.matchPlatform(process.platform, pkg.os)) {
-    const errMsg = `[${pkg.name}@${pkg.version}] skip download for reason ${pkg.os.join(', ')} dont includes your platform ${process.platform}`;
+    const errMsg = `[${pkg.name}@${pkg.version}] skip download because ${pkg.os.join(', ')} does not include your platform ${process.platform}`;
     const err = new Error(errMsg);
     err.name = 'UnSupportedPlatformError';
     throw err;
   }
   // dont download pkg in not matched cpu
   if (!utils.matchPlatform(process.arch, pkg.cpu)) {
-    const errMsg = `[${pkg.name}@${pkg.version}] skip download for reason ${pkg.cpu.join(', ')} dont includes your arch ${process.arch}`;
+    const errMsg = `[${pkg.name}@${pkg.version}] skip download because ${pkg.cpu.join(', ')} does not include your arch ${process.arch}`;
     const err = new Error(errMsg);
     err.name = 'UnSupportedPlatformError';
     throw err;
@@ -348,7 +365,7 @@ async function download(pkg, options) {
   if (Array.isArray(pkg.libc)) {
     const currentLibc = await getLibcFamily();
     if (currentLibc && !utils.matchPlatform(currentLibc, pkg.libc)) {
-      const errMsg = `[${pkg.name}@${pkg.version}] skip download for reason ${pkg.libc.join(', ')} dont includes your libc ${currentLibc}`;
+      const errMsg = `[${pkg.name}@${pkg.version}] skip download because ${pkg.libc.join(', ')} does not include your libc ${currentLibc}`;
       const err = new Error(errMsg);
       err.name = 'UnSupportedPlatformError';
       throw err;
@@ -377,12 +394,16 @@ async function download(pkg, options) {
   };
 
   if (await utils.isInstallDone(ungzipDir)) {
+    // 上次安装中断或失败的包带回阶段, 由本次运行第一个到达的调用方继续安装; 继续执行脚本需要解压出的 scripts
+    const stage = await utils.getResumeStage(ungzipDir, options);
+    if (stage) await mergePackageMeta(pkg, ungzipDir);
     options.cache[key].done = true;
     options.events.emit(key);
     // debug('[%s@%s] Exists', pkg.name, pkg.version);
     return {
       exists: true,
       dir: ungzipDir,
+      stage,
     };
   }
 
@@ -443,17 +464,9 @@ async function download(pkg, options) {
     throw lastErr;
   }
 
-  // read package.json to merge into realPkg
-  const fullMeta = await utils.readPackageJSON(ungzipDir);
-  Object.assign(pkg, fullMeta);
-  if (pkg.__fixDependencies) {
-    pkg.dependencies = Object.assign({}, pkg.dependencies, pkg.__fixDependencies);
-  }
-  if (pkg.__fixScripts) {
-    pkg.scripts = Object.assign({}, pkg.scripts, pkg.__fixScripts);
-  }
+  await mergePackageMeta(pkg, ungzipDir);
 
-  await utils.setInstallDone(ungzipDir);
+  await utils.setInstallDone(ungzipDir, utils.FIRST_INSTALL_STAGE);
 
   const pkgMeta = {
     _from: `${pkg.name}@${pkg.version}`,
@@ -463,7 +476,9 @@ async function download(pkg, options) {
   if (binaryMirror) {
     if (options.mirror) {
       // 记下改写前的内容, 安装脚本失败换源重试时据此在镜像与官方地址之间切换
-      options.mirror.binaryPackages.set(ungzipDir, await snapshotBinaryFiles(pkg, ungzipDir, binaryMirror));
+      const snapshot = await snapshotBinaryFiles(pkg, ungzipDir, binaryMirror);
+      options.mirror.binaryPackages.set(ungzipDir, snapshot);
+      await saveBinarySnapshot(ungzipDir, snapshot);
     }
     if (!options.mirror || options.mirror.binaryOrder[0] === 'mirror') {
       await applyBinaryMirror(pkg, ungzipDir, binaryMirror, pkgMeta, options);
@@ -520,7 +535,7 @@ async function getTarballStream(tarballUrl, pkg, options, mirrored = false) {
   const retry = mirrored ? 1 : undefined;
 
   if (options.offline && (!options.cacheDir || utils.isSudo())) {
-    throw offlineError(`Can't download tarball ${pkg.name}@${pkg.version} on offline mode without the disk cache`);
+    throw offlineError(`Can't download tarball ${pkg.name}@${pkg.version} in offline mode without the disk cache`);
   }
 
   if (!options.cacheDir || utils.isSudo()) {
@@ -565,7 +580,7 @@ async function getTarballStream(tarballUrl, pkg, options, mirrored = false) {
   // --refresh-cache 时忽略已有缓存, 下载后覆盖
   let exists = (options.offline || !options.refreshCache) && (await utils.exists(tarballFile));
   if (!exists && options.offline) {
-    throw offlineError(`Can't find tarball ${pkg.name}@${pkg.version} in the disk cache on offline mode`);
+    throw offlineError(`Can't find tarball ${pkg.name}@${pkg.version} in the disk cache in offline mode`);
   }
   if (!exists) {
     const tmpDir = path.join(options.cacheDir, 'np-tmp', dayjs().format('YYYYMMDD'));
@@ -799,6 +814,18 @@ function binaryMirrorFiles(pkg, binaryMirror) {
   return files;
 }
 
+// read package.json to merge into realPkg
+async function mergePackageMeta(pkg, ungzipDir) {
+  const fullMeta = await utils.readPackageJSON(ungzipDir);
+  Object.assign(pkg, fullMeta);
+  if (pkg.__fixDependencies) {
+    pkg.dependencies = Object.assign({}, pkg.dependencies, pkg.__fixDependencies);
+  }
+  if (pkg.__fixScripts) {
+    pkg.scripts = Object.assign({}, pkg.scripts, pkg.__fixScripts);
+  }
+}
+
 async function snapshotBinaryFiles(pkg, ungzipDir, binaryMirror) {
   const files = {};
   for (const file of binaryMirrorFiles(pkg, binaryMirror)) {
@@ -808,10 +835,43 @@ async function snapshotBinaryFiles(pkg, ungzipDir, binaryMirror) {
   return { pkg, binaryMirror, binary: pkg.binary && JSON.parse(JSON.stringify(pkg.binary)), files };
 }
 
+// 快照随包目录保存, 中断后继续安装或 rebuild 时进程内已没有解压时的快照; 文件路径存相对路径, 全局安装移动目录后仍可用
+const BINARY_SNAPSHOT_FILE = '.npd-binary-snapshot.json';
+
+async function saveBinarySnapshot(ungzipDir, snapshot) {
+  const files = {};
+  for (const filepath in snapshot.files) {
+    files[path.relative(ungzipDir, filepath)] = snapshot.files[filepath].toString('base64');
+  }
+  const { name, version, scripts, binary } = snapshot.pkg;
+  const data = {
+    pkg: { name, version, scripts, binary },
+    binaryMirror: snapshot.binaryMirror,
+    binary: snapshot.binary,
+    files,
+  };
+  await fs.writeFile(path.join(ungzipDir, BINARY_SNAPSHOT_FILE), JSON.stringify(data));
+}
+
+async function loadBinarySnapshot(ungzipDir) {
+  const data = await utils.readJSON(path.join(ungzipDir, BINARY_SNAPSHOT_FILE));
+  if (!data.files) return null;
+  const files = {};
+  for (const file in data.files) {
+    files[path.join(ungzipDir, file)] = Buffer.from(data.files[file], 'base64');
+  }
+  return { ...data, files };
+}
+
 // 安装脚本换源重试前调用: official 还原改写前的文件与 binary 字段, mirror 在还原后重新改写
 module.exports.useBinarySource = async (ungzipDir, source, options) => {
-  const snapshot = options.mirror && options.mirror.binaryPackages.get(ungzipDir);
-  if (!snapshot) return;
+  if (!options.mirror) return;
+  let snapshot = options.mirror.binaryPackages.get(ungzipDir);
+  if (!snapshot) {
+    snapshot = await loadBinarySnapshot(ungzipDir);
+    if (!snapshot) return;
+    options.mirror.binaryPackages.set(ungzipDir, snapshot);
+  }
   for (const filepath in snapshot.files) {
     await fs.writeFile(filepath, snapshot.files[filepath]);
   }

@@ -38,6 +38,6 @@ exports.tmp = name => {
   return [dir, cleanup];
 };
 
-exports.npminstall = path.join(__dirname, '..', 'bin', 'install.js');
+exports.npminstall = path.join(__dirname, '..', 'bin', 'i.js');
 
 exports.readJSON = require('../lib/utils').readJSON;

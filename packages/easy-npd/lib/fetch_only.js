@@ -1,4 +1,4 @@
-// npd-fetch: 只下载, 校验并解压指定的包, 链接到 node_modules/<name>; 不安装依赖, 不执行脚本, 不链接 bin
+// npd-x fetch: 只下载, 校验并解压指定的包, 链接到 node_modules/<name>; 不安装依赖, 不执行脚本, 不链接 bin
 'use strict';
 
 const path = require('path');
@@ -29,7 +29,7 @@ async function fetchOne(pkg, options, context) {
   const version = pkg.version || '*';
   const p = npa(pkg.name ? `${pkg.name}@${version}` : version, { where: options.root, nested: context.nested });
   if (p.type === 'git') {
-    throw new Error(`npd-fetch does not support git package "${p.raw}": fetching it runs its prepare script`);
+    throw new Error(`npd-x fetch does not support git package "${p.raw}": fetching it runs its prepare script`);
   }
   const info = await download(p, options);
   const realPkg = info.package;

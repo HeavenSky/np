@@ -95,7 +95,7 @@ describe('test/installLocal.test.js', () => {
       });
       throw new Error('should not exec');
     } catch (err) {
-      assert(err.message.match(/package.json missed/), err.message);
+      assert(err.message.match(/package.json is missing/), err.message);
     }
   });
 
@@ -107,7 +107,7 @@ describe('test/installLocal.test.js', () => {
       });
       throw new Error('should not exec');
     } catch (err) {
-      assert(err.message.match(/package.json missed/), err.message);
+      assert(err.message.match(/package.json is missing/), err.message);
     }
   });
 
@@ -119,7 +119,7 @@ describe('test/installLocal.test.js', () => {
       });
       throw new Error('should not exec');
     } catch (err) {
-      assert(err.message.match(/package.json must contains name/), err.message);
+      assert(err.message.match(/package.json must contain name/), err.message);
     }
   });
 
@@ -131,7 +131,7 @@ describe('test/installLocal.test.js', () => {
       });
       throw new Error('should not exec');
     } catch (err) {
-      assert(err.message.match(/package.json must contains name/), err.message);
+      assert(err.message.match(/package.json must contain name/), err.message);
     }
   });
 

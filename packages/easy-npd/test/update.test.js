@@ -7,7 +7,7 @@ const helper = require('./helper');
 const { exists } = require('../lib/utils');
 
 describe('test/update.test.js', () => {
-  const npmupdate = path.join(__dirname, '../bin/update.js');
+  const npmupdate = path.join(__dirname, '../bin/x.js');
   const cwd = helper.fixtures('update');
   const cleanup = helper.cleanup(cwd);
 
@@ -25,7 +25,7 @@ describe('test/update.test.js', () => {
 
   it('should update ok', async () => {
     await coffee
-      .fork(npmupdate, [], {
+      .fork(npmupdate, ['update'], {
         cwd,
         stdio: 'pipe',
       })
@@ -37,7 +37,7 @@ describe('test/update.test.js', () => {
 
   it('should update pedding ok', async () => {
     await coffee
-      .fork(npmupdate, ['pedding'], {
+      .fork(npmupdate, ['update', 'pedding'], {
         cwd,
         stdio: 'pipe',
       })

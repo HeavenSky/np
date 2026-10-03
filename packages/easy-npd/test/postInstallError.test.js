@@ -21,7 +21,8 @@ describe('test/postInstallError.test.js', () => {
         pkgs: [{ name: 'install-error', version: '1.0.0' }],
       });
     } catch (err) {
-      assert(err.message.indexOf('post install error, please remove node_modules before retry!') >= 0);
+      assert(err.message.includes('run npd again to continue from where they stopped'));
+      assert(err.message.includes('run postinstall error'));
       throwError = true;
     }
     assert.equal(throwError, true);
@@ -37,6 +38,8 @@ describe('test/postInstallError.test.js', () => {
       .expect('code', 0)
       .expect('stderr', /httpsync@\* optional error: .*Error: Run ".*?build\.sh" error/)
       .expect('stderr', /scripts.install httpsync@\* run "sh build.sh"/)
+      .expect('stderr', /1 optional package\(s\) failed and were skipped/)
+      .expect('stderr', /rerun their scripts with: npd-x rebuild httpsync/)
       .expect('stdout', /All packages installed/)
       .end();
   });

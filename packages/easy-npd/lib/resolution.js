@@ -71,7 +71,7 @@ module.exports = (pkg, options) => {
       if (minimatch(ancestorPath, path)) {
         options.pendingMessages.push([
           'warn',
-          '%s %s override by %s',
+          '%s %s overridden by %s',
           chalk.yellow('resolutions'),
           chalk.gray(utils.getDisplayName(pkg, ancestors)),
           chalk.magenta(`${path}/${pkg.name}@${version}`),

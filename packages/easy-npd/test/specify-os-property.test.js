@@ -20,7 +20,7 @@ describe('test/specify-os-property.test.js', () => {
         });
         throw new Error('should not run this');
       } catch (err) {
-        assert(/dont includes your platform/.test(err.message), err.message);
+        assert(/does not include your platform/.test(err.message), err.message);
       }
     });
   });

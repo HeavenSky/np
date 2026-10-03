@@ -1,56 +1,56 @@
-#!/usr/bin/env node
-
 'use strict';
 
-const debug = require('debug')('npd:bin:link');
+const debug = require('debug')('npd:cli:link');
 const npa = require('npm-package-arg');
 const semver = require('semver');
 const assert = require('assert');
 const chalk = require('chalk');
 const path = require('path');
 const parseArgs = require('minimist');
-const utils = require('../lib/utils');
-const bin = require('../lib/bin');
-const { REGISTRY_TYPES } = require('../lib/npa_types');
+const utils = require('../utils');
+const bin = require('../bin');
+const { REGISTRY_TYPES } = require('../npa_types');
+const help = require('./help');
 
-const orignalArgv = process.argv.slice(2);
-const argv = parseArgs(orignalArgv, {
-  string: ['root'],
-  boolean: ['version', 'help'],
-});
+module.exports = async function link(args) {
+  try {
+    await main(args);
+  } catch (err) {
+    console.error(chalk.red(err.stack));
+    console.error(chalk.yellow('npd-x link version: %s'), require('../../package.json').version);
+    console.error(chalk.yellow('npd-x link args: %s'), process.argv.join(' '));
+    process.exit(1);
+  }
+};
 
-if (argv.version) {
-  console.log('v%s', require('../package.json').version);
-  process.exit(0);
-}
+async function main(args) {
+  const orignalArgv = args;
+  const argv = parseArgs(orignalArgv, {
+    string: ['root'],
+    boolean: ['version', 'help'],
+    alias: {
+      v: 'version',
+      h: 'help',
+    },
+  });
 
-if (argv.help) {
-  console.log(`
-Usage:
+  if (argv.version) {
+    console.log('v%s', require('../../package.json').version);
+    process.exit(0);
+  }
 
-  npd-link <folder>
+  if (argv.help) {
+    console.log(help.link());
+    process.exit(0);
+  }
 
-Can specify one or more: npd-link /some/folder1 /some/folder2
-Without <folder>, install current package and link it to the global directory.
+  const root = argv.root || process.cwd();
 
-Options:
+  const globalMeta = utils.getGlobalInstallMeta(argv.prefix);
+  const globalModuleDir = path.join(globalMeta.targetDir, 'node_modules');
 
-  --root: project root directory, default is current working directory
-  --prefix: global install prefix, default is '$npm config get prefix'
-  --version: show version
-  --help: show help
-`);
-  process.exit(0);
-}
+  const folders = argv._.map(name => utils.formatPath(name));
 
-const root = argv.root || process.cwd();
-
-const globalMeta = utils.getGlobalInstallMeta(argv.prefix);
-const globalModuleDir = path.join(globalMeta.targetDir, 'node_modules');
-
-const folders = argv._.map(name => utils.formatPath(name));
-
-(async () => {
   const installArgs = [];
   for (const arg of orignalArgv) {
     if (arg.startsWith('--root')) {
@@ -68,11 +68,11 @@ const folders = argv._.map(name => utils.formatPath(name));
     // 3. link bins to binDir
     const pkgFile = path.join(root, 'package.json');
     const pkg = await utils.readJSON(pkgFile);
-    assert(pkg.name, `package.name not eixsts on ${pkgFile}`);
+    assert(pkg.name, `package.name does not exist in ${pkgFile}`);
     const linkDir = path.join(globalMeta.targetDir, 'node_modules', pkg.name);
 
     console.info(chalk.gray(`\`$ npd ${installArgs.join(' ')}\` on ${root}`));
-    const installBin = path.join(__dirname, 'install.js');
+    const installBin = path.join(__dirname, '../../bin/i.js');
     await utils.fork(installBin, installArgs, {
       cwd: root,
     });
@@ -96,7 +96,7 @@ const folders = argv._.map(name => utils.formatPath(name));
     },
     process.env
   );
-  const installBin = path.join(__dirname, 'install.js');
+  const installBin = path.join(__dirname, '../../bin/i.js');
 
   for (let folder of folders) {
     // 1.
@@ -129,7 +129,7 @@ const folders = argv._.map(name => utils.formatPath(name));
         (pkgInfo.type === 'range' || pkgInfo.type === 'version') && !semver.satisfies(pkg.version, pkgInfo.spec);
 
       if (pkgNotExist || specIsTag || specNotSemver || specNotSatisfies) {
-        debug('%s not satisfies with requirement, try to install %s from npm', folder, pkgInfo.raw);
+        debug('%s does not satisfy the requirement, try to install %s from npm', folder, pkgInfo.raw);
         // try install from npm registry
         console.info(chalk.gray(`\`$ npd --global ${pkgInfo.raw}`));
         await utils.fork(installBin, installArgs.concat(['-g', pkgInfo.raw]), {
@@ -139,19 +139,19 @@ const folders = argv._.map(name => utils.formatPath(name));
 
       const pkgFile = path.join(folder, 'package.json');
       pkg = await utils.readJSON(pkgFile);
-      assert(pkg.name, `package.name not eixsts on ${pkgFile}`);
+      assert(pkg.name, `package.name does not exist in ${pkgFile}`);
     } else {
       if (!path.isAbsolute(folder)) {
         folder = path.join(root, folder);
       }
       // read from folder
       if (!(await utils.exists(folder))) {
-        throw new Error(`${folder} not exists`);
+        throw new Error(`${folder} does not exist`);
       }
 
       const pkgFile = path.join(folder, 'package.json');
       pkg = await utils.readJSON(pkgFile);
-      assert(pkg.name, `package.name not eixsts on ${pkgFile}`);
+      assert(pkg.name, `package.name does not exist in ${pkgFile}`);
 
       // install dependencies
       console.info(chalk.gray(`\`$ npd ${installArgs.join(' ')}\` on ${folder}`));
@@ -168,9 +168,4 @@ const folders = argv._.map(name => utils.formatPath(name));
     console.info(`link ${chalk.magenta(linkDir)}@ -> ${folder}`);
     await bin(root, pkg, linkDir, { console });
   }
-})().catch(err => {
-  console.error(chalk.red(err.stack));
-  console.error(chalk.yellow('npd-link version: %s'), require('../package.json').version);
-  console.error(chalk.yellow('npd-link args: %s'), process.argv.join(' '));
-  process.exit(1);
-});
+}

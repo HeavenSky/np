@@ -7,7 +7,7 @@ const fs = require('fs');
 const helper = require('./helper');
 
 const bin = helper.npminstall;
-const update = path.join(path.dirname(helper.npminstall), 'update.js');
+const npmx = path.join(path.dirname(helper.npminstall), 'x.js');
 
 describe('test/fix-bug-versions.test.js', () => {
   const demo = helper.fixtures('fix-bug-versions-app');
@@ -71,7 +71,7 @@ describe('test/fix-bug-versions.test.js', () => {
       .end();
 
     await coffee
-      .fork(update, ['-d', '--fix-bug-versions', '--no-cache'], { cwd: demo })
+      .fork(npmx, ['update', '-d', '--fix-bug-versions', '--no-cache'], { cwd: demo })
       .debug()
       .expect('code', 0)
       .expect('stdout', /is-my-json-valid@2\.17\.1@is-my-json-valid/)

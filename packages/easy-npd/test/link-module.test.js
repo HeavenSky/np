@@ -7,7 +7,7 @@ const { readFileSync } = require('fs');
 const utils = require('../lib/utils');
 const { rimraf, existsSync } = require('../lib/utils');
 
-const npmlink = path.join(__dirname, '../bin/link.js');
+const npmlink = path.join(__dirname, '../bin/x.js');
 
 describe('test/link-module.test.js', () => {
   const root = path.join(__dirname, 'fixtures/link-demo-module');
@@ -23,7 +23,7 @@ describe('test/link-module.test.js', () => {
 
   it('should link debug work', async () => {
     await coffee
-      .fork(npmlink, ['debug', `--prefix=${globalRoot}`], {
+      .fork(npmlink, ['link', 'debug', `--prefix=${globalRoot}`], {
         cwd: root,
       })
       .debug()
@@ -35,7 +35,7 @@ describe('test/link-module.test.js', () => {
 
   it('should link debug@semver work', async () => {
     await coffee
-      .fork(npmlink, ['debug@~2.2.0', `--prefix=${globalRoot}`], {
+      .fork(npmlink, ['link', 'debug@~2.2.0', `--prefix=${globalRoot}`], {
         cwd: root,
       })
       .debug()
@@ -46,7 +46,7 @@ describe('test/link-module.test.js', () => {
     assert(readJSON(path.join(root, 'node_modules/debug/package.json')).version === '2.2.0');
 
     await coffee
-      .fork(npmlink, ['debug@1.0.0', `--prefix=${globalRoot}`], {
+      .fork(npmlink, ['link', 'debug@1.0.0', `--prefix=${globalRoot}`], {
         cwd: root,
       })
       .debug()
@@ -57,7 +57,7 @@ describe('test/link-module.test.js', () => {
     assert(readJSON(path.join(root, 'node_modules/debug/package.json')).version === '1.0.0');
 
     await coffee
-      .fork(npmlink, ['debug', `--prefix=${globalRoot}`], {
+      .fork(npmlink, ['link', 'debug', `--prefix=${globalRoot}`], {
         cwd: root,
       })
       .debug()
@@ -68,7 +68,7 @@ describe('test/link-module.test.js', () => {
     assert(readJSON(path.join(root, 'node_modules/debug/package.json')).version === '1.0.0');
 
     await coffee
-      .fork(npmlink, ['debug@latest', `--prefix=${globalRoot}`], {
+      .fork(npmlink, ['link', 'debug@latest', `--prefix=${globalRoot}`], {
         cwd: root,
       })
       .debug()

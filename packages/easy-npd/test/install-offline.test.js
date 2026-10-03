@@ -28,7 +28,7 @@ describe('test/install-offline.test.js', () => {
       })
       .debug()
       .expect('code', 1)
-      .expect('stderr', /Can't find package .+? manifests on offline mode/)
+      .expect('stderr', /Can't find package .+? manifests in offline mode/)
       .end();
   });
 
@@ -71,12 +71,12 @@ describe('test/install-offline.test.js', () => {
       .fork(helper.npminstall, ['--offline'], { cwd: demo, env })
       .debug()
       .expect('code', 1)
-      .expect('stderr', /Can't find tarball .+ in the disk cache on offline mode/)
+      .expect('stderr', /Can't find tarball .+ in the disk cache in offline mode/)
       .notExpect('stderr', /fail count: 2/)
       .end();
   });
 
-  it('should reject git packages on offline mode', async () => {
+  it('should reject git packages in offline mode', async () => {
     await fs.mkdir(homedir, { recursive: true });
     await fs.writeFile(path.join(homedir, 'package.json'), JSON.stringify({ name: 'root', version: '1.0.0' }));
     await coffee

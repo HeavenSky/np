@@ -1,8 +1,6 @@
-#!/usr/bin/env node
-
 'use strict';
 
-const debug = require('debug')('npd:bin:uninstall');
+const debug = require('debug')('npd:cli:uninstall');
 const npa = require('npm-package-arg');
 const path = require('path');
 const fs = require('fs/promises');
@@ -10,39 +8,50 @@ const parseArgs = require('minimist');
 const chalk = require('chalk');
 const execSync = require('child_process').execSync;
 
-const utils = require('../lib/utils');
-const uninstall = require('../lib/uninstall');
+const utils = require('../utils');
+const uninstall = require('../uninstall');
+const help = require('./help');
 
-const argv = parseArgs(process.argv.slice(2), {
-  string: ['root', 'prefix'],
-  boolean: ['version', 'help', 'global', 'save', 'save-dev', 'save-optional', 'ignore-scripts'],
-  alias: {
-    v: 'version',
-    h: 'help',
-    g: 'global',
-    S: 'save',
-    D: 'save-dev',
-    O: 'save-optional',
-  },
-});
+module.exports = async function uninstallCommand(args) {
+  try {
+    await main(args);
+  } catch (err) {
+    console.error(chalk.red(err));
+    console.error(chalk.red(err.stack));
+    process.exit(1);
+  }
+};
 
-if (argv.version) {
-  console.log('v%s', require('../package.json').version);
-  process.exit(0);
-}
+async function main(args) {
+  const argv = parseArgs(args, {
+    string: ['root', 'prefix'],
+    boolean: ['version', 'help', 'global', 'save', 'save-dev', 'save-optional', 'ignore-scripts'],
+    alias: {
+      v: 'version',
+      h: 'help',
+      g: 'global',
+      S: 'save',
+      D: 'save-dev',
+      O: 'save-optional',
+    },
+  });
 
-if (argv.help) help();
+  if (argv.version) {
+    console.log('v%s', require('../../package.json').version);
+    process.exit(0);
+  }
 
-const pkgs = [];
+  if (argv.help) printHelp();
 
-for (const name of argv._) {
-  const p = npa(String(name));
-  pkgs.push({ name: p.name, version: p.rawSpec });
-}
+  const pkgs = [];
 
-if (!pkgs.length) help();
+  for (const name of argv._) {
+    const p = npa(String(name));
+    pkgs.push({ name: p.name, version: p.rawSpec });
+  }
 
-(async () => {
+  if (!pkgs.length) printHelp();
+
   const root = argv.root || process.cwd();
   const config = {
     root,
@@ -63,7 +72,7 @@ if (!pkgs.length) help();
       config.binDir = path.join(npmPrefix, 'bin');
     }
   }
-  debug('uninstall in %s with pkg: $j, config: %j', root, pkgs, config);
+  debug('uninstall in %s with pkg: %j, config: %j', root, pkgs, config);
   const uninstalled = await uninstall(config);
   if (uninstalled.length > 0) {
     // support --save, --save-dev and --save-optional
@@ -76,11 +85,7 @@ if (!pkgs.length) help();
     }
   }
   await updateDependencies(root, uninstalled);
-})().catch(err => {
-  console.error(chalk.red(err));
-  console.error(chalk.red(err.stack));
-  process.exit(1);
-});
+}
 
 async function updateDependencies(root, pkgs, propName) {
   const pkgFile = path.join(root, 'package.json');
@@ -95,23 +100,8 @@ async function updateDependencies(root, pkgs, propName) {
   await fs.writeFile(pkgFile, JSON.stringify(pkg, null, 2));
 }
 
-function help() {
-  console.log(`
-Usage:
-
-  npd-uninstall <pkg>
-  npd-uninstall <pkg>@<version>
-  npd-uninstall <pkg>@<version> [<pkg>@<version>]
-
-Options:
-
-  --root: project root directory, default is current working directory
-  -g, --global: uninstall from the global directory
-  --prefix: global install prefix used with -g, default is '$npm config get prefix'
-  -S, --save, -D, --save-dev, -O, --save-optional: also remove the packages from dependencies, devDependencies or optionalDependencies in package.json
-  -v, --version: show version
-  -h, --help: show help
-`);
+function printHelp() {
+  console.log(help.uninstall());
   process.exit(0);
 }
 

@@ -7,7 +7,7 @@ const fs = require('fs/promises');
 const coffee = require('coffee');
 const helper = require('./helper');
 
-const npmuninstall = path.join(__dirname, '../bin/uninstall.js');
+const npmuninstall = path.join(__dirname, '../bin/x.js');
 
 describe('test/uninstall-hoisted-links.test.js', () => {
   const [tmp, cleanup] = helper.tmp();
@@ -34,7 +34,11 @@ describe('test/uninstall-hoisted-links.test.js', () => {
   }
 
   function uninstall(...names) {
-    return coffee.fork(npmuninstall, names, { cwd: tmp }).debug().expect('code', 0).end();
+    return coffee
+      .fork(npmuninstall, ['uninstall', ...names], { cwd: tmp })
+      .debug()
+      .expect('code', 0)
+      .end();
   }
 
   const rootLink = name => path.join(tmp, 'node_modules', name);
