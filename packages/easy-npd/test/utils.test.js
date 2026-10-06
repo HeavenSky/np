@@ -209,6 +209,48 @@ describe('test/utils.test.js', () => {
         );
       });
     });
+
+    describe('deprecated', () => {
+      const distTags = { latest: '2.1.0' };
+      const allVersions = ['1.0.0', '2.0.0', '2.0.1', '2.1.0'];
+      const versions = {
+        '1.0.0': {},
+        '2.0.0': {},
+        '2.0.1': { engines: { node: '>=20' } },
+        '2.1.0': { deprecated: 'broken release' },
+      };
+      const options = { versions, nodeVersion: 'v18.20.0' };
+
+      it('should avoid deprecated latest when no version is specified', () => {
+        assert.equal(
+          utils.findMaxSatisfyingVersion('latest', distTags, allVersions, { ...options, implicitTag: true }),
+          '2.0.0'
+        );
+      });
+
+      it('should prefer a non-deprecated version with incompatible engines over a deprecated one', () => {
+        assert.equal(
+          utils.findMaxSatisfyingVersion('^2.0.0', distTags, allVersions, {
+            ...options,
+            versions: { ...versions, '2.0.0': { deprecated: 'x' } },
+          }),
+          '2.0.1'
+        );
+      });
+
+      it('should avoid deprecated version in range', () => {
+        assert.equal(utils.findMaxSatisfyingVersion('^2.0.0', distTags, allVersions, options), '2.0.0');
+      });
+
+      it('should keep the explicit tag and exact version', () => {
+        assert.equal(utils.findMaxSatisfyingVersion('latest', distTags, allVersions, options), '2.1.0');
+        assert.equal(utils.findMaxSatisfyingVersion('2.1.0', distTags, allVersions, options), '2.1.0');
+      });
+
+      it('should fallback to deprecated version when the range has nothing else', () => {
+        assert.equal(utils.findMaxSatisfyingVersion('~2.1.0', distTags, allVersions, options), '2.1.0');
+      });
+    });
   });
 
   describe('parseTarballUrls()', () => {

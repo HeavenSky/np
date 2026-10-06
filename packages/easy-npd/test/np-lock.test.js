@@ -104,5 +104,17 @@ describe('test/np-lock.test.js', () => {
     await fs.rm(path.join(tmp, 'package-lock.json'));
     await run(helper.npminstall, ['--no-lockfile']).expect('code', 0).end();
     await assert.rejects(fs.stat(lockFile), /ENOENT/);
+
+    await fs.writeFile(
+      path.join(tmp, 'package.json'),
+      JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        dependencies: { pedding: '1.1.0' },
+        config: { np: { lockfile: false } },
+      })
+    );
+    await run(helper.npminstall, []).expect('code', 0).end();
+    await assert.rejects(fs.stat(lockFile), /ENOENT/);
   });
 });

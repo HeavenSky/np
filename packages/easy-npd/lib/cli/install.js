@@ -356,8 +356,10 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
 
   // 默认读写 <root>/np-lock.json; --lockfile-path, --dependencies-tree 与 -g 有各自的版本来源, 不使用它
   let lockState = null;
+  // 与 easy-np 共用同一份锁文件, 开关也读同一个 config.np.lockfile
+  const rootConfig = (await utils.readJSON(path.join(root, 'package.json'))).config?.np || {};
   const lockfileDisabled = argv.lockfile === false || ['0', 'false'].includes(process.env.np_lockfile);
-  if (!argv.global && !lockfilePath && !dependenciesTree && !lockfileDisabled) {
+  if (!argv.global && !lockfilePath && !dependenciesTree && !lockfileDisabled && rootConfig.lockfile !== false) {
     const lockExists = await npLock.exists(root);
     if (argv['frozen-lockfile'] && !lockExists) {
       throw new Error(`--frozen-lockfile requires ${npLock.LOCKFILE_NAME} in ${root}`);

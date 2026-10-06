@@ -96,7 +96,7 @@ npm i -g easy-npd
 - 完整安装(`npd` 不带包名)只保留本次用到的条目; `npd <pkg>`, `--production`, `--no-optional` 只追加, 不删除其他条目.
 - 已安装的版本与锁定版本不同时重装为锁定版本; `npd-x update` 忽略锁定版本, 按范围重新解析并写回.
 - `--frozen-lockfile`: 只按 `np-lock.json` 安装, 有依赖不在锁文件中时报错, 不写回; 用于 CI.
-- 项目已有 `package-lock.json`, `npm-shrinkwrap.json`, `pnpm-lock.yaml`, `yarn.lock`, `bun.lock` 或 `bun.lockb` 且没有 `np-lock.json` 时不生成; `--no-lockfile` 或环境变量 `np_lockfile=false` 关闭; 使用 `--lockfile-path`, `--dependencies-tree` 或 `-g` 时不读写.
+- 项目已有 `package-lock.json`, `npm-shrinkwrap.json`, `pnpm-lock.yaml`, `yarn.lock`, `bun.lock` 或 `bun.lockb` 且没有 `np-lock.json` 时不生成; `--no-lockfile`, 环境变量 `np_lockfile=false` 或 `package.json` 的 `config.np.lockfile: false`(与 easy-np 同一个键)关闭; 使用 `--lockfile-path`, `--dependencies-tree` 或 `-g` 时不读写.
 - 只锁定 registry 上的包; git, 本地路径与 tarball url 依赖每次重新获取.
 
 ### npm `overrides`
@@ -144,7 +144,7 @@ npm i -g easy-npd
 | 依赖                                                | node-gyp 9, tar 6                                                                              | node-gyp 10, tar 7                                                                                                                                                            |
 | 未写版本或写 range 时选择版本                       | 取 latest 或范围内最高版本, 不看 `engines`                                                     | 同 npm, 优先选 `engines.node` 兼容当前 Node.js 的版本, 如 Node 18 下 `npd -g npm` 装 npm 10; 显式 tag 与精确版本照旧                                                          |
 | tarball 完整性校验                                  | 只校验 `dist.shasum`(sha1); 只有 `--lockfile-path` 时校验 sha512                               | 与 npm 一致按 `dist.integrity` 中最强的算法校验(通常是 sha512), 没有 integrity 时才退回 sha1                                                                                  |
-| 缺失的 peerDependencies                             | 只告警                                                                                         | 与 npm 7+ 一致自动安装为该包的依赖, 失败时按可选依赖跳过并告警; 祖先已声明不兼容版本时只告警; `--legacy-peer-deps` 恢复只告警                                                 |
+| 缺失的 peerDependencies                             | 只告警                                                                                         | 与 npm 7+ 一致自动安装为该包的依赖, 失败时按可选依赖跳过并告警(npm 直接报错); 祖先已声明不兼容版本时只告警; `--legacy-peer-deps` 恢复只告警                                                 |
 
 ### 移除的参数与配置
 
@@ -173,7 +173,6 @@ npm i -g easy-npd
 为支持 Node 16 而保留的依赖, 以下公告未修复:
 
 - urllib 3 依赖的 undici 5: 公告集中在 WebSocket, fetch, Cookie, multipart 与 retry 拦截器, npd 不经过这些路径; 请求走私一类需要恶意 registry 或代理配合.
-- urllib 3 跟随跨域重定向时保留 `Authorization` 等请求头: npd 只给与 registry 同 host 的请求附加 token, 但该请求若被重定向到其他域名, token 会随之发出; 只影响配置了 token 的私有 registry.
 - node-gyp 10 经 make-fetch-happen / cacache 引入的 tar 6 与 http-cache-semantics: 只在依赖的安装脚本调用 node-gyp 下载 Node.js 头文件时使用; npd 自身解压 tarball 使用顶层 tar 7.
 
 ## License

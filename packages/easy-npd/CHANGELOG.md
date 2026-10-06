@@ -16,6 +16,7 @@ easy-npd 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 6.8.0, 上
 ### 行为变更
 
 - 未写版本或写 range 时与 npm 一致优先选 `engines.node` 兼容当前 Node.js 的版本, 例如 Node 18 下 `npd -g npm` 装 npm 10; 显式 tag 与精确版本不变. 不带版本安装时日志显示 `<name>@*`.
+- 未写版本或写 range 时与 npm 一致避开 deprecated 版本: 优先级为未 deprecated > `engines.node` 兼容 > 版本高低; 范围内只有 deprecated 版本时仍选中并告警.
 - 安装进度标记改记在 `node_modules/.npd-state.json`, 不再修改依赖包自己的 `package.json`; 之前版本写入的 `__npd_done` / `__npd_stage` 仍能识别, 升级后不必重装.
 
 - git 依赖改为直接调用 git CLI: 托管仓库也走 git 克隆(本机需要 git), 不再下载 codeload tarball; 需要构建时用 npd 自身安装依赖(含 devDependencies, 不执行依赖的安装脚本)再执行 prepare, 不再调用 `npm install`; 按 npm 的 `files`, `.npmignore` 规则打包.
@@ -24,10 +25,14 @@ easy-npd 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 6.8.0, 上
 
 - 联网安装按 `dist.integrity` 中最强的算法(通常是 sha512)校验 tarball, 之前只校验 sha1.
 - `--save-dependencies-tree` 保存的依赖树补上 `cpu`, `libc`, `bin`, `peerDependenciesMeta`, `bundleDependencies` 等字段, 用它还原时不再在其他平台选错可选依赖.
+- git 依赖准备超时结束整个进程树, 不再残留 prepare 脚本启动的进程.
+- 同一个 git 仓库在一次安装中只执行一次 `git ls-remote`.
+- `package.json` 的 `config.np.lockfile: false` 关闭 `np-lock.json`, 与 easy-np 同一个键.
 
 ### 运行环境
 
 - 移除 `pacote` 与 `@npmcli/arborist`, 新增 `npm-packlist` 5.
+- `urllib` 范围提到 `^3.27.3`, 保证使用跨源重定向时去掉认证头的 undici.
 
 ## 0.0.2 (2026-10-03)
 

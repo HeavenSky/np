@@ -397,6 +397,20 @@ exports.runScript = async (pkgDir, script, options) => {
   }
 };
 
+// 结束整个进程树: 只结束直接子进程时, shell 或脚本再启动的孙进程会残留; POSIX 下要求子进程以 detached 启动成为进程组组长
+exports.killProcessTree = pid => {
+  if (!pid) return;
+  try {
+    if (process.platform === 'win32') {
+      cp.spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
+    } else {
+      process.kill(-pid, 'SIGKILL');
+    }
+  } catch {
+    // 进程已退出
+  }
+};
+
 exports.getMaxRange = spec => {
   // >=1.0.0 <2.0.0
   const r = /^>=.*?<(.*?)$/.exec(spec);
@@ -405,35 +419,45 @@ exports.getMaxRange = spec => {
   }
 };
 
-// 对齐 npm-pick-manifest: 未写版本或写的是 range 时, 优先选 engines.node 兼容当前 Node.js 的版本;
-// 显式 tag 与精确版本原样使用; 范围内没有兼容版本时仍返回原本会选中的版本, 由安装阶段告警
-// options.versions: manifest 的 versions 字段, 不传时不检查 engines
+// 对齐 npm-pick-manifest: 未写版本或写的是 range 时, 优先选未 deprecated 的版本, 其次选 engines.node 兼容当前 Node.js 的版本;
+// 显式 tag 与精确版本原样使用; 范围内都不满足时仍返回原本会选中的版本, 由安装阶段告警
+// options.versions: manifest 的 versions 字段, 不传时不检查 deprecated 与 engines
 // options.implicitTag: spec 是未写版本时补上的 latest, 而不是用户显式写的 tag
 exports.findMaxSatisfyingVersion = (spec, distTags, allVersions, options = {}) => {
   const { versions, nodeVersion = process.version, implicitTag = false } = options;
-  const engineOk = version => {
-    const node = versions && versions[version] && versions[version].engines && versions[version].engines.node;
-    return !node || semver.satisfies(nodeVersion, node);
+  // 0 最优; deprecated 的权重高于 engines 不兼容, 与 npm-pick-manifest 的排序一致
+  const rank = version => {
+    const manifest = versions && versions[version];
+    if (!manifest) return 0;
+    const node = manifest.engines && manifest.engines.node;
+    return (manifest.deprecated ? 2 : 0) + (node && !semver.satisfies(nodeVersion, node) ? 1 : 0);
   };
   const maxSatisfying = range => {
     const max = semver.maxSatisfying(allVersions, range);
-    if (!max || engineOk(max)) return max;
-    return semver.maxSatisfying(allVersions.filter(engineOk), range) || max;
+    if (!max || rank(max) === 0) return max;
+    for (let level = 0; level < rank(max); level++) {
+      const candidate = semver.maxSatisfying(
+        allVersions.filter(version => rank(version) === level),
+        range
+      );
+      if (candidate) return candidate;
+    }
+    return max;
   };
 
   // try tag first
   let realPkgVersion = distTags[spec];
   if (realPkgVersion) {
-    if (implicitTag && !engineOk(realPkgVersion)) {
-      const compatible = maxSatisfying('*');
-      if (compatible && engineOk(compatible)) {
-        realPkgVersion = compatible;
+    if (implicitTag && rank(realPkgVersion) > 0) {
+      const better = maxSatisfying('*');
+      if (better && rank(better) < rank(realPkgVersion)) {
+        realPkgVersion = better;
       }
     }
   } else {
     const version = semver.valid(spec);
     const range = semver.validRange(spec, true);
-    if (semver.satisfies(distTags.latest, spec) && (version || engineOk(distTags.latest))) {
+    if (semver.satisfies(distTags.latest, spec) && (version || rank(distTags.latest) === 0)) {
       realPkgVersion = distTags.latest;
     } else if (version) {
       // use the valid version
@@ -450,7 +474,7 @@ exports.findMaxSatisfyingVersion = (spec, distTags, allVersions, options = {}) =
           if (
             latestMajorVersion &&
             semver.satisfies(latestMajorVersion, spec) &&
-            (engineOk(latestMajorVersion) || !engineOk(realPkgVersion))
+            rank(latestMajorVersion) <= rank(realPkgVersion)
           ) {
             realPkgVersion = latestMajorVersion;
           }

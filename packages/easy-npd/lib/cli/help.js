@@ -70,7 +70,7 @@ Options:
   -v, --version: show version
   -h, --help: show help
   --refresh-cache: ignore cached manifests and tarballs, download again and overwrite the cache
-  --no-lockfile: don't read or write np-lock.json, same as env np_lockfile=false
+  --no-lockfile: don't read or write np-lock.json, same as env np_lockfile=false, or set config.np.lockfile=false in package.json
   --frozen-lockfile: install exactly the versions in np-lock.json, fail if a dependency is not locked, never update it
   --probe-cache: minutes to reuse the last registry speed test result, 0 to test on every run, default 5, also read from env np_probe_cache
   --offline: only use the disk cache and never request the network, fail when a manifest or tarball is not cached. git and remote url packages are not supported.
