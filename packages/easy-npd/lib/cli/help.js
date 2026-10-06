@@ -61,6 +61,10 @@ Options:
   --no-save: Prevents saving to dependencies
   -g, --global: install packages to the global directory specified by 'npm config get prefix'
   -r, --registry: specify custom registry
+  --proxy, --https-proxy: proxy for http / https requests, also passed to install scripts, node-gyp and git; default from npm_config_proxy, ~/.nprc, HTTP_PROXY / HTTPS_PROXY
+  --noproxy: comma separated hosts that bypass the proxy, default from NO_PROXY
+  --cafile: CA certificate file for https requests
+  --no-strict-ssl: skip https certificate verification
   --root: install root directory, default is current working directory
   --prefix: global install prefix used with -g, default is '$npm config get prefix'
   --no-cache: don't use the tarball disk cache, ignored when --cache-strict is set
@@ -150,6 +154,10 @@ git packages are not supported, fetching them runs their prepare script.
 Options:
 
   -r, --registry: specify custom registry
+  --proxy, --https-proxy: proxy for http / https requests, also passed to install scripts, node-gyp and git; default from npm_config_proxy, ~/.nprc, HTTP_PROXY / HTTPS_PROXY
+  --noproxy: comma separated hosts that bypass the proxy, default from NO_PROXY
+  --cafile: CA certificate file for https requests
+  --no-strict-ssl: skip https certificate verification
   --root: install root directory, default is current working directory
   --no-cache: don't use the tarball disk cache
   --refresh-cache: ignore cached manifests and tarballs, download again and overwrite the cache

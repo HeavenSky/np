@@ -19,6 +19,7 @@ const Context = require('../context');
 const mirror = require('../mirror');
 const { lockfileConverter } = require('../lockfile_resolver');
 const npLock = require('../np_lock');
+const proxy = require('../proxy');
 const help = require('./help');
 
 module.exports = async function install(args, { ignorePkgNames = false, ignoreLockfile = false } = {}) {
@@ -48,7 +49,12 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
         'forbidden-licenses',
         // {"http://a.com":"http://b.com"}
         'tarball-url-mapping',
-        // --proxy 已移除: urllib 3 不支持 proxy / enableProxy 参数, 传入后请求仍直连
+        'proxy',
+        'https-proxy',
+        'noproxy',
+        'cafile',
+        // 声明为字符串: 布尔类型在未传时默认为 false, 会被当作关闭证书校验
+        'strict-ssl',
         // --high-speed-store=filepath
         'high-speed-store',
         'dependencies-tree',
@@ -137,6 +143,9 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
     console.log(help.install());
     process.exit(0);
   }
+
+  // 首个网络请求与子进程启动之前写入, 安装脚本, node-gyp 与 git 通过环境变量继承
+  proxy.configure(argv);
 
   const pkgs = [];
 
@@ -294,7 +303,6 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
     forbiddenLicenses,
     flatten,
   };
-  // 不再读取 npm 的 strict-ssl: urllib 3 不支持 rejectUnauthorized, HTTPS 证书始终校验
   config.ignoreScripts = argv['ignore-scripts'] || getIgnoreScripts();
   config.rebuild = argv.rebuild;
   config.ignoreOptionalDependencies = !argv.optional;
