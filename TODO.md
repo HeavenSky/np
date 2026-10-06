@@ -36,14 +36,6 @@
 - README 增加一张"Node 版本 × 能力"表, 写明各版本下的降级项与已知风险, 替代现在的「已知安全风险」段落.
 - 测试: CI 增加 Node 16 / 18 矩阵, 断言降级路径可用且告警内容正确.
 
-## 安全
-
-- urllib 3 跟随跨域重定向时保留 `Authorization` 请求头: token 只附加到与 registry 同 host 的请求, 但该请求被重定向到其他域名(例如 tarball CDN)时 token 会随之发出. 修法候选: 下载 tarball 与 manifest 时关闭自动重定向, 自行跟随并在跨域时去掉认证头; 或升级到已修复的 urllib(需 Node >= 18.19, 与 Node 下限一起决定).
-
-## 选版与 npm 的剩余差异
-
-- npm-pick-manifest 在未写版本或写 range 时还会避开 deprecated 版本(latest 被 deprecate 时改选范围内未被 deprecate 的最高版本); 两个包只补了 engines 检查, deprecated 版本照旧会被选中, 只在安装时告警.
-
 ## 功能待办
 
 - easy-np: `--lockfile-path` 支持 workspace, 使各 workspace 按 lockfile 还原各自版本, 与 `npm ci` 一致.
@@ -53,10 +45,3 @@
 ## 已知不足
 
 - `np-lock.json` 只锁定 registry 包, git, 本地路径与 tarball url 依赖每次重新获取; workspace 下的锁文件读写只有单仓用例覆盖.
-- easy-npd 没有 `package.json` 级配置键, 只能用 `--no-lockfile` / `np_lockfile=false` 关闭锁文件; easy-np 另认 `config.np.lockfile: false`.
-- 安装状态文件按条目合并写入, 但没有跨进程锁; 两个进程同时安装同一个项目时, 后写入的进程可能覆盖另一个进程刚改过的同一条目, 结果是该包下次重新处理, 不会被误判为已完成.
-- 测试 registry 快照只固定 manifest 中可见的版本与 dist-tags; tgz, 二进制文件与 `binary-mirror-config/latest` 仍走网络.
-- 自动安装的 peer 失败时按可选依赖跳过, 与 npm 直接报错不同.
-- git 依赖不再下载托管仓库的 codeload tarball, 一律 git 克隆: 本机必须有 git, 会带上子模块, `.gitattributes` 的 export-ignore 不生效; ls-remote 结果不缓存.
-- git 依赖需要构建时, 安装依赖阶段不执行这些依赖自己的安装脚本(等同 npm 12 默认); npm 11 及以前的 pacote 会执行.
-- easy-np 的 git 依赖只执行根包 prepare, 失败时报错里没有脚本 stderr; 超时只结束直接子进程, 脚本再启动的孙进程可能残留.
