@@ -7,13 +7,18 @@ const chalk = require('chalk');
 const utils = require('../utils');
 
 module.exports = async (pkg, options) => {
+  const { name, raw, fetchSpec, displayName } = pkg;
+  // np-lock.json 记录 tarball 的 integrity; 冻结时缺少条目直接报错
+  const locked = options.cache.dependenciesTree[raw];
+  const installed = await utils.getLockedInstall(locked, options);
+  if (installed) {
+    options.remoteNames[raw] = installed.package.name;
+    if (options.lockPackages) options.lockPackages[raw] = locked;
+    return installed;
+  }
   if (options.offline) {
     throw new Error(`Can't install ${pkg.raw} in offline mode: remote packages are always fetched from the network`);
   }
-  const { name, raw, fetchSpec, displayName } = pkg;
-
-  // np-lock.json 记录 tarball 的 integrity; 冻结时缺少条目直接报错
-  const locked = options.cache.dependenciesTree[raw];
   if (!locked && options.frozenLockfile) {
     throw new Error(`${raw} is not in np-lock.json, run npd without --frozen-lockfile to update it`);
   }

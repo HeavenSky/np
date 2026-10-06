@@ -15,7 +15,7 @@ const bin = require('./bin');
 const link = require('./link');
 const dependencies = require('./dependencies');
 const resolve = require('./download/npm').resolve;
-const { REGISTRY_TYPES } = require('./npa_types');
+const { REGISTRY_TYPES, LOCAL_TYPES } = require('./npa_types');
 
 module.exports = install;
 
@@ -67,8 +67,17 @@ async function _install(parentDir, pkg, ancestors, options, context) {
   if (options.spinner) {
     options.spinner.text = `[${options.progresses.finishedInstallTasks}/${options.progresses.installTasks}] Installing ${pkg.name}@${pkg.version}`;
   }
-  let p = npa(pkg.name ? `${pkg.name}@${pkg.version}` : pkg.version, { where: options.root, nested: context.nested });
+  // 只有根项目, 受信本地包与 overrides / resolutions 声明的依赖受信; 其余依赖声明的本地路径必须按声明者目录解析并按声明者审核脚本, 否则未放行的包能借 file: 依赖执行脚本
+  const parent = ancestors[ancestors.length - 1];
+  const trusted = !parent || !!pkg.overridden || parent.trustedLocal;
+  const where = trusted ? options.root : parent.where;
+  let p = npa(pkg.name ? `${pkg.name}@${pkg.version}` : pkg.version, { where, nested: context.nested });
   const displayName = (p.displayName = utils.getDisplayName(pkg, ancestors));
+  const isLocal = LOCAL_TYPES.includes(p.type);
+  if (isLocal && !trusted) {
+    p.untrustedLocal = true;
+    p.scriptsOwner = allowScripts.keyOf(parent.scriptIdentity);
+  }
 
   if (options.registryOnly && REGISTRY_TYPES.includes(p.type)) {
     throw new Error(`Only registry packages are allowed, but "${displayName}" is ${p.type}`);
@@ -97,7 +106,8 @@ async function _install(parentDir, pkg, ancestors, options, context) {
     }
   }
 
-  const key = `install:${pkg.name}@${pkg.version}`;
+  // 不受信的本地路径相对声明者解析, 同一个 spec 在不同声明者下指向不同目录
+  const key = p.untrustedLocal ? `install:${pkg.name}@${p.fetchSpec}#untrusted` : `install:${pkg.name}@${pkg.version}`;
   const c = options.cache[key]; // {package: packageInfo, dir: realDir}
   if (c) {
     const realPkg = c.package;
@@ -168,7 +178,9 @@ async function _install(parentDir, pkg, ancestors, options, context) {
     options.latestVersions.set(realPkg.name, realPkg.version);
   }
 
-  if (info.exists && !info.stage) {
+  // 已装好的包: 启用锁文件时仍遍历一次子依赖但不执行脚本, 否则这棵子树不会记进 np-lock.json, 完整安装时被当作无用条目删除
+  const revisit = info.exists && !info.stage;
+  if (revisit && (!options.lockPackages || options.visitedStoreDirs.has(realPkgDir))) {
     // make sure bins will be links to ${parentDir}/node_modules/.bin
     await linkModule(pkg, parentDir, realPkg, realPkgDir, options);
     return {
@@ -176,7 +188,8 @@ async function _install(parentDir, pkg, ancestors, options, context) {
       dir: realPkgDir,
     };
   }
-  const stage = info.stage || utils.FIRST_INSTALL_STAGE;
+  options.visitedStoreDirs.add(realPkgDir);
+  const stage = revisit ? 'finish' : info.stage || utils.FIRST_INSTALL_STAGE;
   if (info.stage) {
     options.console.warn(
       chalk.yellow('[npd:resume] %s continue from %s, root: %j'),
@@ -193,48 +206,22 @@ async function _install(parentDir, pkg, ancestors, options, context) {
   // 4. link bin files
   // 5. link package to node_modules dir
 
-  if (realPkg.publish_time && realPkg.publish_time >= options.recentlyUpdateMinDateTime) {
-    options.recentlyUpdates.set(`${displayName}(${chalk.green(realPkg.version)})`, new Date(realPkg.publish_time));
-  }
-
-  if (realPkg.deprecated) {
-    options.pendingMessages.push([
-      'warn',
-      '%s %s %s',
-      chalk.red('deprecate'),
-      chalk.gray(displayName),
-      realPkg.deprecated,
-    ]);
-  }
-
-  if (realPkg.license && options.forbiddenLicensesRegex && options.forbiddenLicensesRegex.test(realPkg.license)) {
-    options.pendingMessages.push([
-      'warn',
-      '%s %s %s',
-      chalk.magenta('license forbidden'),
-      chalk.gray(displayName),
-      `package ${realPkg.name}'s license(${realPkg.license}) is not allowed`,
-    ]);
-  }
-
-  // https://docs.npmjs.com/files/package.json#engines
-  const nodeVersion = realPkg.engines && realPkg.engines.node;
-  if (nodeVersion && !semver.satisfies(process.version, nodeVersion)) {
-    const err = new Error(
-      `"node@${process.version}" is incompatible with ${displayName}, expected node@${nodeVersion}`
-    );
-    err.name = 'UnSupportedNodeError';
-    if (options.engineStrict) {
-      throw err;
-    } else {
-      options.console.warn('\n%s %s', chalk.magenta('WARN node unsupported'), err.message);
-    }
-  }
+  if (!revisit) checkPackage(realPkg, displayName, options);
 
   // 依赖的安装脚本需在 allowScripts 中放行, 未放行时 preinstall / install / postinstall 都不执行
+  let scriptIdentity = null;
+  if (!isLocal) scriptIdentity = allowScripts.identityOf(p.type, realPkg, p.fetchSpec);
+  else if (!trusted) scriptIdentity = parent.scriptIdentity;
   const scriptsAllowed =
-    options.ignoreScripts ||
-    (await allowScripts.allowPackage(realPkg, realPkgDir, p.type, p.fetchSpec, displayName, options));
+    !revisit &&
+    (options.ignoreScripts ||
+      (await allowScripts.allowPackage(
+        realPkg,
+        realPkgDir,
+        scriptIdentity,
+        p.untrustedLocal ? `${displayName} (declared by ${p.scriptsOwner})` : displayName,
+        options
+      )));
   if (scriptsAllowed && utils.shouldRunStage(stage, 'preinstall')) {
     await preinstall(realPkg, realPkgDir, displayName, options);
     if (realPkg.scripts?.preinstall && !options.ignoreScripts) await utils.setInstallStage(realPkgDir, 'deps');
@@ -242,7 +229,7 @@ async function _install(parentDir, pkg, ancestors, options, context) {
   // link bundleDependencies' bin
   // npd fsevents
   const bundledDependencies = await getBundleDependencies(realPkg, realPkgDir);
-  await Promise.all(bundledDependencies.map(name => bundleBin(name, realPkgDir, options)));
+  if (!revisit) await Promise.all(bundledDependencies.map(name => bundleBin(name, realPkgDir, options)));
 
   const deps = dependencies(realPkg, options, context.nested);
   const pkgs = deps.prod;
@@ -279,13 +266,15 @@ async function _install(parentDir, pkg, ancestors, options, context) {
         }
       }
     }
-    realPkg.peerDependencies = unmatched;
-
-    options.peerDependencies.push({
-      package: realPkg,
-      displayName,
-      parentDir,
-    });
+    // 不能写回 realPkg.peerDependencies: 它就是 np-lock.json 里的 manifest, 改写后锁文件丢失原始 peer 声明
+    if (!revisit) {
+      options.peerDependencies.push({
+        package: realPkg,
+        displayName,
+        parentDir,
+        peerDependencies: unmatched,
+      });
+    }
   }
 
   if (pkgs.length > 0) {
@@ -306,6 +295,9 @@ async function _install(parentDir, pkg, ancestors, options, context) {
           version: realPkg.version,
           dependencies: deps.prodMap,
           optional: !!pkg.optional,
+          where: packageWhere(p, realPkgDir),
+          trustedLocal: isLocal && trusted,
+          scriptIdentity,
         }),
         options,
         context
@@ -319,7 +311,7 @@ async function _install(parentDir, pkg, ancestors, options, context) {
 
   await linkModule(pkg, parentDir, realPkg, realPkgDir, options);
   // 本次运行的脚本全部成功后才清除阶段标记, 否则延后执行的子依赖脚本失败时, 上层包已被标为完成而不再遍历到它; 失败被忽略的可选依赖不加入, 下次运行重试
-  options.stagedDirs.add(realPkgDir);
+  if (!revisit) options.stagedDirs.add(realPkgDir);
 
   debug(
     '[%s/%s] installed %s@%s at %s',
@@ -405,6 +397,52 @@ async function satisfiesRange(childPkg, ancestorPkg, options) {
     ancestorSpec: ancestorPkg.rawSpec,
     ancestorResolved: resolveAncestorPkg.version || '-',
   };
+}
+
+function packageWhere(p, realPkgDir) {
+  if (p.type === 'directory') return p.fetchSpec;
+  if (p.type === 'file') return path.dirname(p.fetchSpec);
+  return realPkgDir;
+}
+
+function checkPackage(realPkg, displayName, options) {
+  if (realPkg.publish_time && realPkg.publish_time >= options.recentlyUpdateMinDateTime) {
+    options.recentlyUpdates.set(`${displayName}(${chalk.green(realPkg.version)})`, new Date(realPkg.publish_time));
+  }
+
+  if (realPkg.deprecated) {
+    options.pendingMessages.push([
+      'warn',
+      '%s %s %s',
+      chalk.red('deprecate'),
+      chalk.gray(displayName),
+      realPkg.deprecated,
+    ]);
+  }
+
+  if (realPkg.license && options.forbiddenLicensesRegex && options.forbiddenLicensesRegex.test(realPkg.license)) {
+    options.pendingMessages.push([
+      'warn',
+      '%s %s %s',
+      chalk.magenta('license forbidden'),
+      chalk.gray(displayName),
+      `package ${realPkg.name}'s license(${realPkg.license}) is not allowed`,
+    ]);
+  }
+
+  // https://docs.npmjs.com/files/package.json#engines
+  const nodeVersion = realPkg.engines && realPkg.engines.node;
+  if (nodeVersion && !semver.satisfies(process.version, nodeVersion)) {
+    const err = new Error(
+      `"node@${process.version}" is incompatible with ${displayName}, expected node@${nodeVersion}`
+    );
+    err.name = 'UnSupportedNodeError';
+    if (options.engineStrict) {
+      throw err;
+    } else {
+      options.console.warn('\n%s %s', chalk.magenta('WARN node unsupported'), err.message);
+    }
+  }
 }
 
 function forceFlatten(pkg) {

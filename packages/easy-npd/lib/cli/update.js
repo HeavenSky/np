@@ -2,7 +2,7 @@
 
 const path = require('path');
 const parseArgs = require('minimist');
-const { rimraf } = require('../utils');
+const { rimraf, redact } = require('../utils');
 const help = require('./help');
 const install = require('./install');
 
@@ -15,7 +15,7 @@ module.exports = async function update(args) {
   try {
     await main(args);
   } catch (err) {
-    console.error(err);
+    console.error(redact(err));
     process.exit(-1);
   }
 };

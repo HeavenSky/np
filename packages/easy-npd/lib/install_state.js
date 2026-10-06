@@ -110,16 +110,20 @@ class StateFile {
 
 const stateFiles = new Map();
 
+function stateFileOf(file) {
+  let stateFile = stateFiles.get(file);
+  if (!stateFile) {
+    stateFile = new StateFile(file);
+    stateFiles.set(file, stateFile);
+  }
+  return stateFile;
+}
+
 async function open(pkgRoot) {
   const realRoot = await fs.realpath(pkgRoot).catch(() => path.resolve(pkgRoot));
   const location = locate(realRoot);
   if (!location) return null;
-  let stateFile = stateFiles.get(location.file);
-  if (!stateFile) {
-    stateFile = new StateFile(location.file);
-    stateFiles.set(location.file, stateFile);
-  }
-  return { stateFile, key: location.key, realRoot };
+  return { stateFile: stateFileOf(location.file), key: location.key, realRoot };
 }
 
 async function readLegacy(pkgRoot) {
@@ -155,4 +159,31 @@ exports.update = async (pkgRoot, patch) => {
   }
   await opened.stateFile.set(opened.key, entry);
   return null;
+};
+
+// 解压或复制前调用: 必须写 done: false 而不是删除记录, 没有记录的包会被当作其他工具装好的而跳过安装
+exports.reset = async pkgRoot => {
+  const opened = await open(pkgRoot);
+  if (opened) await opened.stateFile.set(opened.key, { done: false });
+};
+
+// 包目录被删除前调用, 调用时目录仍须存在, 否则经符号链接的 store 路径定位不到同一个状态文件
+exports.remove = async pkgRoot => {
+  const opened = await open(pkgRoot);
+  if (opened) await opened.stateFile.set(opened.key, undefined);
+};
+
+// 删除 stateDir 下状态文件中 shouldDrop(store 目录名) 为真的记录, 返回被删除的键
+exports.removeEntries = async (stateDir, shouldDrop) => {
+  const realDir = await fs.realpath(stateDir).catch(() => path.resolve(stateDir));
+  const stateFile = stateFileOf(path.join(realDir, STATE_FILE));
+  await stateFile.sync();
+  const keys = Object.keys(stateFile.entries).filter(key => stateFile.entries[key] && shouldDrop(key.split('/')[0]));
+  if (!keys.length) return keys;
+  for (const key of keys) {
+    stateFile.entries[key] = undefined;
+    stateFile.touched.add(key);
+  }
+  await stateFile.flush();
+  return keys;
 };

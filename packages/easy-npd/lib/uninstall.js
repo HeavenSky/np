@@ -5,6 +5,7 @@ const fs = require('fs/promises');
 const chalk = require('chalk');
 const normalize = require('npm-normalize-package-bin');
 const utils = require('./utils');
+const installState = require('./install_state');
 const preUninstall = require('./preuninstall');
 const postUninstall = require('./postuninstall');
 
@@ -127,6 +128,7 @@ async function uninstall(pkg, options) {
     await utils.rimraf(pkgRoot);
     await utils.rimraf(storeDir);
   } else {
+    await installState.remove(realRoot);
     await utils.rimraf(pkgRoot);
     await utils.rimraf(realRoot);
   }

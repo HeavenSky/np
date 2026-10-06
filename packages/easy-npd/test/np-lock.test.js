@@ -34,13 +34,16 @@ describe('test/np-lock.test.js', () => {
       if (pkg.version) return pkg.version;
     }
   }
+  async function lockManifest(key, spec) {
+    const lock = await readLock();
+    const res = await urllib.request(`https://registry.npmmirror.com/${spec}`, { dataType: 'json', timeout: 30000 });
+    const { name, version, dist } = res.data;
+    lock.packages[key] = { name, version, dist };
+    await fs.writeFile(lockFile, JSON.stringify(lock));
+  }
   // 把锁文件中 ms@^2.1.1 改成 2.1.1, 证明再次安装复用锁定的版本而不是范围内的最新版本
   async function pinMs() {
-    const lock = await readLock();
-    const res = await urllib.request('https://registry.npmmirror.com/ms/2.1.1', { dataType: 'json', timeout: 30000 });
-    const { name, version, dist } = res.data;
-    lock.packages['ms@^2.1.1'] = { name, version, dist };
-    await fs.writeFile(lockFile, JSON.stringify(lock));
+    await lockManifest('ms@^2.1.1', 'ms/2.1.1');
     await fs.rm(path.join(tmp, 'node_modules'), { recursive: true, force: true });
   }
 
@@ -69,11 +72,115 @@ describe('test/np-lock.test.js', () => {
     await writePkg({ debug: '4.1.0' });
     await run(helper.npminstall, []).expect('code', 0).end();
     await run(helper.npminstall, ['pedding@1.1.0']).expect('code', 0).end();
-    assert.deepEqual(Object.keys((await readLock()).packages), ['debug@4.1.0', 'ms@^2.1.1', 'pedding@1.1.0']);
+    // 命令行装的包另按保存进 package.json 的声明(^1.1.0)记录, 命令行的非浮动键保留到下次完整安装
+    assert.deepEqual(Object.keys((await readLock()).packages), [
+      'debug@4.1.0',
+      'ms@^2.1.1',
+      'pedding@1.1.0',
+      'pedding@^1.1.0',
+    ]);
 
     await writePkg({ pedding: '1.1.0' });
     await run(helper.npminstall, []).expect('code', 0).end();
     assert.deepEqual(Object.keys((await readLock()).packages), ['pedding@1.1.0']);
+  });
+
+  it('should lock the subtree of packages installed without the lockfile', async () => {
+    await writePkg({ debug: '4.1.0' });
+    await run(helper.npminstall, ['--no-lockfile']).expect('code', 0).end();
+    await run(helper.npminstall, []).expect('code', 0).end();
+    assert.deepEqual(Object.keys((await readLock()).packages), ['debug@4.1.0', 'ms@^2.1.1']);
+  });
+
+  it('should restore the lockfile after switching branches', async () => {
+    await writePkg({ debug: '4.1.0' });
+    await run(helper.npminstall, []).expect('code', 0).end();
+    const lockA = await fs.readFile(lockFile, 'utf8');
+    await writePkg({ debug: '4.3.4' });
+    await run(helper.npminstall, []).expect('code', 0).end();
+    const lockB = await fs.readFile(lockFile, 'utf8');
+    assert.deepEqual(Object.keys(JSON.parse(lockB).packages), ['debug@4.3.4', 'ms@2.1.2']);
+
+    // 切换分支只换 package.json 与锁文件, node_modules 与 store 里两个版本都已装好
+    await writePkg({ debug: '4.1.0' });
+    await fs.writeFile(lockFile, lockA);
+    await run(helper.npminstall, []).expect('code', 0).end();
+    assert.equal(await installedVersion('debug'), '4.1.0');
+    assert.equal(await fs.readFile(lockFile, 'utf8'), lockA);
+
+    await writePkg({ debug: '4.3.4' });
+    await fs.writeFile(lockFile, lockB);
+    await run(helper.npminstall, ['--frozen-lockfile']).expect('code', 0).end();
+    assert.equal(await installedVersion('debug'), '4.3.4');
+    await run(helper.npminstall, []).expect('code', 0).end();
+    assert.equal(await fs.readFile(lockFile, 'utf8'), lockB);
+  });
+
+  it('should record the same keys when everything is installed', async () => {
+    await writePkg({ '@isaacs/cliui': '8.0.2' });
+    await run(helper.npminstall, []).expect('code', 0).end();
+    const keys = Object.keys((await readLock()).packages);
+    assert(keys.includes('string-width@^4.2.0'), keys.join(', '));
+    await run(helper.npminstall, []).expect('code', 0).end();
+    assert.deepEqual(Object.keys((await readLock()).packages), keys);
+  });
+
+  it('should keep a root alias next to the aliased package', async () => {
+    await writePkg({ 'lodash-has-v3': 'npm:lodash.has@^3', 'lodash.has': '4.5.2' });
+    const keys = [];
+    for (let i = 0; i < 2; i++) {
+      await run(helper.npminstall, []).expect('code', 0).end();
+      assert.equal(await installedVersion('lodash.has'), '4.5.2');
+      assert.equal(await installedVersion('lodash-has-v3'), '3.2.1');
+      keys.push(Object.keys((await readLock()).packages));
+    }
+    assert(keys[0].includes('lodash.has@4.5.2') && keys[0].includes('lodash.has@^3'), keys[0].join(', '));
+    assert.deepEqual(keys[1], keys[0]);
+  });
+
+  it('should lock packages installed by name under the saved spec', async () => {
+    await writePkg({});
+    await run(helper.npminstall, ['pedding']).expect('code', 0).end();
+    // 不写版本时按 engines 选版本, Node 18.19 以下装 1.1.0
+    const version = await installedVersion('pedding');
+    const pkg = await helper.readJSON(path.join(tmp, 'package.json'));
+    assert.deepEqual(pkg.dependencies, { pedding: `^${version}` });
+    assert.deepEqual(Object.keys((await readLock()).packages), [`pedding@^${version}`]);
+    await run(helper.npminstall, ['--frozen-lockfile']).expect('code', 0).end();
+    await run(helper.npminstall, ['pedding', '--frozen-lockfile'])
+      .expect('code', 1)
+      .expect('stderr', /--frozen-lockfile can not be used with package arguments/)
+      .end();
+
+    // 命令行显式写的 tag 不复用锁文件里的同名键
+    await lockManifest('pedding@latest', 'pedding/1.1.0');
+    await run(helper.npminstall, ['pedding@latest']).expect('code', 0).end();
+    assert.equal(await installedVersion('pedding'), '2.0.1');
+    assert.equal((await readLock()).packages['pedding@latest'].version, '2.0.1');
+
+    await run(helper.npminstall, ['pedding@*', '--no-save']).expect('code', 0).end();
+    assert(!('pedding@*' in (await readLock()).packages));
+  });
+
+  it('should keep the original peerDependencies in the lockfile', async () => {
+    await writePkg({ 'use-sync-external-store': '1.2.0', react: '18.3.1' });
+    for (let i = 0; i < 2; i++) {
+      await run(helper.npminstall, []).expect('code', 0).end();
+      const locked = (await readLock()).packages['use-sync-external-store@1.2.0'];
+      assert.deepEqual(locked.peerDependencies, { react: '^16.8.0 || ^17.0.0 || ^18.0.0' });
+    }
+  });
+
+  it('should switch to the locked version without removing node_modules', async () => {
+    await writePkg({ debug: '4.1.0' });
+    await run(helper.npminstall, []).expect('code', 0).end();
+    await lockManifest('ms@^2.1.1', 'ms/2.1.1');
+    await run(helper.npminstall, []).expect('code', 0).end();
+    assert.equal(await msVersion(), '2.1.1');
+
+    await lockManifest('ms@^2.1.1', 'ms/2.1.2');
+    await run(helper.npminstall, ['--frozen-lockfile']).expect('code', 0).end();
+    assert.equal(await msVersion(), '2.1.2');
   });
 
   it('should fail with --frozen-lockfile when a dependency is not locked', async () => {

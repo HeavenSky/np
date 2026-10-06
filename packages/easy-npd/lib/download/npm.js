@@ -20,6 +20,7 @@ const get = require('../get');
 
 const { MIRROR_ATTEMPTS } = get;
 const utils = require('../utils');
+const installState = require('../install_state');
 const config = require('../np_config');
 
 module.exports = async (pkg, options) => {
@@ -285,7 +286,7 @@ async function _fetchFullPackageMetaWithCache(pkgUrl, globalOptions, cacheFile, 
     result = await _fetchFullPackageMeta(pkgUrl, globalOptions, etag, mirrorUrls);
   } catch (err) {
     if (cache) {
-      globalOptions.console.warn('[npd:download:npm] Request %s error, use cache instead', pkgUrl);
+      globalOptions.console.warn('[npd:download:npm] Request %s error, use cache instead', utils.redactUrl(pkgUrl));
       return cache.manifests;
     }
     throw err;
@@ -410,7 +411,7 @@ async function download(pkg, options) {
   if (await utils.isInstallDone(ungzipDir)) {
     // 上次安装中断或失败的包带回阶段, 由本次运行第一个到达的调用方继续安装; 继续执行脚本需要解压出的 scripts
     const stage = await utils.getResumeStage(ungzipDir, options);
-    if (stage) await mergePackageMeta(pkg, ungzipDir);
+    if (stage) await mergePackageMeta(pkg, ungzipDir, options);
     options.cache[key].done = true;
     options.events.emit(key);
     // debug('[%s@%s] Exists', pkg.name, pkg.version);
@@ -422,6 +423,7 @@ async function download(pkg, options) {
   }
 
   await utils.mkdirp(ungzipDir);
+  await installState.reset(ungzipDir);
 
   let lastErr;
   let count = 0;
@@ -455,9 +457,9 @@ async function download(pkg, options) {
       count++;
       options.console.warn(
         `[${pkg.name}@${pkg.version}] download %s %s: %s, fail count: %s`,
-        tarballUrl,
+        utils.redactUrl(tarballUrl),
         err.name,
-        err.message,
+        utils.redactUrl(err.message),
         count
       );
       // 缓存中的 tgz 校验或解压失败时删除, 否则之后每次重试都读到同一个损坏文件
@@ -478,7 +480,7 @@ async function download(pkg, options) {
     throw lastErr;
   }
 
-  await mergePackageMeta(pkg, ungzipDir);
+  await mergePackageMeta(pkg, ungzipDir, options);
 
   await utils.setInstallDone(ungzipDir, utils.FIRST_INSTALL_STAGE);
 
@@ -540,8 +542,12 @@ async function getTarballStream(tarballUrl, pkg, options, mirrored = false) {
         return stream;
       }
     } catch (err) {
-      options.console.warn('[npd:download:npm] highSpeedStore.get %s error: %s', tarballUrl, err);
-      options.console.warn(err.stack);
+      options.console.warn(
+        '[npd:download:npm] highSpeedStore.get %s error: %s',
+        utils.redactUrl(tarballUrl),
+        utils.redactUrl(String(err))
+      );
+      options.console.warn(utils.redactUrl(err.stack));
     }
   }
 
@@ -573,7 +579,7 @@ async function getTarballStream(tarballUrl, pkg, options, mirrored = false) {
       } catch (err) {
         options.console.warn('[npd:download:npm] ignore destroy response stream error: %s', err);
       }
-      throw new Error(`Download ${tarballUrl} status: ${result.status} error, should be 200`);
+      throw new Error(`Download ${utils.redactUrl(tarballUrl)} status: ${result.status} error, should be 200`);
     }
 
     // record size
@@ -613,7 +619,7 @@ async function getTarballStream(tarballUrl, pkg, options, mirrored = false) {
     );
 
     if (result.status !== 200) {
-      throw new Error(`Download ${tarballUrl} status: ${result.status} error, should be 200`);
+      throw new Error(`Download ${utils.redactUrl(tarballUrl)} status: ${result.status} error, should be 200`);
     }
     // make sure tarball file is not exists again
     exists = (options.offline || !options.refreshCache) && (await utils.exists(tarballFile));
@@ -720,7 +726,7 @@ function checkShasumAndUngzip(ungzipDir, readstream, pkg, useTarFormat) {
       const hashResult = hash.digest(expected.encoding);
       if (hashResult !== expected.digest) {
         const err = new Error(
-          `real ${expected.algorithm}:${hashResult} not equal to remote:${expected.digest}, download url ${readstream.tarballUrl || ''}, download size ${tarballSize}`
+          `real ${expected.algorithm}:${hashResult} not equal to remote:${expected.digest}, download url ${utils.redactUrl(readstream.tarballUrl || '')}, download size ${tarballSize}`
         );
         err.name = 'ShasumNotMatchError';
         handleCallback(err);
@@ -838,9 +844,20 @@ function binaryMirrorFiles(pkg, binaryMirror) {
 }
 
 // read package.json to merge into realPkg
-async function mergePackageMeta(pkg, ungzipDir) {
+// name, version 与 dist 保留 registry 的值: tarball 内的 package.json 可以自称任意包, 用它判断 allowScripts 会冒充已放行的包
+async function mergePackageMeta(pkg, ungzipDir, options) {
+  const trusted = { name: pkg.name, version: pkg.version, dist: pkg.dist };
   const fullMeta = await utils.readPackageJSON(ungzipDir);
-  Object.assign(pkg, fullMeta);
+  if (fullMeta.name !== trusted.name || fullMeta.version !== trusted.version) {
+    options.pendingMessages.push([
+      'warn',
+      '%s %s tarball contains package.json of %s',
+      chalk.magenta('manifest mismatch'),
+      chalk.gray(`${trusted.name}@${trusted.version}`),
+      chalk.yellow(`${fullMeta.name}@${fullMeta.version}`),
+    ]);
+  }
+  Object.assign(pkg, fullMeta, trusted);
   if (pkg.__fixDependencies) {
     pkg.dependencies = Object.assign({}, pkg.dependencies, pkg.__fixDependencies);
   }

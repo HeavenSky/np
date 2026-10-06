@@ -1,7 +1,7 @@
 {
   "name": "easy-npd",
   "version": "0.0.3",
-  "description": "Fast npm installer forked from npminstall 6.8.0, with flat _name@version@name layout, latest-version hoisting and node 16 support",
+  "description": "Fast npm installer forked from npminstall 6.8.0, with flat _name@version@name layout, latest-version hoisting and node 14 support",
   "keywords": [
     "dedup",
     "hoist",
@@ -61,8 +61,6 @@
     "minimatch": "^3.0.4",
     "minimist": "^1.2.0",
     "ms": "^2.1.1",
-    "node-gyp": "^12.4.0",
-    "node-gyp10": "npm:node-gyp@^10.3.1",
     "node-homedir": "^1.1.1",
     "normalize-package-data": "^5.0.0",
     "npm-normalize-package-bin": "^3.0.0",
@@ -85,6 +83,6 @@
     "oxlint": "^1.85.0"
   },
   "engines": {
-    "node": ">=16.14.0"
+    "node": ">=14.18.0"
   }
 }

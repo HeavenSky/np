@@ -8,6 +8,8 @@ const cp = require('child_process');
 const { promisify } = require('util');
 const { parse: urlparse } = require('url');
 const querystring = require('querystring');
+// 不能删: 加载时为 tar 补齐 Node < 16.6 缺少的内置方法
+require('./runtime');
 const tar = require('tar');
 const zlib = require('zlib');
 const runscript = require('runscript');
@@ -239,7 +241,7 @@ const INSTALL_FAILURES_CODE = 'NPD_INSTALL_FAILURES';
 exports.INSTALL_FAILURES_CODE = INSTALL_FAILURES_CODE;
 exports.installFailuresError = (failures, hint = 'run npd again to continue from where they stopped') => {
   const lines = failures.map(({ displayName, error }) => `  - ${displayName}: ${String(error.message).split('\n')[0]}`);
-  const err = new Error(`${failures.length} package(s) failed, ${hint}:\n${lines.join('\n')}`);
+  const err = new Error(exports.redactUrl(`${failures.length} package(s) failed, ${hint}:\n${lines.join('\n')}`));
   err.code = INSTALL_FAILURES_CODE;
   err.failures = failures;
   return err;
@@ -411,6 +413,126 @@ exports.killProcessTree = pid => {
   }
 };
 
+// 登记中的子进程树: 本进程退出时直接结束, 收到 SIGINT / SIGTERM 时先 SIGTERM, 最多等 1 秒仍存活再强制结束
+const trackedPids = new Set();
+const SIGNAL_GRACE_MS = 1000;
+
+function signalTree(pid, signal) {
+  try {
+    process.kill(process.platform === 'win32' ? pid : -pid, signal);
+    return true;
+  } catch (err) {
+    return err.code === 'EPERM';
+  }
+}
+
+function killTrackedOnExit() {
+  for (const pid of trackedPids) exports.killProcessTree(pid);
+}
+
+let terminating = false;
+function terminateTracked(signal) {
+  if (terminating) return;
+  terminating = true;
+  const pids = [...trackedPids];
+  if (process.platform === 'win32') {
+    for (const pid of pids) exports.killProcessTree(pid);
+  } else {
+    for (const pid of pids) signalTree(pid, 'SIGTERM');
+  }
+  const deadline = Date.now() + SIGNAL_GRACE_MS;
+  const timer = setInterval(() => {
+    const alive = pids.filter(pid => signalTree(pid, 0));
+    if (alive.length && Date.now() < deadline) return;
+    clearInterval(timer);
+    for (const pid of alive) exports.killProcessTree(pid);
+    process.exit(signal === 'SIGINT' ? 130 : 143);
+  }, 50);
+}
+
+// 登记 / 注销都只在集合为空时增删一次监听, 并发子进程再多也不会触发 MaxListenersExceededWarning
+exports.trackChildProcess = pid => {
+  if (!pid) return () => {};
+  if (trackedPids.size === 0) {
+    process.on('exit', killTrackedOnExit);
+    process.on('SIGINT', terminateTracked);
+    process.on('SIGTERM', terminateTracked);
+  }
+  trackedPids.add(pid);
+  return () => {
+    if (!trackedPids.delete(pid) || trackedPids.size > 0) return;
+    process.removeListener('exit', killTrackedOnExit);
+    process.removeListener('SIGINT', terminateTracked);
+    process.removeListener('SIGTERM', terminateTracked);
+  };
+};
+
+// 遮住 URL 中的 userinfo 与 .npmrc 风格的凭据, 用于报错, 日志与 debug 输出; 传给子进程的环境变量不经过这里
+exports.redactUrl = str => {
+  if (typeof str !== 'string') return str;
+  return str
+    .replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@'"]+@/gi, '$1***@')
+    .replace(/(_authToken|_auth|_password)("?\s*[=:]\s*"?)[^\s'",}]+/g, '$1$2***');
+};
+
+const SECRET_KEYS = new Set([
+  'authorization',
+  'proxy-authorization',
+  'registryauthorization',
+  '_authtoken',
+  '_auth',
+  '_password',
+  'password',
+]);
+const isSecretKey = key => {
+  const lower = String(key).toLowerCase();
+  return SECRET_KEYS.has(lower) || lower.endsWith(':_authtoken');
+};
+
+// 返回深拷贝, 原对象不变; 类实例保留原型以便 util.inspect 显示类名
+exports.redact = value => redactValue(value, new WeakMap());
+
+function redactValue(value, seen) {
+  if (typeof value === 'string') return exports.redactUrl(value);
+  if (!value || typeof value !== 'object') return value;
+  if (seen.has(value)) return seen.get(value);
+  if (ArrayBuffer.isView(value) || value instanceof Date || value instanceof RegExp) return value;
+  if (Array.isArray(value)) {
+    const copy = [];
+    seen.set(value, copy);
+    for (const item of value) copy.push(redactValue(item, seen));
+    return copy;
+  }
+  if (value instanceof Map) {
+    const copy = new Map();
+    seen.set(value, copy);
+    for (const [key, item] of value) copy.set(key, isSecretKey(key) ? '***' : redactValue(item, seen));
+    return copy;
+  }
+  if (value instanceof Set) {
+    const copy = new Set();
+    seen.set(value, copy);
+    for (const item of value) copy.add(redactValue(item, seen));
+    return copy;
+  }
+  const copy = Object.create(Object.getPrototypeOf(value));
+  seen.set(value, copy);
+  if (value instanceof Error) {
+    Object.defineProperty(copy, 'message', { value: exports.redactUrl(value.message), configurable: true });
+    Object.defineProperty(copy, 'stack', { value: exports.redactUrl(value.stack), configurable: true });
+  }
+  for (const key of Object.keys(value)) {
+    let item;
+    try {
+      item = value[key];
+    } catch {
+      continue;
+    }
+    copy[key] = isSecretKey(key) ? '***' : redactValue(item, seen);
+  }
+  return copy;
+}
+
 exports.getMaxRange = spec => {
   // >=1.0.0 <2.0.0
   const r = /^>=.*?<(.*?)$/.exec(spec);
@@ -491,6 +613,17 @@ exports.getPackageStorePath = (storeDir, pkg) => {
   // @scope/name => _@scope_name@1.0.0@scope/name
   // some packages need name: https://github.com/BenoitZugmeyer/eslint-plugin-html/blob/master/src/index.js#L24
   return path.join(storeDir, `_${pkg.name.replace(/\//g, '_')}@${pkg.version}@${pkg.name}`);
+};
+
+// getPackageStorePath 的逆运算, 不是 store 目录时返回 null
+exports.parsePackageStorePath = dir => {
+  const base = path.basename(dir);
+  const unscoped = /^_([^@]+)@([^@]+)@([^@]+)$/.exec(base);
+  if (unscoped && unscoped[1] === unscoped[3]) return { name: unscoped[3], version: unscoped[2] };
+  const scoped = /^_(@.+)@([^@]+)@(@[^@]+)$/.exec(path.basename(path.dirname(dir)));
+  if (!scoped) return null;
+  const name = `${scoped[3]}/${base}`;
+  return scoped[1] === name.replace(/\//g, '_') ? { name, version: scoped[2] } : null;
 };
 
 exports.unpack = (readstream, target, pkg) => {
@@ -588,6 +721,8 @@ exports.copyInstall = async (src, options) => {
   };
 
   if (!(await exports.isInstallDone(targetdir))) {
+    await exports.mkdirp(targetdir);
+    await installState.reset(targetdir);
     await fse.emptyDir(targetdir);
     await fse.copy(src, targetdir);
     await exports.setInstallDone(targetdir, exports.FIRST_INSTALL_STAGE);
@@ -600,6 +735,17 @@ exports.copyInstall = async (src, options) => {
   options.cache[key].done = true;
   options.events.emit(key);
   return result;
+};
+
+// np-lock.json 锁定的 git / tarball url 包已在 store 中装好时返回与 copyInstall 同形的结果, 否则返回 null
+exports.getLockedInstall = async (locked, options) => {
+  if (!locked || !locked._resolved || !locked.name || !locked.version || options.rebuild) return null;
+  const dir = options.ungzipDir || exports.getPackageStorePath(options.storeDir, locked);
+  if (!(await exports.isInstallDone(dir)) || (await installState.get(dir))?.stage) return null;
+  const pkg = await exports.readPackageJSON(dir);
+  // 同版本号的包可能来自另一个 commit 或 url
+  if (pkg._resolved !== locked._resolved) return null;
+  return { dir, package: pkg, exists: true };
 };
 
 exports.getPkgFromPaths = async (name, paths) => {

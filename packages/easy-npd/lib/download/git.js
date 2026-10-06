@@ -22,6 +22,8 @@ const PREPARE_TIMEOUT = 30 * 60 * 1000;
 const GIT_RETRY_DELAYS = [1000, 10000];
 // 记录当前安装链上正在准备的仓库; 互相依赖的 git 仓库不靠它会无限递归启动子进程
 const NO_PREPARE_ENV = '_NPD_NO_PREPARE_';
+// 标记构建子进程: 子进程不执行任何依赖脚本, 也不读克隆仓库自带的 allowScripts
+const PREPARE_CHILD_ENV = '_NPD_GIT_PREPARE_CHILD_';
 const NPD_BIN = path.join(__dirname, '../../bin/i.js');
 const FULL_SHA_RE = /^[a-f0-9]{40}$/;
 const CONNECTION_ERROR_RE = new RegExp(
@@ -39,10 +41,18 @@ const CONNECTION_ERROR_RE = new RegExp(
 const PATHSPEC_ERROR_RE = /pathspec .* did not match any file\(s\) known to git/;
 
 module.exports = async (pkg, options) => {
-  if (options.offline) {
-    throw new Error(`Can't install ${pkg.raw} in offline mode: git packages are always fetched from the network`);
-  }
   const { name, raw, displayName } = pkg;
+  const installed = await utils.getLockedInstall(options.cache.dependenciesTree[raw], options);
+  if (installed) {
+    options.remoteNames[raw] = installed.package.name;
+    if (options.lockPackages) options.lockPackages[raw] = installed.package;
+    return installed;
+  }
+  if (options.offline) {
+    throw new Error(
+      utils.redactUrl(`Can't install ${pkg.raw} in offline mode: git packages are always fetched from the network`)
+    );
+  }
 
   options.gitPackages++;
   options.console.warn(
@@ -84,7 +94,7 @@ module.exports = async (pkg, options) => {
   } catch (err) {
     // git 与子进程的错误只在 stderr 里带真实原因, 附上末尾便于定位
     const stderr = err.stderr ? `\n${String(err.stderr).trim().split('\n').slice(-5).join('\n')}` : '';
-    throw new Error(`[${displayName}] ${err.message}${stderr}`, { cause: err });
+    throw new Error(utils.redactUrl(`[${displayName}] ${err.message}${stderr}`), { cause: err });
   } finally {
     // clean up
     try {
@@ -94,6 +104,8 @@ module.exports = async (pkg, options) => {
     }
   }
 };
+
+module.exports.PREPARE_CHILD_ENV = PREPARE_CHILD_ENV;
 
 // 托管仓库先走 https(公开仓库免密, 带 auth 时只能走 https), 失败再回退 ssh 以支持私有仓库
 async function cloneSpec(spec, dir) {
@@ -290,19 +302,26 @@ function resolvedUrl(spec, sha) {
 }
 
 // 用 npd 子进程安装依赖(含 devDependencies)并执行根包的 prepublish 与 prepare, 之后才能打包出构建产物;
-// npd 的根包 prepublish 与 prepare 不受 --ignore-scripts 影响, 与 pacote 打包前总会执行 prepare 一致
+// 子进程的 --ignore-scripts 不影响根包的 prepublish 与 prepare
 async function prepareRepo(dir, resolved, options) {
   const pkgFile = path.join(dir, 'package.json');
   const content = await fs.readFile(pkgFile, 'utf8');
   const pkg = JSON.parse(content);
   const scripts = pkg.scripts || {};
-  if (!pkg.workspaces && !PREPARE_SCRIPTS.some(script => scripts[script])) {
+  const triggers = PREPARE_SCRIPTS.filter(script => scripts[script]);
+  if (!pkg.workspaces && triggers.length === 0) {
     return;
   }
-  // 与 npm 12 一致: 非 registry 依赖的 prepare 同样受 allowScripts 约束, 未放行时不构建, 直接按仓库内容打包
-  const buildScripts = ['prepublish', 'prepare'].filter(script => scripts[script]);
-  const info = { displayName: pkg.name || resolved, name: pkg.name, scripts: buildScripts };
-  if (buildScripts.length > 0 && !allowScripts.allow(options, { git: resolved }, info)) {
+  if (options.ignoreScripts) {
+    return;
+  }
+  // 构建会安装 devDependencies 并执行仓库内的脚本, 不论触发它的是哪个脚本都要先在 allowScripts 中放行, 未放行时直接按仓库内容打包
+  const info = {
+    displayName: pkg.name || resolved,
+    name: pkg.name,
+    scripts: triggers.length ? triggers : ['workspaces'],
+  };
+  if (!allowScripts.allow(options, { git: resolved }, info)) {
     return;
   }
   const noPrepare = process.env[NO_PREPARE_ENV] ? process.env[NO_PREPARE_ENV].split('\n') : [];
@@ -314,7 +333,7 @@ async function prepareRepo(dir, resolved, options) {
 
   // NODE_ENV=production 会让子进程按 --production 跳过 devDependencies, 构建脚本通常依赖它们;
   // 依赖的安装脚本不执行(与 npm 12 默认不执行未授权的依赖脚本一致), 否则只用于测试的 devDependencies(例如 phantomjs-prebuilt)下载失败也会让整个 git 依赖装不上
-  const env = { ...process.env, [NO_PREPARE_ENV]: noPrepare.join('\n') };
+  const env = { ...process.env, [NO_PREPARE_ENV]: noPrepare.join('\n'), [PREPARE_CHILD_ENV]: '1' };
   delete env.NODE_ENV;
   const args = [NPD_BIN, `--root=${dir}`, '--ignore-scripts'];
   if (options.registry) {
@@ -380,7 +399,7 @@ function run(cmd, args, { cwd, env, timeout, name }) {
       detached: process.platform !== 'win32',
     });
     const killTree = () => utils.killProcessTree(child.pid);
-    process.once('exit', killTree);
+    const untrack = utils.trackChildProcess(child.pid);
     let stdout = '';
     let stderr = '';
     let timedOut = false;
@@ -395,7 +414,7 @@ function run(cmd, args, { cwd, env, timeout, name }) {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      process.removeListener('exit', killTree);
+      untrack();
       if (err) {
         err.stderr = stderr;
         reject(err);

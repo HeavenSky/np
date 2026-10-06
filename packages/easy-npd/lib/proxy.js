@@ -11,6 +11,7 @@ function pick(argv, key, envKeys) {
   const candidates = [argv[key], process.env[`npm_config_${key.replace(/-/g, '_')}`], npConfig.get(key)];
   for (const name of envKeys) candidates.push(process.env[name]);
   for (const value of candidates) {
+    if (value === true) return true;
     if (value === false || value === 'false') return false;
     if (typeof value === 'string' && value) return value;
   }

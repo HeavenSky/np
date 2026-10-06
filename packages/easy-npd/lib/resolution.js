@@ -126,6 +126,7 @@ module.exports = (pkg, options, overridesPkg = pkg) => {
     resolutionMap.get(endpoint).push([packages.join('/'), version]);
   }
 
+  // overridden: 版本由根项目的 overrides / resolutions 指定, 本地路径按项目根解析且脚本按根项目的本地依赖处理
   const replaceVersion = (pkg, version, nested) => {
     // alias(npm:lodash@^1) support
     const [aliasPackageName, realPackageName] = parsePackageName(`${pkg.name}@${version}`, nested);
@@ -137,10 +138,11 @@ module.exports = (pkg, options, overridesPkg = pkg) => {
         alias: aliasPackageName,
         version: fetchSpec,
         name,
+        overridden: true,
       });
     }
 
-    return Object.assign({}, pkg, { version });
+    return Object.assign({}, pkg, { version, overridden: true });
   };
 
   return (pkg, ancestors, nested) => {

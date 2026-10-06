@@ -52,6 +52,9 @@ exports.ensure = options => {
   return options.scriptPolicy;
 };
 
+// git 依赖构建子进程使用: 不读克隆仓库的 allowScripts 与 ~/.nprc, 依赖脚本一律不放行
+exports.empty = () => ({ policy: null, source: null, allowAll: false, strict: false, skipped: [] });
+
 function readPackage(root) {
   try {
     return JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
@@ -60,10 +63,17 @@ function readPackage(root) {
   }
 }
 
+// 重复传入的 --allow-scripts 被 minimist 解析为数组, 各项合并
 function parseList(value) {
-  if (typeof value !== 'string' || !value.trim()) return null;
+  const names = []
+    .concat(value)
+    .filter(item => typeof item === 'string')
+    .join(',')
+    .split(/[,\s]+/)
+    .filter(Boolean);
+  if (!names.length) return null;
   const policy = {};
-  for (const name of value.split(/[,\s]+/).filter(Boolean)) policy[name] = true;
+  for (const name of names) policy[name] = true;
   return policy;
 }
 
@@ -140,7 +150,7 @@ function repoId(parsed) {
     .toLowerCase();
 }
 
-// 按依赖声明与 package.json 推出比对用的身份; 本地目录与 tarball 文件由用户控制, 不受策略限制, 返回 null
+// 按依赖声明与 package.json 推出比对用的身份; 本地目录与 tarball 文件返回 null, 由调用方按声明者决定是否受信
 exports.identityOf = (originType, realPkg, originSpec) => {
   if (['file', 'directory'].includes(originType)) return null;
   if (originType === 'git') return { git: realPkg._resolved || originSpec };
@@ -162,11 +172,18 @@ exports.allow = (options, identity, { displayName, name, scripts }) => {
   if (state.allowAll) return true;
   const result = exports.check(state.policy, identity);
   if (result === true) return true;
+  const key = exports.keyOf(identity);
+  // git 依赖的构建与它自身的安装脚本各审核一次, 合并成一条
+  const existing = state.skipped.find(item => item.key === key && item.name === name);
+  if (existing) {
+    existing.scripts = [...new Set(existing.scripts.concat(scripts))];
+    return false;
+  }
   state.skipped.push({
     displayName,
     name,
     scripts,
-    key: exports.keyOf(identity),
+    key,
     denied: result === false,
   });
   return false;
@@ -213,26 +230,42 @@ exports.pendingScripts = async (realPkg, dir) => {
   return pending;
 };
 
-// 已安装的包按 package.json 中安装时写入的 _from / _resolved 还原来源: _from 是 git 或 url 声明时按解析地址比对
-exports.identityOfInstalled = pkg => {
-  let type;
+// 已安装的包按安装时写入的 _from / _resolved / _scriptsOwner 还原来源; registry 包的名称与版本必须取自 store 目录名, 包内 package.json 由 tarball 作者决定, 可冒充已放行的包
+exports.identityOfInstalled = (pkg, dir) => {
+  let from = null;
   try {
-    type = pkg._from ? npa(pkg._from).type : null;
+    from = pkg._from ? npa(pkg._from) : null;
   } catch {
-    type = null;
+    from = null;
   }
+  let type = from && from.type;
   if (!type && typeof pkg._resolved === 'string' && /^git[+:]/.test(pkg._resolved)) type = 'git';
   if (type === 'git' && pkg._resolved) return { git: pkg._resolved };
   if (type === 'remote' && pkg._resolved) return { url: pkg._resolved };
+  if (type === 'file' || type === 'directory') return pkg._scriptsOwner ? identityOfKey(pkg._scriptsOwner) : null;
+  const stored = dir && utils.parsePackageStorePath(dir);
+  if (stored) return stored;
+  if (from && from.type === 'version' && from.name) return { name: from.name, version: from.fetchSpec };
   return { name: pkg.name, version: pkg.version };
 };
 
-// 判断一个依赖包的安装脚本能否执行; 没有脚本时返回 true; originType 为空时按已安装包的 package.json 还原来源
-exports.allowPackage = async (realPkg, dir, originType, originSpec, displayName, options) => {
+// keyOf 的逆运算
+function identityOfKey(key) {
+  let parsed;
+  try {
+    parsed = npa(key);
+  } catch {
+    return null;
+  }
+  if (parsed.type === 'git') return { git: key };
+  if (parsed.type === 'remote') return { url: key };
+  if (parsed.type === 'version' && parsed.name) return { name: parsed.name, version: parsed.fetchSpec };
+  return null;
+}
+
+// 判断一个依赖包的安装脚本能否执行; 没有脚本时返回 true; identity 为 null 时不受策略限制
+exports.allowPackage = async (realPkg, dir, identity, displayName, options) => {
   const pending = await exports.pendingScripts(realPkg, dir);
   if (pending.length === 0) return true;
-  const identity = originType
-    ? exports.identityOf(originType, realPkg, originSpec)
-    : exports.identityOfInstalled(realPkg);
   return exports.allow(options, identity, { displayName, name: realPkg.name, scripts: pending });
 };

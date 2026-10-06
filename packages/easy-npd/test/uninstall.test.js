@@ -42,6 +42,14 @@ describe('test/uninstall.test.js', () => {
     assert(!existsSync(path.join(root, 'node_modules/_pkg@1.0.0@pkg')));
   });
 
+  it('should drop the install state of the removed package', async () => {
+    const stateKeys = async () =>
+      Object.keys(JSON.parse(await fs.readFile(path.join(root, 'node_modules/.npd-state.json'), 'utf8')).packages);
+    assert((await stateKeys()).includes('_pkg@1.0.0@pkg'));
+    await coffee.fork(npmuninstall, ['uninstall', 'pkg@1.0.0'], { cwd: root, stdio: 'pipe' }).expect('code', 0).end();
+    assert(!(await stateKeys()).includes('_pkg@1.0.0@pkg'));
+  });
+
   it('should uninstall --save', async () => {
     await coffee
       .fork(npmuninstall, ['uninstall', 'pkg@1.0.0', '--save'], {

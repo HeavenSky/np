@@ -48,7 +48,7 @@ async function get(url, options, globalOptions) {
   }
   const retry = options.retry || options.retry === 0 ? options.retry : MAX_RETRY;
   options.retry = undefined;
-  debug('GET %s with headers: %j', url, options.headers);
+  debug('GET %s with headers: %j', utils.redactUrl(url), utils.redact(options.headers));
   const result = await _get(url, options, retry, globalOptions);
   debug('Response %s, headers: %j', result.status, result.headers);
   if (result.status < 100 || result.status >= 400) {
@@ -62,7 +62,7 @@ async function get(url, options, globalOptions) {
         logger.warn('[npd:get] ignore destroy response stream error: %s', err);
       }
     }
-    let message = `GET ${url} response ${result.status} status`;
+    let message = `GET ${utils.redactUrl(url)} response ${result.status} status`;
     if (result.headers && result.headers['npm-notice']) {
       message += `, ${result.headers['npm-notice']}`;
     }
@@ -84,7 +84,7 @@ async function getFromMirrors(options, globalOptions) {
       return await get(url, { ...requestOptions, headers: { ...requestOptions.headers }, retry: 1 }, globalOptions);
     } catch (err) {
       lastErr = err;
-      debug('mirror attempt %s GET %s error: %s', i + 1, url, err.message);
+      debug('mirror attempt %s GET %s error: %s', i + 1, utils.redactUrl(url), utils.redactUrl(err.message));
     }
   }
   throw lastErr;
@@ -113,11 +113,11 @@ async function _get(url, options, retry, globalOptions) {
       const logger = (globalOptions && globalOptions.console) || console;
       logger.warn(
         '[npd:get] retry GET %s after %sms, retry left %s, %s: %s, status: %s, headers: %j',
-        url,
+        utils.redactUrl(url),
         delay,
         retry,
         err.name,
-        err.message,
+        utils.redactUrl(err.message),
         err.status,
         err.headers
       );

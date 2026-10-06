@@ -4,12 +4,15 @@
 const path = require('path');
 const fs = require('fs/promises');
 const utils = require('./utils');
+const installState = require('./install_state');
 
 // 包版本目录: _name@version@name, scope 包为 _@scope_name@version@@scope, 包本体在其下的 name 子目录
 const isStoreEntry = name => name.startsWith('_') && name.includes('@');
 
 module.exports = async ({ root, dryRun = false }) => {
-  const storeDir = path.join(root, 'node_modules');
+  // 链接目标都按 realpath 比较, node_modules 或 --root 经过符号链接时不取 realpath 会把所有包都判为不可达
+  const linkedStoreDir = path.join(root, 'node_modules');
+  const storeDir = await fs.realpath(linkedStoreDir).catch(() => linkedStoreDir);
   let entries;
   try {
     entries = (await fs.readdir(storeDir)).filter(isStoreEntry);
@@ -57,6 +60,7 @@ module.exports = async ({ root, dryRun = false }) => {
 
   const removed = entries.filter(entry => !reachable.has(entry)).sort();
   if (!dryRun) {
+    await installState.removeEntries(storeDir, entry => removed.includes(entry) || !entries.includes(entry));
     for (const entry of removed) await utils.rimraf(path.join(storeDir, entry));
   }
   return { removed, kept: entries.length - removed.length };

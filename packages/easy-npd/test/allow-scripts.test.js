@@ -43,6 +43,11 @@ describe('test/allow-scripts.test.js', () => {
       assert.deepEqual(state.policy, { c: true });
       assert.equal(warnings.length, 2);
     });
+
+    it('should merge repeated --allow-scripts', () => {
+      const state = allowScripts.load({ argv: { 'allow-scripts': ['a', 'b,c'] } });
+      assert.deepEqual(state.policy, { a: true, b: true, c: true });
+    });
   });
 
   describe('install', () => {
@@ -102,6 +107,23 @@ describe('test/allow-scripts.test.js', () => {
         .end();
     });
 
+    it('should not take the next package name as the value of a boolean switch', async () => {
+      await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'root', version: '1.0.0' }));
+      await run(helper.npminstall, ['--dangerously-allow-all-scripts', 'postinstall-hello@1.0.0'])
+        .expect('code', 0)
+        .expect('stdout', /run on postinstall-hello/)
+        .end();
+      const pkg = await helper.readJSON(path.join(root, 'package.json'));
+      assert.match(pkg.dependencies['postinstall-hello'], /^\^?1\.0\.0$/);
+
+      await cleanup();
+      await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'root', version: '1.0.0' }));
+      await run(helper.npminstall, ['--strict-allow-scripts', 'postinstall-hello@1.0.0'])
+        .expect('code', 1)
+        .expect('stderr', /were blocked/)
+        .end();
+    });
+
     it('should deny scripts by name and drop existing approvals', async () => {
       await writePkg({ allowScripts: { 'postinstall-hello@1.0.0': true } });
       await run(helper.npminstall, []).expect('code', 0).end();
@@ -135,6 +157,76 @@ describe('test/allow-scripts.test.js', () => {
       const pkg = await helper.readJSON(path.join(root, 'package.json'));
       assert.deepEqual(pkg.allowScripts, { [url]: true });
       await run(x, ['rebuild', 'postinstall-hello']).expect('code', 0).expect('stdout', /run on postinstall-hello/).end();
+    });
+  });
+
+  describe('manifest confusion', () => {
+    const [tmp, cleanup] = helper.tmp();
+    const root = path.join(tmp, 'root');
+    const marker = path.join(tmp, 'marker');
+    let registry;
+    const run = (bin, args) =>
+      coffee.fork(bin, args, { cwd: root, env: { ...process.env, np_cache: path.join(tmp, 'cache') } });
+
+    before(async () => {
+      await cleanup();
+      registry = helper.createRegistry('local', []);
+      await new Promise(resolve => registry.server.listen(0, '127.0.0.1', resolve));
+      registry.prefix = `http://127.0.0.1:${registry.server.address().port}/`;
+      // registry 上的 evil@1.0.0, tarball 里的 package.json 自称已放行的 trusted@9.9.9
+      const script = `node -e "require('fs').writeFileSync('${marker.replace(/\\/g, '/')}', 'x')"`;
+      registry.packages.evil = {
+        '1.0.0': await helper.packTarball(tmp, { name: 'trusted', version: '9.9.9', scripts: { postinstall: script } }),
+      };
+      await fs.mkdir(root, { recursive: true });
+      await fs.writeFile(
+        path.join(root, 'package.json'),
+        JSON.stringify({
+          name: 'root',
+          version: '1.0.0',
+          dependencies: { evil: '1.0.0' },
+          allowScripts: { trusted: true },
+        })
+      );
+    });
+    after(() => registry.server.close());
+
+    it('should identify packages by the registry name and version', async () => {
+      await run(helper.npminstall, [`--registry=${registry.prefix}`])
+        .expect('code', 0)
+        .expect('stderr', /manifest mismatch/)
+        .expect('stderr', /evil@1\.0\.0 \(postinstall\)/)
+        .end();
+      await assert.rejects(fs.access(marker));
+      assert((await fs.lstat(path.join(root, 'node_modules/evil'))).isSymbolicLink());
+      await assert.rejects(fs.lstat(path.join(root, 'node_modules/trusted')));
+
+      await run(x, ['approve-scripts', '--pending'])
+        .expect('stdout', /evil@1\.0\.0 \(postinstall\)/)
+        .end();
+      await run(x, ['rebuild', 'evil'])
+        .expect('code', 0)
+        .expect('stderr', /evil@1\.0\.0 \(postinstall\)/)
+        .expect('stderr', /were skipped/)
+        .end();
+      await assert.rejects(fs.access(marker));
+
+      await run(x, ['approve-scripts', 'evil']).expect('code', 0).end();
+      const pkg = await helper.readJSON(path.join(root, 'package.json'));
+      assert.deepEqual(pkg.allowScripts, { trusted: true, 'evil@1.0.0': true });
+      await run(x, ['rebuild', 'evil', '-d'])
+        .expect('code', 0)
+        .expect('stdout', /rebuilt evil@1\.0\.0/)
+        .end();
+      await fs.access(marker);
+    });
+
+    it('should save the registry name and version to package.json', async () => {
+      await run(helper.npminstall, [`--registry=${registry.prefix}`, '--save-exact', 'evil'])
+        .expect('code', 0)
+        .end();
+      const pkg = await helper.readJSON(path.join(root, 'package.json'));
+      assert.deepEqual(pkg.dependencies, { evil: '1.0.0' });
     });
   });
 });

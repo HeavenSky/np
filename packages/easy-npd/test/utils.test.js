@@ -288,6 +288,24 @@ describe('test/utils.test.js', () => {
     });
   });
 
+  describe('parsePackageStorePath()', () => {
+    it('should reverse getPackageStorePath', () => {
+      for (const pkg of [
+        { name: 'foo', version: '1.0.0' },
+        { name: '@a/b_c', version: '2.0.0-beta.1' },
+        { name: '@a_b/c', version: '1.0.0' },
+      ]) {
+        assert.deepEqual(utils.parsePackageStorePath(utils.getPackageStorePath('/store', pkg)), pkg);
+      }
+    });
+
+    it('should return null for other directories', () => {
+      assert.equal(utils.parsePackageStorePath('/store/foo'), null);
+      assert.equal(utils.parsePackageStorePath('/store/_foo@1.0.0@bar'), null);
+      assert.equal(utils.parsePackageStorePath('/store/_@a_b@1.0.0@@a/c'), null);
+    });
+  });
+
   describe('pruneJSON()', () => {
     const [tmp, cleanup] = helper.tmp();
     beforeEach(cleanup);
@@ -314,6 +332,162 @@ describe('test/utils.test.js', () => {
       await utils.pruneJSON(pkgFile, 'foo');
       const pkg = JSON.parse(await fs.readFile(pkgFile, 'utf8'));
       assert.deepEqual(pkg.dependencies, { bar: '1.0.0' });
+    });
+  });
+
+  describe('install state', () => {
+    const [tmp, cleanup] = helper.tmp();
+    const store = path.join(tmp, 'node_modules');
+    const installState = require('../lib/install_state');
+    const createPackage = async entry => {
+      const dir = path.join(store, entry);
+      await utils.mkdirp(dir);
+      await fs.writeFile(path.join(dir, 'package.json'), '{}');
+      await utils.setInstallDone(dir, 'postinstall');
+      return dir;
+    };
+    const stateKeys = async () =>
+      Object.keys(JSON.parse(await fs.readFile(path.join(store, '.npd-state.json'), 'utf8')).packages).sort();
+    beforeEach(cleanup);
+    afterEach(cleanup);
+
+    it('should mark a package unfinished on reset', async () => {
+      const dir = await createPackage('_a@1.0.0@a');
+      assert.equal(await utils.isInstallDone(dir), true);
+      await installState.reset(dir);
+      assert.equal(await utils.isInstallDone(dir), false);
+      assert.deepEqual(await utils.getInstallState(dir), { done: false });
+    });
+
+    it('should remove only the matching store entries', async () => {
+      await createPackage('_a@1.0.0@a');
+      await createPackage('_b@1.0.0@b');
+      await createPackage('_@s_c@1.0.0@@s/c');
+      const dropped = ['_a@1.0.0@a', '_@s_c@1.0.0@@s'];
+      await installState.removeEntries(store, entry => dropped.includes(entry));
+      assert.deepEqual(await stateKeys(), ['_b@1.0.0@b']);
+    });
+  });
+
+  describe('redact()', () => {
+    it('should hide credentials in urls and npmrc style tokens', () => {
+      assert.equal(utils.redactUrl('http://u:p@h:8080'), 'http://***@h:8080');
+      assert.equal(
+        utils.redactUrl('install git+https://tok@github.com/a/b.git failed'),
+        'install git+https://***@github.com/a/b.git failed'
+      );
+      assert.equal(utils.redactUrl('git@github.com:a/b'), 'git@github.com:a/b');
+      assert.equal(utils.redactUrl('//r.com/:_authToken=abc x'), '//r.com/:_authToken=*** x');
+    });
+
+    it('should return a redacted copy and keep the original', () => {
+      const original = {
+        registry: 'https://u:p@r.com/',
+        headers: { Authorization: 'Bearer abc', 'User-Agent': 'npd' },
+        '//r.com/:_authToken': 'abc',
+        list: ['http://a:b@c.com'],
+        nested: { password: 'x' },
+      };
+      const snapshot = JSON.parse(JSON.stringify(original));
+      const copy = utils.redact(original);
+      assert.deepEqual(original, snapshot);
+      assert.deepEqual(copy, {
+        registry: 'https://***@r.com/',
+        headers: { Authorization: '***', 'User-Agent': 'npd' },
+        '//r.com/:_authToken': '***',
+        list: ['http://***@c.com'],
+        nested: { password: '***' },
+      });
+    });
+
+    it('should not throw on circular references', () => {
+      const original = { url: 'http://a:b@c.com' };
+      original.self = original;
+      const copy = utils.redact(original);
+      assert.equal(copy.self, copy);
+      assert.equal(copy.url, 'http://***@c.com');
+    });
+  });
+
+  describe('trackChildProcess()', () => {
+    const events = ['exit', 'SIGINT', 'SIGTERM'];
+    const counts = () => events.map(event => process.listenerCount(event));
+
+    it('should add one listener per event however many processes are tracked', async () => {
+      const warnings = [];
+      const onWarning = warning => warnings.push(warning);
+      process.on('warning', onWarning);
+      const baseline = counts();
+      // 同一 worker 先运行的文件会留下监听(coffee 每次 fork 注册一个 exit 监听), 基线恰好等于上限时多 1 个也会告警
+      const maxListeners = process.getMaxListeners();
+      process.setMaxListeners(Math.max(maxListeners, ...baseline) + 10);
+      try {
+        // 超出 pid 上限, 不会误杀真实进程
+        const untracks = Array.from({ length: 20 }, (_, i) => utils.trackChildProcess(4194304 + i));
+        assert.deepEqual(
+          counts(),
+          baseline.map(count => count + 1)
+        );
+        untracks.forEach(untrack => untrack());
+        assert.deepEqual(counts(), baseline);
+        await new Promise(resolve => setImmediate(resolve));
+      } finally {
+        process.setMaxListeners(maxListeners);
+        process.removeListener('warning', onWarning);
+      }
+      assert.deepEqual(warnings, []);
+    });
+
+    describe('on signals', () => {
+      if (process.platform === 'win32') return;
+      const [tmp, cleanup] = helper.tmp();
+      before(cleanup);
+      after(cleanup);
+
+      const isAlive = pid => {
+        try {
+          process.kill(pid, 0);
+          return true;
+        } catch {
+          return false;
+        }
+      };
+
+      const runDriver = async signal => {
+        const driver = path.join(tmp, 'driver.js');
+        const grandchild = `const c = require('child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' }); console.log(c.pid); setInterval(() => {}, 1000);`;
+        await fs.writeFile(
+          driver,
+          `const { spawn } = require('child_process');
+const utils = require(${JSON.stringify(path.join(__dirname, '../lib/utils'))});
+const child = spawn(process.execPath, ['-e', ${JSON.stringify(grandchild)}], { detached: true, stdio: ['ignore', 'pipe', 'ignore'] });
+utils.trackChildProcess(child.pid);
+child.stdout.pipe(process.stdout);
+setInterval(() => {}, 1000);
+`
+        );
+        const proc = require('child_process').spawn(process.execPath, [driver], {
+          stdio: ['ignore', 'pipe', 'inherit'],
+        });
+        const pid = await new Promise(resolve =>
+          proc.stdout.once('data', data => resolve(Number(String(data).trim())))
+        );
+        assert(isAlive(pid));
+        const code = await new Promise(resolve => {
+          proc.on('exit', resolve);
+          proc.kill(signal);
+        });
+        for (let i = 0; i < 40 && isAlive(pid); i++) await utils.sleep(50);
+        return { code, alive: isAlive(pid) };
+      };
+
+      it('should kill tracked process trees and exit with 143 on SIGTERM', async () => {
+        assert.deepEqual(await runDriver('SIGTERM'), { code: 143, alive: false });
+      });
+
+      it('should exit with 130 on SIGINT', async () => {
+        assert.deepEqual(await runDriver('SIGINT'), { code: 130, alive: false });
+      });
     });
   });
 });

@@ -16,9 +16,9 @@ module.exports = async function link(args) {
   try {
     await main(args);
   } catch (err) {
-    console.error(chalk.red(err.stack));
+    console.error(chalk.red(utils.redactUrl(err.stack)));
     console.error(chalk.yellow('npd-x link version: %s'), require('../../package.json').version);
-    console.error(chalk.yellow('npd-x link args: %s'), process.argv.join(' '));
+    console.error(chalk.yellow('npd-x link args: %s'), utils.redactUrl(process.argv.join(' ')));
     process.exit(1);
   }
 };

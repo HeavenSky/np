@@ -16,8 +16,8 @@ module.exports = async function uninstallCommand(args) {
   try {
     await main(args);
   } catch (err) {
-    console.error(chalk.red(err));
-    console.error(chalk.red(err.stack));
+    console.error(chalk.red(utils.redactUrl(String(err))));
+    console.error(chalk.red(utils.redactUrl(err.stack)));
     process.exit(1);
   }
 };

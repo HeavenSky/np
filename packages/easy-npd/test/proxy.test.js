@@ -1,6 +1,10 @@
 const assert = require('node:assert');
 const http = require('node:http');
 const net = require('node:net');
+const path = require('node:path');
+const fs = require('node:fs/promises');
+const coffee = require('coffee');
+const helper = require('./helper');
 const proxy = require('../lib/proxy');
 const get = require('../lib/get');
 
@@ -80,6 +84,42 @@ describe('test/proxy.test.js', () => {
     assert.equal(process.env.npm_config_strict_ssl, 'false');
     assert.equal(process.env.GIT_SSL_NO_VERIFY, 'true');
     assert.deepEqual(proxy.tlsOptions(), { rejectUnauthorized: false });
+  });
+
+  it('should let --strict-ssl override npm_config_strict_ssl=false', () => {
+    process.env.npm_config_strict_ssl = 'false';
+    proxy.configure({ 'strict-ssl': true });
+    assert.equal(proxy.tlsOptions(), undefined);
+  });
+
+  describe('credentials', () => {
+    const [root, cleanup] = helper.tmp();
+    before(cleanup);
+    after(cleanup);
+
+    it('should not print proxy credentials to stderr or npd-debug.log', async () => {
+      await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'root', version: '1.0.0' }));
+      const env = { ...process.env, np_lockfile: 'false' };
+      for (const name of ['NO_PROXY', 'no_proxy', 'npm_config_noproxy']) delete env[name];
+      await coffee
+        .fork(
+          helper.npminstall,
+          [
+            'npd-redact-test-not-exists',
+            '--registry=http://127.0.0.1:1',
+            '--proxy=http://user:s3cret@127.0.0.1:1',
+            '--https-proxy=http://user:s3cret@127.0.0.1:1',
+          ],
+          { cwd: root, env }
+        )
+        .expect('code', 1)
+        .notExpect('stderr', /s3cret/)
+        .notExpect('stdout', /s3cret/)
+        .end();
+      const log = await fs.readFile(path.join(root, 'npd-debug.log'), 'utf8');
+      assert.match(log, /\*\*\*@127\.0\.0\.1:1/);
+      assert.doesNotMatch(log, /s3cret/);
+    });
   });
 
   it('should match NO_PROXY entries like curl', () => {
