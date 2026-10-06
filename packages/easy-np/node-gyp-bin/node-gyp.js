@@ -1,1 +1,3 @@
-return require('node-gyp/bin/node-gyp.js');
+'use strict';
+
+require(require('../lib/runtime').nodeGypBin());

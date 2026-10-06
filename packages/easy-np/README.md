@@ -183,12 +183,18 @@ npm i -g easy-np
 - 根目录只放直接依赖与被提升的包.
 - 完整安装会用本次结果替换上次的提升链接, 可能降级; `np <pkg>`, `-w`, `--workspaces` 只升级不降级.
 
-## 已知安全风险
+## Node.js 版本与能力
 
-为支持 Node 16 而保留的依赖, 以下公告未修复:
+不提高 `engines` 下限: 低版本 Node.js 上按能力改用兼容的旧实现, 每次运行打印一条 `np WARN Node vX: <降级项>, upgrade to Node >= <版本> to restore`; 环境变量 `np_node_warning=false` 关闭. 版本划分见 `lib/runtime.js` 的 `CAPABILITIES`.
 
-- urllib 3 依赖的 undici 5: 公告集中在 WebSocket, fetch, Cookie, multipart 与 retry 拦截器, np 不经过这些路径; 请求走私一类需要恶意 registry 或代理配合.
-- node-gyp 10 经 make-fetch-happen / cacache 引入的 tar 6 与 http-cache-semantics: 只在依赖的安装脚本调用 node-gyp 下载 Node.js 头文件时使用; np 自身解压 tarball 使用顶层 tar 7.
+| Node.js | node-gyp(依赖的安装脚本与 `binding.gyp` 构建使用) | 已知风险 |
+| --- | --- | --- |
+| 20.17 ~ 20.x, >= 22.9 | 12 | 无 |
+| 16.14 ~ 20.16, 21.x, 22.0 ~ 22.8 | 10: 较新的 Python 与 Visual Studio 可能不受支持 | node-gyp 10 经 make-fetch-happen / cacache 引入的 tar 6 与 http-cache-semantics 有未修复公告, 只在 node-gyp 下载 Node.js 头文件时使用; 顶层 tar 7 声明需要 Node >= 18, Node 16 上实测可用 |
+
+全部版本共有的依赖公告:
+
+- urllib 3 依赖的 undici 5: 公告集中在 WebSocket, fetch, Cookie, multipart 与 retry 拦截器, np 不经过这些路径; 请求走私一类需要恶意 registry 或代理配合. 跨源重定向时 undici 会去掉 `Authorization`, 有用例覆盖.
 - globby 依赖的 braces / micromatch: 深度嵌套的匹配模式会耗尽调用栈, np 只用它匹配 `package.json` 中的 workspaces 模式.
 
 ## License
