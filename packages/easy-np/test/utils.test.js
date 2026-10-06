@@ -405,6 +405,7 @@ setInterval(() => {}, 1000);`
     const fs = require('node:fs/promises');
     const path = require('node:path');
     const helper = require('./helper');
+    const mm = require('mm');
     const installState = require('../lib/install_state');
     const [tmp, cleanup] = helper.tmp();
     const store = path.join(tmp, 'node_modules/.store');
@@ -434,6 +435,36 @@ setInterval(() => {}, 1000);`
       await createPackage('b');
       await installState.removeEntries(store, entry => entry === 'a@1.0.0');
       assert.deepEqual(await stateKeys(), ['b@1.0.0/node_modules/b']);
+    });
+
+    it('should keep an entry set while another call is reloading the state file', async () => {
+      const a = await createPackage('a');
+      const b = await createPackage('b');
+      await installState.reset(a);
+      // 其他进程改写了状态文件, 下一次读取会重新加载
+      const file = path.join(store, '.np-state.json');
+      const data = await helper.readJSON(file);
+      data.packages['c@1.0.0/node_modules/c'] = { done: true };
+      await fs.writeFile(file, JSON.stringify(data));
+      // 第 1 次读取(get(b) 的重新加载)慢于 setInstallDone(a), 第 3 次读取(写盘前的合并)再晚于第 1 次返回
+      const readFile = fs.readFile;
+      const delays = [200, 0, 400];
+      let calls = 0;
+      mm(fs, 'readFile', async (...args) => {
+        const delay = delays[calls++] || 0;
+        if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+        return readFile.apply(fs, args);
+      });
+      try {
+        const reloading = installState.get(b);
+        await new Promise(resolve => setTimeout(resolve, 50));
+        await utils.setInstallDone(a);
+        await reloading;
+      } finally {
+        mm.restore();
+      }
+      assert.deepEqual(await installState.get(a), { done: true });
+      assert.deepEqual((await helper.readJSON(file)).packages['a@1.0.0/node_modules/a'], { done: true });
     });
   });
 

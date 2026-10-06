@@ -52,9 +52,11 @@ class StateFile {
   async sync() {
     const signature = await statSignature(this.file);
     if (signature === this.signature) return;
+    const fileEntries = signature ? await readEntries(this.file) : {};
+    // 读完文件再取本进程未写盘的修改: 先取会漏掉读文件期间的 set, 磁盘上的旧值随后被写回
     const pending = {};
     for (const key of this.touched) pending[key] = this.entries[key];
-    this.entries = Object.assign(signature ? await readEntries(this.file) : {}, pending);
+    this.entries = Object.assign(fileEntries, pending);
     this.signature = signature;
   }
 
