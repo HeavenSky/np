@@ -160,7 +160,7 @@ npm i -g easy-np
 | registry token                                      | 附加到所有请求                                                                                 | 只附加到与 registry 同 host 的请求                                                                                                                                           |
 | `np-x uninstall` 后的提升链接                       | 保留, 被卸载的包仍可被 require                                                                 | 移除不再被任何 `package.json` 声明, 也不被 `.store` 中其他包依赖的提升链接                                                                                                   |
 | `np-x uninstall` 的返回时机                         | 可能在 `package.json` 写回前返回                                                               | 写回完成后返回                                                                                                                                                               |
-| `--lockfile-path` 加载失败                          | 告警后改为联网解析                                                                             | 报错退出; workspace 下暂不支持, 直接报错                                                                                                                                     |
+| `--lockfile-path` 加载失败                          | 告警后改为联网解析                                                                             | 报错退出; workspace 下各 workspace 按 lockfile 还原版本, 同一声明在不同位置锁定了不同版本时告警并统一用靠近根目录的版本                                                                                                                                     |
 | 在 `npm run` / `npx` 下安装需要 prepare 的 git 依赖 | 继承 `npm_config_allow_scripts`, 被 npm 12 以 `EALLOWSCRIPTS` 拒绝                             | 正常安装: 不再调用 `npm install`; 失败时错误信息附带子进程 stderr                                                                                                            |
 | git 依赖                                            | 经 pacote 获取: 托管仓库优先下载 codeload tarball, 需要构建时调用 `npm install` 后执行 prepare | 直接调用 git CLI 克隆(本机需要 git); 有 prepare 等脚本且在 `allowScripts` 中放行时用 np 自身安装依赖(含 devDependencies, 不执行依赖的安装脚本)再执行 prepare; 按 npm 的 `files`, `.npmignore` 规则打包 |
 | `--tarball-url-mapping`                             | 声称也改写重定向地址, 但 urllib 3/4 不支持 `formatRedirectUrl`                                 | 只改写首个请求地址                                                                                                                                                           |
@@ -195,7 +195,7 @@ npm i -g easy-np
 - 按依赖关系拓扑排序后依次安装与执行生命周期脚本; 有循环依赖时保持 glob 顺序并告警.
 - 依赖名与某个 workspace 同名时总是链接本地 workspace; 版本不满足声明范围时只告警.
 - `np-x update -w <name>` 只清理该 workspace 的 `node_modules`.
-- `--lockfile-path` 不支持 workspace, 会直接报错.
+- `--lockfile-path` 读取 npm 生成的 workspace lockfile, 各 workspace 按其中锁定的版本安装; workspace 之间的依赖照常链接本地目录.
 
 ## node_modules 布局
 

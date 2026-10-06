@@ -14,6 +14,8 @@ easy-np 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1, 上�
 - 公共源测速结果缓存在 `~/.np_tarball/np-probe.json`, 默认 5 分钟内复用; `--probe-cache=<分钟>` 或 `np_probe_cache` 修改, `0` 表示每次都测速.
 - 代理: `--proxy`, `--https-proxy`, `--noproxy`, 未传时依次读取 `npm_config_*`, `~/.nprc`, `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`; 同一份配置传给安装脚本, node-gyp 与 git.
 - `--cafile` 指定 CA 证书, `--no-strict-ssl` 关闭证书校验, 同样传给安装脚本与 git.
+- `np-lock.json` 锁定 git 依赖解析出的 commit 与 tarball url 依赖的 sha512 integrity: 再次安装直接检出锁定的 commit(不再 `git ls-remote`, 已装时不再克隆), tarball 内容变化时报错; `--frozen-lockfile` 下缺少条目同样报错. 本地目录依赖不锁定.
+- `--lockfile-path` 支持 workspace: 各 workspace 按 npm 生成的 lockfile 还原版本; 同一声明在不同位置锁定了不同版本时告警, 统一使用靠近根目录的版本.
 
 ### 行为变更
 

@@ -374,15 +374,21 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
 
   const lockfilePath = argv['lockfile-path'];
   if (lockfilePath) {
-    // lockfileConverter 查不到 workspace 子包的依赖, 且依赖树的键不区分 workspace, 放行会静默装错版本
-    if (enableWorkspace) {
-      throw new Error('--lockfile-path is not supported with npm workspaces');
-    }
     // 加载失败必须中止: 回退到联网解析会装出与 lockfile 不一致的版本且退出码为 0
     try {
       const lockfileData = await fs.readFile(lockfilePath, 'utf8');
       config.dependenciesTree = lockfileConverter(JSON.parse(lockfileData), {
         ignoreOptionalDependencies: true,
+        onConflict(key, kept, ignored) {
+          console.warn(
+            chalk.yellow('np WARN %s is locked to both %s and %s in %s, installing %s everywhere'),
+            key,
+            kept,
+            ignored,
+            lockfilePath,
+            kept
+          );
+        },
       });
     } catch (error) {
       throw new Error(`load lockfile from ${lockfilePath} error: ${error.message}`, { cause: error });

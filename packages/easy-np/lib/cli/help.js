@@ -72,7 +72,7 @@ Options:
   --prefix: global install prefix used with -g, default is '$npm config get prefix'
   --no-cache: don't use the tarball disk cache, ignored when --cache-strict is set
   --tarball-url-mapping: JSON object to rewrite tarball urls before request, redirect targets are not rewritten, e.g.: --tarball-url-mapping='{"https://a.com":"https://b.com"}'
-  --lockfile-path: install from package-lock.json (lockfileVersion >= 2), optionalDependencies in lockfile are ignored, not supported with workspaces, fail if the lockfile can't be loaded
+  --lockfile-path: install from package-lock.json (lockfileVersion >= 2), optionalDependencies in lockfile are ignored, fail if the lockfile can't be loaded
   --save-dependencies-tree: save the resolved dependencies tree to node_modules/.dependencies_tree.json
   -v, --version: show version
   -h, --help: show help

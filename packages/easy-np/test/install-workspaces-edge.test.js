@@ -52,13 +52,14 @@ describe('test/install-workspaces-edge.test.js', () => {
     assert.equal(await fs.readFile(path.join(tmp, 'node_modules/pkg-a/marker.txt'), 'utf8'), 'keep');
   });
 
-  it('should reject --lockfile-path in workspaces', async () => {
+  // workspace 按 lockfile 还原版本的用例在 install-with-lockfile.test.js; 这里确认不再拒绝 workspace
+  it('should accept --lockfile-path in workspaces', async () => {
     await workspace({ 'packages/a': { name: 'pkg-a', dependencies: { ms: '^2.0.0' } } });
     await writeJSON(path.join(tmp, 'package-lock.json'), { lockfileVersion: 3, packages: {} });
     await run(helper.npminstall, [`--lockfile-path=${path.join(tmp, 'package-lock.json')}`])
-      .expect('code', 1)
-      .expect('stderr', /--lockfile-path is not supported with npm workspaces/)
+      .expect('code', 0)
       .end();
+    assert(require(path.join(tmp, 'packages/a/node_modules/ms/package.json')).version.startsWith('2.'));
   });
 
   it('should keep other workspaces working after np-x update -w', async () => {

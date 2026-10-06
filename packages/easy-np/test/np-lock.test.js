@@ -33,6 +33,15 @@ describe('test/np-lock.test.js', () => {
     }
   }
   // 把锁文件中 ms@^2.1.1 改成 2.1.1, 证明再次安装复用锁定的版本而不是范围内的最新版本
+  async function pinMsTo211(lock) {
+    const res = await urllib.request('https://registry.npmmirror.com/ms/2.1.1', { dataType: 'json', timeout: 30000 });
+    const { name, version, dist } = res.data;
+    lock.packages['ms@^2.1.1'] = { name, version, dist };
+    await fs.writeFile(lockFile, JSON.stringify(lock));
+    for (const dir of ['node_modules', 'packages/a/node_modules']) {
+      await fs.rm(path.join(tmp, dir), { recursive: true, force: true });
+    }
+  }
   async function pinMs() {
     const lock = await readLock();
     const res = await urllib.request('https://registry.npmmirror.com/ms/2.1.1', { dataType: 'json', timeout: 30000 });
@@ -102,5 +111,68 @@ describe('test/np-lock.test.js', () => {
     await fs.rm(path.join(tmp, 'package-lock.json'));
     await run(helper.npminstall, ['--no-lockfile']).expect('code', 0).end();
     await assert.rejects(fs.stat(lockFile), /ENOENT/);
+  });
+
+  if (process.platform !== 'win32') {
+    it('should lock the git commit and reuse it after the branch moves', async () => {
+      const { execFileSync } = require('child_process');
+      const repo = path.join(tmp, 'repo');
+      await fs.mkdir(repo, { recursive: true });
+      const git = args => execFileSync('git', args, { cwd: repo, stdio: 'ignore' });
+      const commit = async version => {
+        await fs.writeFile(path.join(repo, 'package.json'), JSON.stringify({ name: 'git-lock-demo', version }));
+        git(['add', '-A']);
+        git(['-c', 'user.name=test', '-c', 'user.email=test@example.com', 'commit', '-q', '-m', version]);
+      };
+      git(['init', '-q']);
+      await commit('1.0.0');
+      await writePkg({ 'git-lock-demo': `git+file://${repo}` });
+      await run(helper.npminstall, []).expect('code', 0).end();
+      const key = `git-lock-demo@git+file://${repo}`;
+      const locked = (await readLock()).packages[key];
+      assert.match(locked._resolved, /#[a-f0-9]{40}$/);
+      assert.equal(locked.version, '1.0.0');
+
+      await commit('2.0.0');
+      await fs.rm(path.join(tmp, 'node_modules'), { recursive: true, force: true });
+      await run(helper.npminstall, ['--frozen-lockfile']).expect('code', 0).end();
+      assert.equal(await installedVersion('git-lock-demo'), '1.0.0');
+      // 已装的就是锁定的 commit, 再次安装不重新克隆
+      await run(helper.npminstall, []).expect('code', 0).notExpect('stderr', /install git-lock-demo from git/).end();
+    });
+  }
+
+  it('should record and verify the integrity of tarball url dependencies', async () => {
+    const url = 'https://registry.npmmirror.com/pedding/-/pedding-1.1.0.tgz';
+    await writePkg({ pedding: url });
+    await run(helper.npminstall, []).expect('code', 0).end();
+    const lock = await readLock();
+    assert.match(lock.packages[`pedding@${url}`].dist.integrity, /^sha512-/);
+
+    lock.packages[`pedding@${url}`].dist.integrity = 'sha512-tampered';
+    await fs.writeFile(lockFile, JSON.stringify(lock));
+    await fs.rm(path.join(tmp, 'node_modules'), { recursive: true, force: true });
+    await run(helper.npminstall, []).expect('code', 1).expect('stderr', /integrity mismatch/).end();
+  });
+
+  it('should lock dependencies of every workspace', async () => {
+    await fs.mkdir(path.join(tmp, 'packages/a'), { recursive: true });
+    await fs.writeFile(
+      path.join(tmp, 'package.json'),
+      JSON.stringify({ name: 'root', version: '1.0.0', workspaces: ['packages/*'], dependencies: { pedding: '1.1.0' } })
+    );
+    await fs.writeFile(
+      path.join(tmp, 'packages/a/package.json'),
+      JSON.stringify({ name: 'a', version: '1.0.0', dependencies: { ms: '^2.1.1' } })
+    );
+    await run(helper.npminstall, []).expect('code', 0).end();
+    const lock = await readLock();
+    assert(lock.packages['pedding@1.1.0']);
+    assert(lock.packages['ms@^2.1.1']);
+
+    await pinMsTo211(lock);
+    await run(helper.npminstall, ['--frozen-lockfile']).expect('code', 0).end();
+    const msDir = await fs.realpath(path.join(tmp, 'packages/a/node_modules/ms'));
+    assert.equal((await helper.readJSON(path.join(msDir, 'package.json'))).version, '2.1.1');
   });
 });
