@@ -33,6 +33,7 @@ easy-npd 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 6.8.0, 上
 
 ### 运行环境
 
+- node-gyp 升到 12; Node.js 低于 20.17(以及 21.x, 22.0 ~ 22.8)时改用别名依赖 `node-gyp10`(node-gyp 10), 并在每次运行时打印一条 `npd WARN Node vX: ...` 说明降级项与恢复所需的 Node.js 版本, `np_node_warning=false` 关闭. `engines` 下限仍为 16.14.
 - 移除 `pacote` 与 `@npmcli/arborist`, 新增 `npm-packlist` 5.
 - `urllib` 范围提到 `^3.27.3`, 保证使用跨源重定向时去掉认证头的 undici.
 

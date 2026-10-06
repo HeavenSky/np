@@ -20,6 +20,7 @@ const mirror = require('../mirror');
 const { lockfileConverter } = require('../lockfile_resolver');
 const npLock = require('../np_lock');
 const proxy = require('../proxy');
+const runtime = require('../runtime');
 const help = require('./help');
 
 module.exports = async function install(args, { ignorePkgNames = false, ignoreLockfile = false } = {}) {
@@ -146,6 +147,7 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
 
   // 首个网络请求与子进程启动之前写入, 安装脚本, node-gyp 与 git 通过环境变量继承
   proxy.configure(argv);
+  runtime.warnIfDegraded();
 
   const pkgs = [];
 
