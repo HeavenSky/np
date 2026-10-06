@@ -42,10 +42,16 @@ describe('test/prune.test.js', () => {
     assert((await stateKeys()).includes('_debug@4.3.4@debug'));
     assert(!(await stateKeys()).some(key => key.startsWith('_pedding@')));
 
-    await run(x, ['prune', '--dry-run']).expect('code', 0).expect('stdout', /would remove _debug@4\.3\.4@debug/).end();
+    await run(x, ['prune', '--dry-run'])
+      .expect('code', 0)
+      .expect('stdout', /would remove _debug@4\.3\.4@debug/)
+      .end();
     assert.deepEqual(await storeEntries(), before);
 
-    await run(x, ['prune']).expect('code', 0).expect('stdout', /removed _debug@4\.3\.4@debug/).end();
+    await run(x, ['prune'])
+      .expect('code', 0)
+      .expect('stdout', /removed _debug@4\.3\.4@debug/)
+      .end();
     const after = await storeEntries();
     assert.deepEqual(after, ['_debug@3.2.7@debug', '_ms@2.1.3@ms']);
     assert.deepEqual((await stateKeys()).sort(), after);

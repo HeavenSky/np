@@ -17,17 +17,17 @@ npm i -g easy-npd
 
 ## 命令
 
-| 命令                    | 别名                      | 作用                                                | 上游对应       |
-| ----------------------- | ------------------------- | --------------------------------------------------- | -------------- |
-| `npd` / `npd-x install` | `i`, `add`                | 安装依赖                                            | `npminstall`   |
-| `npd-x uninstall`       | `un`, `remove`, `rm`, `r` | 卸载包, 并移除不再被使用的提升链接                  | `npmuninstall` |
-| `npd-x update`          | `up`, `upgrade`           | 删除 `node_modules` 后重装                          | `npmupdate`    |
-| `npd-x link`            | `ln`                      | 链接本地目录; 不带参数时把当前包安装并链接到全局    | `npmlink`      |
-| `npd-x fetch`           | 无                        | 只下载并解压指定的包, 不安装依赖, 不执行脚本        | 无, 新增       |
-| `npd-x rebuild`         | `rb`                      | 重跑已安装依赖的 preinstall / install / postinstall | 无, 新增       |
-| `npd-x approve-scripts` | 无 | 把依赖写入 `package.json` 的 `allowScripts`, 放行其安装脚本 | 无, 新增 |
-| `npd-x deny-scripts` | 无 | 在 `allowScripts` 中写入拒绝条目, 并删除同一包已有的放行条目 | 无, 新增 |
-| `npd-x prune` | 无 | 删除 `node_modules` 中不再被任何链接引用的 `_<name>@<version>@<name>` 目录 | 无, 新增 |
+| 命令                    | 别名                      | 作用                                                                       | 上游对应       |
+| ----------------------- | ------------------------- | -------------------------------------------------------------------------- | -------------- |
+| `npd` / `npd-x install` | `i`, `add`                | 安装依赖                                                                   | `npminstall`   |
+| `npd-x uninstall`       | `un`, `remove`, `rm`, `r` | 卸载包, 并移除不再被使用的提升链接                                         | `npmuninstall` |
+| `npd-x update`          | `up`, `upgrade`           | 删除 `node_modules` 后重装                                                 | `npmupdate`    |
+| `npd-x link`            | `ln`                      | 链接本地目录; 不带参数时把当前包安装并链接到全局                           | `npmlink`      |
+| `npd-x fetch`           | 无                        | 只下载并解压指定的包, 不安装依赖, 不执行脚本                               | 无, 新增       |
+| `npd-x rebuild`         | `rb`                      | 重跑已安装依赖的 preinstall / install / postinstall                        | 无, 新增       |
+| `npd-x approve-scripts` | 无                        | 把依赖写入 `package.json` 的 `allowScripts`, 放行其安装脚本                | 无, 新增       |
+| `npd-x deny-scripts`    | 无                        | 在 `allowScripts` 中写入拒绝条目, 并删除同一包已有的放行条目               | 无, 新增       |
+| `npd-x prune`           | 无                        | 删除 `node_modules` 中不再被任何链接引用的 `_<name>@<version>@<name>` 目录 | 无, 新增       |
 
 - 别名用法如 `npd-x i`, `npd-x rb`. `npd-x -h` 列出全部子命令; `npd-x <command> -h` 或 `npd-x help <command>` 显示子命令的参数.
 - `npd --help` 显示安装的全部参数.
@@ -161,37 +161,37 @@ npm i -g easy-npd
 
 ### 行为变更
 
-| 项                                                  | 上游 6.8.0                                                                                     | easy-npd                                                                                                                                                                      |
-| --------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 选择 registry                                       | 固定一个 registry; 加 `-c` 才换成 npmmirror 与二进制镜像; 失败只在同一个源上重试               | 自动在 npmmirror 与 npmjs 之间切换, 见「自动切换公共源」                                                                                                                      |
-| 安装失败                                            | 停在第一个错误, 提示删除 `node_modules` 后重试                                                 | 继续安装其余包, 再次运行从断点继续, 见「失败后继续」                                                                                                                          |
-| 根目录提升链接                                      | 已存在即跳过, 依赖变化后重装也不更新; 加 `--force-link-latest` 才用更高版本覆盖                | 始终链接最高版本; 完整安装(不带包名)时把上次的提升链接替换为本次依赖树中的最高版本, 可能降级; 根 `package.json` 声明的包不覆盖                                                |
-| manifest 缓存键                                     | 按请求地址区分                                                                                 | 公共源统一按官方源地址, 两个源共用缓存                                                                                                                                        |
-| 缓存中损坏的 tgz                                    | 校验失败后每次重试都读到同一个坏文件                                                           | 校验或解压失败时删除该文件并重新下载                                                                                                                                          |
-| `.nprc` 的 registry 用户名密码                      | 按子串匹配 registry 地址附加; `always-auth` 时附加到所有请求                                   | 只附加到与 registry 同 host 的请求, `always-auth` 也不例外                                                                                                                    |
-| `npd-x uninstall` 后被卸载包的依赖                  | 根目录提升链接保留, 仍可被 require                                                             | 移除不再被根 `package.json` 声明, 也不被其他 `_name@version@name` 引用的提升链接                                                                                              |
-| `npd-x uninstall` 的返回时机                        | 可能在 `package.json` 写回前返回                                                               | 写回完成后返回                                                                                                                                                                |
-| `--lockfile-path` 加载失败                          | 告警后改为联网解析, 退出码 0                                                                   | 报错退出                                                                                                                                                                      |
-| 在 `npm run` / `npx` 下安装需要 prepare 的 git 依赖 | 继承 `npm_config_allow_scripts`, 被 npm 12 以 `EALLOWSCRIPTS` 拒绝                             | 正常安装: 不再调用 `npm install`; 失败时错误信息附带子进程 stderr                                                                                                             |
+| 项                                                  | 上游 6.8.0                                                                                     | easy-npd                                                                                                                                                                                                                                               |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 选择 registry                                       | 固定一个 registry; 加 `-c` 才换成 npmmirror 与二进制镜像; 失败只在同一个源上重试               | 自动在 npmmirror 与 npmjs 之间切换, 见「自动切换公共源」                                                                                                                                                                                               |
+| 安装失败                                            | 停在第一个错误, 提示删除 `node_modules` 后重试                                                 | 继续安装其余包, 再次运行从断点继续, 见「失败后继续」                                                                                                                                                                                                   |
+| 根目录提升链接                                      | 已存在即跳过, 依赖变化后重装也不更新; 加 `--force-link-latest` 才用更高版本覆盖                | 始终链接最高版本; 完整安装(不带包名)时把上次的提升链接替换为本次依赖树中的最高版本, 可能降级; 根 `package.json` 声明的包不覆盖                                                                                                                         |
+| manifest 缓存键                                     | 按请求地址区分                                                                                 | 公共源统一按官方源地址, 两个源共用缓存                                                                                                                                                                                                                 |
+| 缓存中损坏的 tgz                                    | 校验失败后每次重试都读到同一个坏文件                                                           | 校验或解压失败时删除该文件并重新下载                                                                                                                                                                                                                   |
+| `.nprc` 的 registry 用户名密码                      | 按子串匹配 registry 地址附加; `always-auth` 时附加到所有请求                                   | 只附加到与 registry 同 host 的请求, `always-auth` 也不例外                                                                                                                                                                                             |
+| `npd-x uninstall` 后被卸载包的依赖                  | 根目录提升链接保留, 仍可被 require                                                             | 移除不再被根 `package.json` 声明, 也不被其他 `_name@version@name` 引用的提升链接                                                                                                                                                                       |
+| `npd-x uninstall` 的返回时机                        | 可能在 `package.json` 写回前返回                                                               | 写回完成后返回                                                                                                                                                                                                                                         |
+| `--lockfile-path` 加载失败                          | 告警后改为联网解析, 退出码 0                                                                   | 报错退出                                                                                                                                                                                                                                               |
+| 在 `npm run` / `npx` 下安装需要 prepare 的 git 依赖 | 继承 `npm_config_allow_scripts`, 被 npm 12 以 `EALLOWSCRIPTS` 拒绝                             | 正常安装: 不再调用 `npm install`; 失败时错误信息附带子进程 stderr                                                                                                                                                                                      |
 | git 依赖                                            | 经 pacote 获取: 托管仓库优先下载 codeload tarball, 需要构建时调用 `npm install` 后执行 prepare | 直接调用 git CLI 克隆(本机需要 git); 有 prepare 等脚本, 在 `allowScripts` 中放行且未传 `--ignore-scripts` 时用 npd 自身安装依赖(含 devDependencies, 不执行任何依赖脚本, 嵌套的 git 依赖不构建)再执行 prepare; 按 npm 的 `files`, `.npmignore` 规则打包 |
-| 重复传入的参数 | `--registry` 取第一个, `--root` 取最后一个, 其余参数变成数组, 可能报错 | 与 npm 一致取最后一个; `--allow-scripts` 各项合并 |
-| `--tarball-url-mapping`                             | 声称也改写重定向地址, 但 urllib 3 不支持 `formatRedirectUrl`                                   | 只改写首个请求地址                                                                                                                                                            |
-| npm `strict-ssl`                                    | 读取后作为 `rejectUnauthorized` 传入, 但 urllib 3 不认, 不生效                                 | 读取 `--strict-ssl`, `npm_config_strict_ssl` 与 `~/.nprc`, 为 false 时关闭证书校验; 另支持 `--cafile` 指定 CA 证书(相对路径按当前目录转为绝对路径); 两者都传给安装脚本与 git, 命令行的 `--strict-ssl` 覆盖继承的 `npm_config_strict_ssl=false` |
-| `--proxy`, `npm_proxy`, `npm_config_proxy` | 声明支持, 但 urllib 3 不认 `proxy` 参数, 实际直连 | 支持 `--proxy`, `--https-proxy`, `--noproxy`; 未传时依次读取 `npm_config_*`, `~/.nprc`, `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`; 同时传给安装脚本, node-gyp 与 git; 只支持 http(s) 代理 |
-| 依赖                                                | node-gyp 9, tar 6                                                                              | 不依赖 node-gyp, 首次编译原生模块时按当前 Node.js 安装兼容版本; tar 7                                                                                                          |
-| 未写版本或写 range 时选择版本                       | 取 latest 或范围内最高版本, 不看 `engines`                                                     | 同 npm, 优先选 `engines.node` 兼容当前 Node.js 的版本, 如 Node 18 下 `npd -g npm` 装 npm 10; 显式 tag 与精确版本照旧                                                          |
-| tarball 完整性校验                                  | 只校验 `dist.shasum`(sha1); 只有 `--lockfile-path` 时校验 sha512                               | 与 npm 一致按 `dist.integrity` 中最强的算法校验(通常是 sha512), 没有 integrity 时才退回 sha1                                                                                  |
-| 缺失的 peerDependencies                             | 只告警                                                                                         | 与 npm 7+ 一致自动安装为该包的依赖, 失败时按可选依赖跳过并告警(npm 直接报错); 祖先已声明不兼容版本时只告警; `--legacy-peer-deps` 恢复只告警                                                 |
+| 重复传入的参数                                      | `--registry` 取第一个, `--root` 取最后一个, 其余参数变成数组, 可能报错                         | 与 npm 一致取最后一个; `--allow-scripts` 各项合并                                                                                                                                                                                                      |
+| `--tarball-url-mapping`                             | 声称也改写重定向地址, 但 urllib 3 不支持 `formatRedirectUrl`                                   | 只改写首个请求地址                                                                                                                                                                                                                                     |
+| npm `strict-ssl`                                    | 读取后作为 `rejectUnauthorized` 传入, 但 urllib 3 不认, 不生效                                 | 读取 `--strict-ssl`, `npm_config_strict_ssl` 与 `~/.nprc`, 为 false 时关闭证书校验; 另支持 `--cafile` 指定 CA 证书(相对路径按当前目录转为绝对路径); 两者都传给安装脚本与 git, 命令行的 `--strict-ssl` 覆盖继承的 `npm_config_strict_ssl=false`         |
+| `--proxy`, `npm_proxy`, `npm_config_proxy`          | 声明支持, 但 urllib 3 不认 `proxy` 参数, 实际直连                                              | 支持 `--proxy`, `--https-proxy`, `--noproxy`; 未传时依次读取 `npm_config_*`, `~/.nprc`, `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`; 同时传给安装脚本, node-gyp 与 git; 只支持 http(s) 代理                                                              |
+| 依赖                                                | node-gyp 9, tar 6                                                                              | 不依赖 node-gyp, 首次编译原生模块时按当前 Node.js 安装兼容版本; tar 7                                                                                                                                                                                  |
+| 未写版本或写 range 时选择版本                       | 取 latest 或范围内最高版本, 不看 `engines`                                                     | 同 npm, 优先选 `engines.node` 兼容当前 Node.js 的版本, 如 Node 18 下 `npd -g npm` 装 npm 10; 显式 tag 与精确版本照旧                                                                                                                                   |
+| tarball 完整性校验                                  | 只校验 `dist.shasum`(sha1); 只有 `--lockfile-path` 时校验 sha512                               | 与 npm 一致按 `dist.integrity` 中最强的算法校验(通常是 sha512), 没有 integrity 时才退回 sha1                                                                                                                                                           |
+| 缺失的 peerDependencies                             | 只告警                                                                                         | 与 npm 7+ 一致自动安装为该包的依赖, 失败时按可选依赖跳过并告警(npm 直接报错); 祖先已声明不兼容版本时只告警; `--legacy-peer-deps` 恢复只告警                                                                                                            |
 
 ### 移除的参数与配置
 
-| 项                                                                         | 上游 6.8.0                                        | easy-npd                                                                               |
-| -------------------------------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `-c`, `--china`, `npm_china`                                               | 切换到 npmmirror 与二进制镜像                     | 移除, 由自动切换取代                                                                   |
-| `--custom-china-mirror-url`                                                | 替换二进制镜像地址                                | 移除                                                                                   |
-| `--prune`, `config.npminstall.prune`, `env:production` / `env:development` | 解压时按固定名单跳过文件                          | 移除: 名单含 `tsconfig.json`, `LICENSE`, `images/` 等, 会静默破坏 `@tsconfig/*` 这类包 |
-| `--force-link-latest`                                                      | 见「根目录提升链接」                              | 移除, 始终链接最高版本                                                                 |
-| `--disable-dedupe`, `config.npminstall.disableDedupe`                      | 关闭根目录扁平链接                                | 移除                                                                                   |
+| 项                                                                         | 上游 6.8.0                    | easy-npd                                                                               |
+| -------------------------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------- |
+| `-c`, `--china`, `npm_china`                                               | 切换到 npmmirror 与二进制镜像 | 移除, 由自动切换取代                                                                   |
+| `--custom-china-mirror-url`                                                | 替换二进制镜像地址            | 移除                                                                                   |
+| `--prune`, `config.npminstall.prune`, `env:production` / `env:development` | 解压时按固定名单跳过文件      | 移除: 名单含 `tsconfig.json`, `LICENSE`, `images/` 等, 会静默破坏 `@tsconfig/*` 这类包 |
+| `--force-link-latest`                                                      | 见「根目录提升链接」          | 移除, 始终链接最高版本                                                                 |
+| `--disable-dedupe`, `config.npminstall.disableDedupe`                      | 关闭根目录扁平链接            | 移除                                                                                   |
 
 ## 安装范围
 
@@ -208,11 +208,11 @@ npm i -g easy-npd
 
 低版本 Node.js 上按能力改用兼容的旧实现, 每次运行打印一条 `npd WARN Node vX: <降级项>, upgrade to Node >= <版本> to restore`; 环境变量 `np_node_warning=false` 关闭. 版本划分见 `lib/runtime.js` 的 `CAPABILITIES`.
 
-| Node.js | node-gyp(依赖的安装脚本与 `binding.gyp` 构建使用) | 已知风险 |
-| --- | --- | --- |
-| 20.17 ~ 20.x, >= 22.9 | `node-gyp` 12 及以上(按 `engines.node` 选兼容的最新版本) | 无 |
-| 16.14 ~ 16.x, 18.0 ~ 20.16, 21.x, 22.0 ~ 22.8 | `node-gyp` 10 / 11(按 `engines.node` 选择): 不识别 Visual Studio 2026 | node-gyp 10 依赖的 tar 6 有未修复公告, 只在 node-gyp 下载 Node.js 头文件时使用 |
-| 14.18 ~ 16.13, 17.x | `@electron/node-gyp` 10.2: 不识别 Visual Studio 2026 | 它经 make-fetch-happen / cacache 引入的 tar 6 有未修复公告, 只在 node-gyp 下载 Node.js 头文件时使用 |
+| Node.js                                       | node-gyp(依赖的安装脚本与 `binding.gyp` 构建使用)                     | 已知风险                                                                                            |
+| --------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| 20.17 ~ 20.x, >= 22.9                         | `node-gyp` 12 及以上(按 `engines.node` 选兼容的最新版本)              | 无                                                                                                  |
+| 16.14 ~ 16.x, 18.0 ~ 20.16, 21.x, 22.0 ~ 22.8 | `node-gyp` 10 / 11(按 `engines.node` 选择): 不识别 Visual Studio 2026 | node-gyp 10 依赖的 tar 6 有未修复公告, 只在 node-gyp 下载 Node.js 头文件时使用                      |
+| 14.18 ~ 16.13, 17.x                           | `@electron/node-gyp` 10.2: 不识别 Visual Studio 2026                  | 它经 make-fetch-happen / cacache 引入的 tar 6 有未修复公告, 只在 node-gyp 下载 Node.js 头文件时使用 |
 
 npd 自身的 tar 7 声明需要 Node >= 18, Node 14.18 / 16 上实测可用(低于 16.6 时由 `lib/runtime.js` 补齐缺少的内置方法).
 
