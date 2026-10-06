@@ -192,7 +192,18 @@ function pickRev(revs, spec) {
 }
 
 // 把 git ls-remote 的输出整理成 refs, 按 sha 反查的 refs, 以及从 tag 名解析出的版本
-async function lsRemote(repo) {
+// 同一仓库在一次安装中可能被多个依赖引用, 结果按仓库地址缓存到进程结束; 失败不缓存, 下次引用时重试
+const lsRemoteCache = new Map();
+function lsRemote(repo) {
+  if (!lsRemoteCache.has(repo)) {
+    const pending = _lsRemote(repo);
+    lsRemoteCache.set(repo, pending);
+    pending.catch(() => lsRemoteCache.delete(repo));
+  }
+  return lsRemoteCache.get(repo);
+}
+
+async function _lsRemote(repo) {
   const { stdout } = await git(['ls-remote', repo], undefined, GIT_SHORT_TIMEOUT);
   const revs = { versions: {}, latest: null, refs: {}, shas: {} };
   for (const line of stdout.trim().split('\n')) {
@@ -341,10 +352,18 @@ async function git(args, cwd, timeout) {
   }
 }
 
-// 超时后结束子进程; 错误带上 stderr 供调用方附在报错末尾
+// 超时或本进程退出时结束整个子进程树; 错误带上 stderr 供调用方附在报错末尾
 function run(cmd, args, { cwd, env, timeout, name }) {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    const child = spawn(cmd, args, {
+      cwd,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+      detached: process.platform !== 'win32',
+    });
+    const killTree = () => utils.killProcessTree(child.pid);
+    process.once('exit', killTree);
     let stdout = '';
     let stderr = '';
     let timedOut = false;
@@ -353,12 +372,13 @@ function run(cmd, args, { cwd, env, timeout, name }) {
     child.stderr.setEncoding('utf8').on('data', data => (stderr += data));
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill();
+      killTree();
     }, timeout);
     const finish = err => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      process.removeListener('exit', killTree);
       if (err) {
         err.stderr = stderr;
         reject(err);

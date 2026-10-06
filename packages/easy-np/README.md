@@ -147,7 +147,7 @@ npm i -g easy-np
 | npm `strict-ssl`                                    | 读取后传给 urllib, 但 urllib 3/4 不认, 不生效                                                  | 不再读取, HTTPS 证书始终校验                                                                                                                                                 |
 | 未写版本或写 range 时选择版本                       | 取 latest 或范围内最高版本, 不看 `engines`                                                     | 与 npm 一致, 优先选 `engines.node` 兼容当前 Node.js 的版本, 例如 Node 18 下 `np -g npm` 装 npm 10; 显式 tag(`foo@latest`)与精确版本照旧                                      |
 | tarball 完整性校验                                  | 只校验 `dist.shasum`(sha1); 只有 `--lockfile-path` 时校验 sha512                               | 与 npm 一致按 `dist.integrity` 中最强的算法校验(通常是 sha512), 没有 integrity 时才退回 sha1                                                                                 |
-| 缺失的 peerDependencies                             | 只告警                                                                                         | 与 npm 7+ 一致自动安装为该包的依赖, 失败时按可选依赖跳过并告警; 祖先已声明不兼容版本时只告警; `--legacy-peer-deps` 恢复只告警                                                |
+| 缺失的 peerDependencies                             | 只告警                                                                                         | 与 npm 7+ 一致自动安装为该包的依赖, 失败时按可选依赖跳过并告警(npm 直接报错); 祖先已声明不兼容版本时只告警; `--legacy-peer-deps` 恢复只告警                                                |
 
 ### 移除的参数与配置
 
@@ -188,7 +188,6 @@ npm i -g easy-np
 为支持 Node 16 而保留的依赖, 以下公告未修复:
 
 - urllib 3 依赖的 undici 5: 公告集中在 WebSocket, fetch, Cookie, multipart 与 retry 拦截器, np 不经过这些路径; 请求走私一类需要恶意 registry 或代理配合.
-- urllib 3 跟随跨域重定向时保留 `Authorization` 等请求头: np 只给与 registry 同 host 的请求附加 token, 但该请求若被重定向到其他域名, token 会随之发出; 只影响配置了 token 的私有 registry.
 - node-gyp 10 经 make-fetch-happen / cacache 引入的 tar 6 与 http-cache-semantics: 只在依赖的安装脚本调用 node-gyp 下载 Node.js 头文件时使用; np 自身解压 tarball 使用顶层 tar 7.
 - globby 依赖的 braces / micromatch: 深度嵌套的匹配模式会耗尽调用栈, np 只用它匹配 `package.json` 中的 workspaces 模式.
 

@@ -387,19 +387,53 @@ exports.runScript = async (pkgDir, script, globalOptions, runInForeground = fals
   }
 
   try {
-    return await command(script, {
-      cwd: pkgDir,
-      env,
-      stdio: runInForeground ? 'inherit' : 'ignore',
-      shell: true,
-      timeout,
-    });
+    const options = { cwd: pkgDir, env, stdio: runInForeground ? 'inherit' : 'ignore', shell: true };
+    return await (timeout ? commandWithTimeout(script, options, timeout) : command(script, options));
   } catch (err) {
     if (ignoreError) {
       globalOptions.console.info('[np:runScript] ignore runscript error: %s', err);
     } else {
       throw err;
     }
+  }
+};
+
+// 结束整个进程树: 只结束直接子进程时, shell 或脚本再启动的孙进程会残留; POSIX 下要求子进程以 detached 启动成为进程组组长
+// 超时结束整个进程树; 后台执行时收集 stderr, 调用方把末尾几行附在报错里
+async function commandWithTimeout(script, options, timeout) {
+  const child = command(script, {
+    ...options,
+    stdio: options.stdio === 'inherit' ? 'inherit' : ['ignore', 'ignore', 'pipe'],
+    detached: process.platform !== 'win32',
+  });
+  const killTree = () => exports.killProcessTree(child.pid);
+  process.once('exit', killTree);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    killTree();
+  }, timeout);
+  try {
+    return await child;
+  } catch (err) {
+    err.message = timedOut ? `${err.shortMessage}, timed out after ${timeout / 1000}s` : err.shortMessage || err.message;
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    process.removeListener('exit', killTree);
+  }
+}
+
+exports.killProcessTree = pid => {
+  if (!pid) return;
+  try {
+    if (process.platform === 'win32') {
+      cp.spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
+    } else {
+      process.kill(-pid, 'SIGKILL');
+    }
+  } catch {
+    // 进程已退出
   }
 };
 
@@ -458,35 +492,45 @@ exports.fastSemverMaxSatisfying = (versions, range) => {
   return max;
 };
 
-// 对齐 npm-pick-manifest: 未写版本或写的是 range 时, 优先选 engines.node 兼容当前 Node.js 的版本;
-// 显式 tag 与精确版本原样使用; 范围内没有兼容版本时仍返回原本会选中的版本, 由安装阶段告警
-// options.versions: manifest 的 versions 字段, 不传时不检查 engines
+// 对齐 npm-pick-manifest: 未写版本或写的是 range 时, 优先选未 deprecated 的版本, 其次选 engines.node 兼容当前 Node.js 的版本;
+// 显式 tag 与精确版本原样使用; 范围内都不满足时仍返回原本会选中的版本, 由安装阶段告警
+// options.versions: manifest 的 versions 字段, 不传时不检查 deprecated 与 engines
 // options.implicitTag: spec 是未写版本时补上的 latest, 而不是用户显式写的 tag
 exports.findMaxSatisfyingVersion = (spec, distTags, allVersions, options = {}) => {
   const { versions, nodeVersion = process.version, implicitTag = false } = options;
-  const engineOk = version => {
-    const node = versions && versions[version] && versions[version].engines && versions[version].engines.node;
-    return !node || exports.fastSemverSatisfies(nodeVersion, node);
+  // 0 最优; deprecated 的权重高于 engines 不兼容, 与 npm-pick-manifest 的排序一致
+  const rank = version => {
+    const manifest = versions && versions[version];
+    if (!manifest) return 0;
+    const node = manifest.engines && manifest.engines.node;
+    return (manifest.deprecated ? 2 : 0) + (node && !exports.fastSemverSatisfies(nodeVersion, node) ? 1 : 0);
   };
   const maxSatisfying = range => {
     const max = exports.fastSemverMaxSatisfying(allVersions, range);
-    if (!max || engineOk(max)) return max;
-    return exports.fastSemverMaxSatisfying(allVersions.filter(engineOk), range) || max;
+    if (!max || rank(max) === 0) return max;
+    for (let level = 0; level < rank(max); level++) {
+      const candidate = exports.fastSemverMaxSatisfying(
+        allVersions.filter(version => rank(version) === level),
+        range
+      );
+      if (candidate) return candidate;
+    }
+    return max;
   };
 
   // try tag first
   let realPkgVersion = distTags[spec];
   if (realPkgVersion) {
-    if (implicitTag && !engineOk(realPkgVersion)) {
-      const compatible = maxSatisfying('*');
-      if (compatible && engineOk(compatible)) {
-        realPkgVersion = compatible;
+    if (implicitTag && rank(realPkgVersion) > 0) {
+      const better = maxSatisfying('*');
+      if (better && rank(better) < rank(realPkgVersion)) {
+        realPkgVersion = better;
       }
     }
   } else {
     const version = semver.valid(spec);
     const range = semver.validRange(spec, true);
-    if (exports.fastSemverSatisfies(distTags.latest, spec) && (version || engineOk(distTags.latest))) {
+    if (exports.fastSemverSatisfies(distTags.latest, spec) && (version || rank(distTags.latest) === 0)) {
       realPkgVersion = distTags.latest;
     } else if (version) {
       // use the valid version
@@ -503,7 +547,7 @@ exports.findMaxSatisfyingVersion = (spec, distTags, allVersions, options = {}) =
           if (
             latestMajorVersion &&
             exports.fastSemverSatisfies(latestMajorVersion, spec) &&
-            (engineOk(latestMajorVersion) || !engineOk(realPkgVersion))
+            rank(latestMajorVersion) <= rank(realPkgVersion)
           ) {
             realPkgVersion = latestMajorVersion;
           }
