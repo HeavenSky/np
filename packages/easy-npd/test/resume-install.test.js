@@ -53,6 +53,8 @@ describe('test/resume-install.test.js', () => {
   });
 
   it('should rerun scripts of the listed packages with npd-x rebuild <pkg>', async () => {
+    // rebuild 按 registry 包处理已安装的版本, 需要在 allowScripts 中放行
+    await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ allowScripts: { 'resume-scripts': true } }));
     await fs.writeFile(flagFile, '');
     await install();
     const rebuild = specs =>

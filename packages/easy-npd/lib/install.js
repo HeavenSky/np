@@ -9,6 +9,7 @@ const download = require('./download');
 const utils = require('./utils');
 const postinstall = require('./postinstall');
 const preinstall = require('./preinstall');
+const allowScripts = require('./allow_scripts');
 const npa = require('./npa');
 const bin = require('./bin');
 const link = require('./link');
@@ -230,7 +231,11 @@ async function _install(parentDir, pkg, ancestors, options, context) {
     }
   }
 
-  if (utils.shouldRunStage(stage, 'preinstall')) {
+  // 依赖的安装脚本需在 allowScripts 中放行, 未放行时 preinstall / install / postinstall 都不执行
+  const scriptsAllowed =
+    options.ignoreScripts ||
+    (await allowScripts.allowPackage(realPkg, realPkgDir, p.type, p.fetchSpec, displayName, options));
+  if (scriptsAllowed && utils.shouldRunStage(stage, 'preinstall')) {
     await preinstall(realPkg, realPkgDir, displayName, options);
     if (realPkg.scripts?.preinstall && !options.ignoreScripts) await utils.setInstallStage(realPkgDir, 'deps');
   }
@@ -310,7 +315,7 @@ async function _install(parentDir, pkg, ancestors, options, context) {
   }
   // 延后执行的脚本无法再抛给可选祖先, 位于可选依赖子树中时同样按可选处理
   const optional = pkg.optional || ancestors.some(ancestor => ancestor.optional);
-  await postinstall(realPkg, realPkgDir, optional, displayName, options, stage);
+  if (scriptsAllowed) await postinstall(realPkg, realPkgDir, optional, displayName, options, stage);
 
   await linkModule(pkg, parentDir, realPkg, realPkgDir, options);
   // 本次运行的脚本全部成功后才清除阶段标记, 否则延后执行的子依赖脚本失败时, 上层包已被标为完成而不再遍历到它; 失败被忽略的可选依赖不加入, 下次运行重试

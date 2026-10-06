@@ -25,6 +25,7 @@ npm i -g easy-npd
 | `npd-x link`            | `ln`                      | 链接本地目录; 不带参数时把当前包安装并链接到全局    | `npmlink`      |
 | `npd-x fetch`           | 无                        | 只下载并解压指定的包, 不安装依赖, 不执行脚本        | 无, 新增       |
 | `npd-x rebuild`         | `rb`                      | 重跑已安装依赖的 preinstall / install / postinstall | 无, 新增       |
+| `npd-x approve-scripts` | 无 | 把依赖写入 `package.json` 的 `allowScripts`, 放行其安装脚本 | 无, 新增 |
 
 - 别名用法如 `npd-x i`, `npd-x rb`. `npd-x -h` 列出全部子命令; `npd-x <command> -h` 或 `npd-x help <command>` 显示子命令的参数.
 - `npd --help` 显示安装的全部参数.
@@ -58,6 +59,25 @@ npm i -g easy-npd
 - `npd -g` 一次安装多个包时同样适用.
 
 实现方式: 每个依赖包安装停在的阶段记录在 `node_modules/.npd-state.json`(全局安装为 `.<name>_npd/.npd-state.json`), 依次为 `preinstall`, `deps`(安装子依赖), `install`, `postinstall`, `finish`(自身步骤已完成). npd 在全部依赖安装完后才统一执行 install / postinstall, 所以本次运行装过的包要等全部脚本成功后才统一清除阶段; 再次运行时这些包会重新遍历子依赖, 但不重复已成功的脚本. 不修改依赖包自己的 `package.json`; 0.0.2 写在包内 `package.json` 的 `__npd_done` / `__npd_stage` 仍能识别, 升级后不必重装.
+
+### 依赖安装脚本默认不执行: `allowScripts`
+
+与 npm 12 一致, 依赖的 preinstall / install / postinstall, 有 `binding.gyp` 时的隐式 `node-gyp rebuild`, 以及 git 依赖的 prepare, 只有在根 `package.json` 的 `allowScripts` 中放行后才执行; 根项目, workspace 与本地目录依赖的脚本照常执行. 未放行的包被跳过, 安装结束时列出它们和放行后重跑的命令; 被跳过的原生模块要到运行时才报错.
+
+```json
+{
+  "allowScripts": {
+    "esbuild": true,
+    "sharp@0.33.5": true,
+    "core-js": false
+  }
+}
+```
+
+- 键写包名(放行全部版本), `<name>@<精确版本>` 或用 `||` 连接的多个精确版本, git 地址, tarball url; `^`, `~` 等范围与 dist-tag 告警后忽略. 值 `false` 表示明确拒绝, 不再出现在跳过列表里, 同时命中时拒绝优先.
+- `npd-x approve-scripts <pkg>` 按已安装版本写入 `<pkg>@<version>`, `--no-pin` 只写包名, `--all` 放行全部未审核的包, `--pending` 只列出; 之后运行 `npd-x rebuild <pkg>` 执行脚本. git 依赖放行后要重新安装才会执行 prepare.
+- 来源只取第一个有配置的: `--allow-scripts=<pkg>[,<pkg>]`(主要用于 `-g`) > 根 `package.json` 的 `allowScripts` > `~/.nprc` 的 `allow-scripts`.
+- `--strict-allow-scripts`: 有未审核的依赖脚本时安装以非 0 退出. `--dangerously-allow-all-scripts`: 忽略 `allowScripts`, 执行全部依赖脚本(0.0.2 及以前的行为). 两者也可写在 `~/.nprc` 或 `npm_config_*` 中. `--ignore-scripts` 优先于以上全部设置.
 
 ### `npd-x rebuild`: 重跑安装脚本
 
@@ -138,7 +158,7 @@ npm i -g easy-npd
 | `npd-x uninstall` 的返回时机                        | 可能在 `package.json` 写回前返回                                                               | 写回完成后返回                                                                                                                                                                |
 | `--lockfile-path` 加载失败                          | 告警后改为联网解析, 退出码 0                                                                   | 报错退出                                                                                                                                                                      |
 | 在 `npm run` / `npx` 下安装需要 prepare 的 git 依赖 | 继承 `npm_config_allow_scripts`, 被 npm 12 以 `EALLOWSCRIPTS` 拒绝                             | 正常安装: 不再调用 `npm install`; 失败时错误信息附带子进程 stderr                                                                                                             |
-| git 依赖                                            | 经 pacote 获取: 托管仓库优先下载 codeload tarball, 需要构建时调用 `npm install` 后执行 prepare | 直接调用 git CLI 克隆(本机需要 git); 有 prepare 等脚本时用 npd 自身安装依赖(含 devDependencies, 不执行依赖的安装脚本)再执行 prepare; 按 npm 的 `files`, `.npmignore` 规则打包 |
+| git 依赖                                            | 经 pacote 获取: 托管仓库优先下载 codeload tarball, 需要构建时调用 `npm install` 后执行 prepare | 直接调用 git CLI 克隆(本机需要 git); 有 prepare 等脚本且在 `allowScripts` 中放行时用 npd 自身安装依赖(含 devDependencies, 不执行依赖的安装脚本)再执行 prepare; 按 npm 的 `files`, `.npmignore` 规则打包 |
 | `--tarball-url-mapping`                             | 声称也改写重定向地址, 但 urllib 3 不支持 `formatRedirectUrl`                                   | 只改写首个请求地址                                                                                                                                                            |
 | npm `strict-ssl`                                    | 读取后作为 `rejectUnauthorized` 传入, 但 urllib 3 不认, 不生效                                 | 读取 `--strict-ssl`, `npm_config_strict_ssl` 与 `~/.nprc`, 为 false 时关闭证书校验; 另支持 `--cafile` 指定 CA 证书; 两者都传给安装脚本与 git |
 | `--proxy`, `npm_proxy`, `npm_config_proxy` | 声明支持, 但 urllib 3 不认 `proxy` 参数, 实际直连 | 支持 `--proxy`, `--https-proxy`, `--noproxy`; 未传时依次读取 `npm_config_*`, `~/.nprc`, `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`; 同时传给安装脚本, node-gyp 与 git; 只支持 http(s) 代理 |

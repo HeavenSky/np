@@ -17,6 +17,7 @@ easy-npd 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 6.8.0, 上
 
 ### 行为变更
 
+- **依赖的安装脚本默认不执行**: 与 npm 12 一致, 依赖的 preinstall / install / postinstall, `binding.gyp` 隐式构建与 git 依赖的 prepare 只有在根 `package.json` 的 `allowScripts` 中放行后才执行, 结束时列出被跳过的包; 新增 `npd-x approve-scripts`, `--allow-scripts`, `--strict-allow-scripts`, `--dangerously-allow-all-scripts`(恢复旧行为). 根项目, workspace 与本地目录依赖不受影响.
 - 未写版本或写 range 时与 npm 一致优先选 `engines.node` 兼容当前 Node.js 的版本, 例如 Node 18 下 `npd -g npm` 装 npm 10; 显式 tag 与精确版本不变. 不带版本安装时日志显示 `<name>@*`.
 - 未写版本或写 range 时与 npm 一致避开 deprecated 版本: 优先级为未 deprecated > `engines.node` 兼容 > 版本高低; 范围内只有 deprecated 版本时仍选中并告警.
 - 安装进度标记改记在 `node_modules/.npd-state.json`, 不再修改依赖包自己的 `package.json`; 之前版本写入的 `__npd_done` / `__npd_stage` 仍能识别, 升级后不必重装.

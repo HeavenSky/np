@@ -21,6 +21,7 @@ const postinstall = require('./postinstall');
 const preinstall = require('./preinstall');
 const prepublish = require('./prepublish');
 const prepare = require('./prepare');
+const allowScripts = require('./allow_scripts');
 const install = require('./install');
 const dependencies = require('./dependencies');
 const createResolution = require('./resolution');
@@ -212,6 +213,8 @@ async function _install(options, context) {
   recordDependenciesTree(options);
 
   printOptionalFailures(options);
+  const scriptPolicyError = allowScripts.report(options);
+  if (scriptPolicyError) options.failures.push({ displayName: 'allowScripts', error: scriptPolicyError });
   if (options.failures.length > 0) {
     throw utils.installFailuresError(options.failures);
   }

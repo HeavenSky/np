@@ -8,6 +8,7 @@ const semver = require('semver');
 const utils = require('./utils');
 const mirror = require('./mirror');
 const formatInstallOptions = require('./format_install_options');
+const allowScripts = require('./allow_scripts');
 
 module.exports = async options => {
   options = formatInstallOptions(options);
@@ -27,11 +28,16 @@ module.exports = async options => {
   for (const { pkg, dir } of targets) {
     const displayName = `${pkg.name}@${pkg.version}`;
     try {
+      // rebuild 按 registry 包处理已安装的版本, 同样要在 allowScripts 中放行
+      const originType = pkg._resolved && /^git[+:]/.test(pkg._resolved) ? 'git' : 'version';
+      if (!(await allowScripts.allowPackage(pkg, dir, originType, pkg._resolved, displayName, options))) continue;
       await rebuildOne(pkg, dir, displayName, options);
     } catch (err) {
       options.failures.push({ displayName, error: err, name: pkg.name });
     }
   }
+  const scriptPolicyError = allowScripts.report(options);
+  if (scriptPolicyError) options.failures.push({ displayName: 'allowScripts', error: scriptPolicyError });
   if (options.failures.length > 0) {
     // 被其他包依赖的子包不会被普通 npd 遍历到, 只能再次 npd-x rebuild
     const names = [...new Set(options.failures.map(item => item.name))].join(' ');

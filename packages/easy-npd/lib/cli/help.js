@@ -8,6 +8,7 @@ const SUMMARIES = {
   link: 'link local folders or global packages',
   fetch: 'only download and extract packages, no dependencies or scripts',
   rebuild: 'rerun lifecycle scripts of installed dependencies',
+  'approve-scripts': 'allow install scripts of dependencies in package.json allowScripts',
 };
 
 // commands: [{ name, aliases }], 顺序即展示顺序
@@ -81,6 +82,9 @@ Options:
   -d, --detail: show detail log of installation
   --trace: show memory and CPU usage traces of the installation
   --ignore-scripts: ignore all preinstall / install and postinstall scripts during the installation
+  --allow-scripts=<pkg>[,<pkg>]: allow install scripts of these dependencies, overrides allowScripts in package.json; mainly for -g
+  --strict-allow-scripts: fail the install when a dependency has install scripts not reviewed in allowScripts
+  --dangerously-allow-all-scripts: run install scripts of every dependency, ignoring allowScripts
   --rebuild: same as npd-x rebuild, rerun lifecycle scripts of installed dependencies, see npd-x rebuild --help
   --no-optional: ignore all optionalDependencies during the installation
   --forbidden-licenses: forbid installing packages that use these licenses
@@ -184,5 +188,27 @@ Options:
 
   --root: install root directory, default is current working directory
   -v, --version: show version
+  -h, --help: show help
+`;
+
+exports.approveScripts = () => `
+Usage:
+
+  npd-x approve-scripts <pkg> [<pkg> ...]
+  npd-x approve-scripts --all
+  npd-x approve-scripts --pending
+
+Install scripts (preinstall / install / postinstall, binding.gyp builds and prepare of git dependencies) of dependencies
+only run when the dependency is allowed in the allowScripts field of the root package.json, same as npm 12.
+Scripts of the root project, workspaces and local folder dependencies always run.
+This command writes allowScripts entries for installed packages; run npd-x rebuild <pkg> afterwards to run their scripts,
+reinstall git dependencies to run their prepare script.
+
+Options:
+
+  --all: approve every installed package whose install scripts are not reviewed yet
+  --pending: only list installed packages whose install scripts are not reviewed yet
+  --no-pin: write name-only entries that allow any version, default writes <pkg>@<installed version>
+  --root: project root directory, default is current working directory
   -h, --help: show help
 `;

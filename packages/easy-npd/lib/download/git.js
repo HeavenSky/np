@@ -9,6 +9,7 @@ const npa = require('npm-package-arg');
 const semver = require('semver');
 const packlist = require('npm-packlist');
 const utils = require('../utils');
+const allowScripts = require('../allow_scripts');
 
 // 只对这些主机浅克隆: 其他主机(例如 GHE)不一定支持, 浅拉取失败比完整拉取更慢
 const SHALLOW_HOSTS = new Set(['github.com', 'gist.github.com', 'gitlab.com', 'bitbucket.com', 'bitbucket.org']);
@@ -285,6 +286,12 @@ async function prepareRepo(dir, resolved, options) {
   const pkg = JSON.parse(content);
   const scripts = pkg.scripts || {};
   if (!pkg.workspaces && !PREPARE_SCRIPTS.some(script => scripts[script])) {
+    return;
+  }
+  // 与 npm 12 一致: 非 registry 依赖的 prepare 同样受 allowScripts 约束, 未放行时不构建, 直接按仓库内容打包
+  const buildScripts = ['prepublish', 'prepare'].filter(script => scripts[script]);
+  const info = { displayName: pkg.name || resolved, name: pkg.name, scripts: buildScripts };
+  if (buildScripts.length > 0 && !allowScripts.allow(options, { git: resolved }, info)) {
     return;
   }
   const noPrepare = process.env[NO_PREPARE_ENV] ? process.env[NO_PREPARE_ENV].split('\n') : [];

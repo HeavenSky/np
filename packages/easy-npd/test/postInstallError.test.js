@@ -2,6 +2,7 @@
 
 const assert = require('assert');
 const path = require('path');
+const fs = require('fs/promises');
 const coffee = require('coffee');
 const helper = require('./helper');
 const npminstall = require('./npminstall');
@@ -14,6 +15,7 @@ describe('test/postInstallError.test.js', () => {
   afterEach(cleanup);
 
   it('should display error when post install', async () => {
+    await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ allowScripts: { 'postinstall-error': true } }));
     let throwError = false;
     try {
       await npminstall({
