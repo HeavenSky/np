@@ -10,6 +10,7 @@ const COMMANDS = [
   { name: 'fetch', aliases: [], run: args => require('./install')(['--fetch-only', ...args]) },
   { name: 'rebuild', aliases: ['rb'], run: args => require('./install')(['--rebuild', ...args]) },
   { name: 'approve-scripts', aliases: [], run: args => require('./approve_scripts')(args) },
+  { name: 'prune', aliases: [], run: args => require('./prune')(args) },
 ];
 
 function findCommand(name) {

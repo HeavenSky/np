@@ -7,6 +7,7 @@ const SUMMARIES = {
   fetch: 'only download and extract packages, no dependencies or scripts',
   rebuild: 'rerun lifecycle scripts of installed dependencies',
   'approve-scripts': 'allow install scripts of dependencies in package.json allowScripts',
+  prune: 'remove package versions in node_modules/.store that nothing links to',
 };
 
 // commands: [{ name, aliases }], 顺序即展示顺序
@@ -218,6 +219,25 @@ Options:
   --all: approve every installed package whose install scripts are not reviewed yet
   --pending: only list installed packages whose install scripts are not reviewed yet
   --no-pin: write name-only entries that allow any version, default writes <pkg>@<installed version>
+  --root: project root directory, default is current working directory
+  -h, --help: show help
+`;
+
+exports.prune = () => `
+Usage:
+
+  np-x prune
+  np-x prune --dry-run
+
+Uninstalling or upgrading packages leaves their old versions in node_modules/.store.
+This command walks the links from node_modules of the project and every workspace,
+removes the <name>@<version> folders in node_modules/.store that are not reachable,
+and the fallback links in node_modules/.store/node_modules that point to them.
+Installs never remove these folders by themselves.
+
+Options:
+
+  --dry-run: only list what would be removed
   --root: project root directory, default is current working directory
   -h, --help: show help
 `;

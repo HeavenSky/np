@@ -26,6 +26,7 @@ npm i -g easy-np
 | `np-x fetch`          | 无                        | 只下载并解压指定的包, 不安装依赖, 不执行脚本        | 无, 新增       |
 | `np-x rebuild`        | `rb`                      | 重跑已安装依赖的 preinstall / install / postinstall | 无, 新增       |
 | `np-x approve-scripts` | 无 | 把依赖写入 `package.json` 的 `allowScripts`, 放行其安装脚本 | 无, 新增 |
+| `np-x prune` | 无 | 删除 `node_modules/.store` 中不再被任何链接引用的包版本 | 无, 新增 |
 
 - 别名用法如 `np-x i`, `np-x rb`. `np-x -h` 列出全部子命令; `np-x <command> -h` 或 `np-x help <command>` 显示子命令的参数.
 - `np --help` 显示安装的全部参数.
@@ -92,6 +93,10 @@ npm i -g easy-np
 - 修复由 easy-np 0.0.1 及更早版本装出的 `node_modules`: 这些版本会把脚本没跑完的包也标记为完成.
 
 普通的失败或中断不需要 rebuild, 直接再次运行 `np` 即可.
+
+### `np-x prune`: 回收不再使用的包版本
+
+卸载或升级后旧版本仍留在 `node_modules/.store/<name>@<version>`; 安装与卸载本身不删除它们. `np-x prune` 从根目录与各 workspace 的 `node_modules` 出发沿链接遍历, 删除遍历不到的版本目录, 以及 `.store/node_modules` 中指向它们的回退链接; `--dry-run` 只列出不删除.
 
 ### `np-x fetch`: 只下载解压
 
