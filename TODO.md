@@ -19,10 +19,6 @@
 
 推荐: 沿用 npm 12 的根 `package.json` `allowScripts` 字段, 同一份配置对 npm 12 与 np / npd 都生效. 分两步落地: 先默认照常执行, 结束时列出不在 `allowScripts` 中却执行了脚本的包; 再改为默认跳过, 提供 `np-x approve-scripts` 与严格模式. 有 `binding.gyp` 的隐式 node-gyp 构建与 git 依赖的 prepare 同样纳入. 被跳过的原生模块要到运行时才报错, 结束时的列表要给出重跑命令.
 
-### 代理支持(待调研修复方案)
-
-`--proxy` 与 `npm_config_proxy` 因 urllib 3 不支持已移除, 企业内网没有可用的代理配置. 候选: undici 的 `ProxyAgent` / `EnvHttpProxyAgent` 读取 `HTTPS_PROXY` / `NO_PROXY`; 需核实 urllib 3 能否透传 dispatcher, 以及二进制下载与 git 依赖是否走同一代理.
-
 ### 低版本 Node.js: 降级兜底并告警(方向已定, 待实施)
 
 原则: 不提高 `engines` 下限; 低版本 Node 上按能力降级或改用兜底实现, 接受一定风险与简化功能, 但每次运行用一条告警说明降级了什么, 以及升级到哪个 Node 版本可以恢复.
