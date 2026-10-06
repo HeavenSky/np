@@ -1,0 +1,28 @@
+const assert = require('node:assert');
+const path = require('node:path');
+const fs = require('node:fs/promises');
+const coffee = require('coffee');
+const helper = require('../support/helper');
+
+describe('test/registry/custom.test.js', () => {
+  const tmp = helper.fixtures('custom-registry');
+  const cleanup = helper.cleanup(tmp);
+
+  beforeEach(cleanup);
+  afterEach(cleanup);
+
+  it('should install with custom registry', async () => {
+    const args = [
+      '--registry=https://registry.npmmirror.com?bucket=foo',
+      '--registry=https://registry.npmmirror.com?bucket=bar',
+      '-d',
+    ];
+    await coffee
+      .fork(helper.npminstall, args, { cwd: tmp })
+      .debug()
+      .expect('stdout', /All packages installed/)
+      .expect('code', 0)
+      .end();
+    assert(JSON.parse(await fs.readFile(path.join(tmp, 'node_modules/pedding/package.json'))).version === '0.0.1');
+  });
+});

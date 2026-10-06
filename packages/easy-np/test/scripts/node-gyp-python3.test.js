@@ -1,0 +1,37 @@
+const coffee = require('coffee');
+const semver = require('semver');
+const helper = require('../support/helper');
+
+if (process.platform !== 'win32') {
+  describe('test/scripts/node-gyp-python3.test.js', () => {
+    if (semver.satisfies(process.version, '< 20.0.0')) {
+      describe('raw-socket', () => {
+        const cwd = helper.fixtures('install-raw-socket');
+        const cleanup = helper.cleanup(cwd);
+
+        beforeEach(cleanup);
+        afterEach(cleanup);
+
+        it('should install raw-socket with python3', async () => {
+          // https://github.com/cnpm/npminstall/issues/384
+          await coffee.fork(helper.npminstall, ['-d'], { cwd }).debug().expect('code', 0).end();
+        });
+      });
+    }
+
+    // xprofiler@2 doesn't have prebuilt binaries for Node.js 22+ and native build may fail
+    if (semver.satisfies(process.version, '< 22.0.0')) {
+      describe('xprofiler', () => {
+        const cwd = helper.fixtures('install-xprofiler');
+        const cleanup = helper.cleanup(cwd);
+
+        beforeEach(cleanup);
+        afterEach(cleanup);
+
+        it('should install xprofiler with python3', async () => {
+          await coffee.fork(helper.npminstall, ['-d'], { cwd }).debug().expect('code', 0).end();
+        });
+      });
+    }
+  });
+}
