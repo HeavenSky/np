@@ -53,6 +53,15 @@ module.exports = async (pkg, options) => {
   const packageDir = path.join(tmpDir, 'package');
   try {
     const spec = npa(raw);
+    // np-lock.json 锁定了解析出的 commit 时直接检出它, 不再按分支, tag 或 semver 重新解析
+    const locked = options.cache.dependenciesTree[raw];
+    const lockedSha = locked && /#([a-f0-9]{40})$/.exec(locked._resolved || '')?.[1];
+    if (lockedSha) {
+      spec.gitCommittish = lockedSha;
+      spec.gitRange = undefined;
+    } else if (options.frozenLockfile) {
+      throw new Error(`${raw} is not in np-lock.json, run npd without --frozen-lockfile to update it`);
+    }
     const sha = await cloneSpec(spec, repoDir);
     const resolved = resolvedUrl(spec, sha);
     await prepareRepo(repoDir, resolved, options);
@@ -70,6 +79,7 @@ module.exports = async (pkg, options) => {
     }
     // record package name
     options.remoteNames[raw] = res.package.name;
+    if (options.lockPackages) options.lockPackages[raw] = res.package;
     return res;
   } catch (err) {
     // git 与子进程的错误只在 stderr 里带真实原因, 附上末尾便于定位
@@ -106,9 +116,10 @@ async function cloneSpec(spec, dir) {
 async function cloneRepo(repo, spec, dir) {
   await utils.rimraf(dir);
   await utils.mkdirp(dir);
-  const revs = await lsRemote(repo);
   const ref = spec.gitCommittish || 'HEAD';
-  const revDoc = pickRev(revs, spec);
+  // 完整 sha(含 np-lock.json 锁定的 commit)不需要 ls-remote, 直接按 sha 拉取
+  const revs = FULL_SHA_RE.test(ref) ? null : await lsRemote(repo);
+  const revDoc = revs && pickRev(revs, spec);
   const shallow = SHALLOW_HOSTS.has(hostOf(repo));
   if (!revDoc) {
     // HEAD~3, 缩写 sha 等未公布的 ref 只能完整克隆; 完整 sha 在支持按 sha 拉取的主机上先尝试浅拉取

@@ -62,7 +62,7 @@ npm i -g easy-npd
 
 ### 依赖安装脚本默认不执行: `allowScripts`
 
-与 npm 12 一致, 依赖的 preinstall / install / postinstall, 有 `binding.gyp` 时的隐式 `node-gyp rebuild`, 以及 git 依赖的 prepare, 只有在根 `package.json` 的 `allowScripts` 中放行后才执行; 根项目, workspace 与本地目录依赖的脚本照常执行. 未放行的包被跳过, 安装结束时列出它们和放行后重跑的命令; 被跳过的原生模块要到运行时才报错.
+与 npm 12 一致, 依赖的 preinstall / install / postinstall, 有 `binding.gyp` 时的隐式 `node-gyp rebuild`, 以及 git 依赖的 prepare, 只有在根 `package.json` 的 `allowScripts` 中放行后才执行; 根项目与本地目录依赖的脚本照常执行. 未放行的包被跳过, 安装结束时列出它们和放行后重跑的命令; 被跳过的原生模块要到运行时才报错.
 
 ```json
 {

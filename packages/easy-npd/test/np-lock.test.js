@@ -117,4 +117,46 @@ describe('test/np-lock.test.js', () => {
     await run(helper.npminstall, []).expect('code', 0).end();
     await assert.rejects(fs.stat(lockFile), /ENOENT/);
   });
+
+  if (process.platform !== 'win32') {
+    it('should lock the git commit and reuse it after the branch moves', async () => {
+      const { execFileSync } = require('child_process');
+      const repo = path.join(tmp, 'repo');
+      await fs.mkdir(repo, { recursive: true });
+      const git = args => execFileSync('git', args, { cwd: repo, stdio: 'ignore' });
+      const commit = async version => {
+        await fs.writeFile(path.join(repo, 'package.json'), JSON.stringify({ name: 'git-lock-demo', version }));
+        git(['add', '-A']);
+        git(['-c', 'user.name=test', '-c', 'user.email=test@example.com', 'commit', '-q', '-m', version]);
+      };
+      git(['init', '-q']);
+      await commit('1.0.0');
+      await writePkg({ 'git-lock-demo': `git+file://${repo}` });
+      await run(helper.npminstall, []).expect('code', 0).end();
+      const key = `git-lock-demo@git+file://${repo}`;
+      const locked = (await readLock()).packages[key];
+      assert.match(locked._resolved, /#[a-f0-9]{40}$/);
+      assert.equal(locked.version, '1.0.0');
+
+      await commit('2.0.0');
+      await fs.rm(path.join(tmp, 'node_modules'), { recursive: true, force: true });
+      await run(helper.npminstall, ['--frozen-lockfile']).expect('code', 0).end();
+      assert.equal(await installedVersion('git-lock-demo'), '1.0.0');
+      // 已装的就是锁定的 commit, 再次安装不重新克隆
+      await run(helper.npminstall, []).expect('code', 0).notExpect('stderr', /install git-lock-demo from git/).end();
+    });
+  }
+
+  it('should record and verify the integrity of tarball url dependencies', async () => {
+    const url = 'https://registry.npmmirror.com/pedding/-/pedding-1.1.0.tgz';
+    await writePkg({ pedding: url });
+    await run(helper.npminstall, []).expect('code', 0).end();
+    const lock = await readLock();
+    assert.match(lock.packages[`pedding@${url}`].dist.integrity, /^sha512-/);
+
+    lock.packages[`pedding@${url}`].dist.integrity = 'sha512-tampered';
+    await fs.writeFile(lockFile, JSON.stringify(lock));
+    await fs.rm(path.join(tmp, 'node_modules'), { recursive: true, force: true });
+    await run(helper.npminstall, []).expect('code', 1).expect('stderr', /integrity mismatch/).end();
+  });
 });

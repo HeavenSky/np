@@ -290,6 +290,13 @@ async function needInstall(parentDir, childPkg, options) {
           return false;
         }
       }
+      // git 与 tarball url 依赖: 已装的就是锁定的 commit 或 url 时跳过, 不再克隆或下载
+      const lockedRemote =
+        options.lockPackages && options.cache.dependenciesTree[`${childPkg.name}@${childPkg.version}`];
+      if (lockedRemote && lockedRemote._resolved && pkg._resolved === lockedRemote._resolved) {
+        recordLockedSubtree(childPkg, options);
+        return false;
+      }
     }
   } catch (err) {
     // ignore, maybe pkg.version invalid

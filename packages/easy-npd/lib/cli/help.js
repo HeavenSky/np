@@ -200,7 +200,7 @@ Usage:
 
 Install scripts (preinstall / install / postinstall, binding.gyp builds and prepare of git dependencies) of dependencies
 only run when the dependency is allowed in the allowScripts field of the root package.json, same as npm 12.
-Scripts of the root project, workspaces and local folder dependencies always run.
+Scripts of the root project and local folder dependencies always run.
 This command writes allowScripts entries for installed packages; run npd-x rebuild <pkg> afterwards to run their scripts,
 reinstall git dependencies to run their prepare script.
 

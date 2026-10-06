@@ -794,6 +794,8 @@ const LOCKED_PACKAGE_KEYS = [
   'libc',
   'engines',
   'dist',
+  // git 依赖锁定的 commit 记在这里; tarball url 依赖记录下载地址
+  '_resolved',
   'scripts',
   'hasInstallScript',
   'gypfile',
