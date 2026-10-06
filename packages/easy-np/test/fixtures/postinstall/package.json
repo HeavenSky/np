@@ -12,5 +12,8 @@
     "postinstall-hello": "1.0.0",
     "utility": "1.6.0",
     "a-dep-b": "*"
+  },
+  "allowScripts": {
+    "postinstall-hello": true
   }
 }

@@ -45,6 +45,7 @@ describe('test/installGit-prepare.test.js', () => {
         name: 'app',
         version: '1.0.0',
         dependencies: { 'prep-demo': `git+file://${repo}#semver:^1.0.0` },
+        allowScripts: { [`git+file://${repo}`]: true },
       })
     );
   });
@@ -74,6 +75,16 @@ describe('test/installGit-prepare.test.js', () => {
     it('should still run prepare with ignoreScripts', async () => {
       await npminstall({ root, ignoreScripts: true });
       await assertPrepared();
+    });
+
+    it('should skip prepare when the git dependency is not in allowScripts', async () => {
+      const pkgFile = path.join(root, 'package.json');
+      const pkg = await helper.readJSON(pkgFile);
+      delete pkg.allowScripts;
+      await fs.writeFile(pkgFile, JSON.stringify(pkg));
+      await npminstall({ root });
+      const files = (await fs.readdir(path.join(root, 'node_modules/prep-demo'))).sort();
+      assert(!files.includes('dist'), files.join(','));
     });
   }
 });

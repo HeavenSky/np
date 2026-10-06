@@ -21,6 +21,7 @@ const createResolution = require('./resolution');
 const formatInstallOptions = require('./format_install_options');
 const Context = require('./context');
 const { runLifecycleScripts } = require('./lifecycle_scripts');
+const allowScripts = require('./allow_scripts');
 
 /**
  * npm install
@@ -234,6 +235,8 @@ async function _install(options, context) {
   recordDependenciesTree(options);
 
   printOptionalFailures(options);
+  const scriptPolicyError = allowScripts.report(options);
+  if (scriptPolicyError) options.failures.push({ displayName: 'allowScripts', error: scriptPolicyError });
   if (options.failures.length > 0) {
     throw utils.installFailuresError(options.failures);
   }

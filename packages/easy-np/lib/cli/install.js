@@ -19,6 +19,7 @@ const { lockfileConverter } = require('../lockfile_resolver');
 const npLock = require('../np_lock');
 const proxy = require('../proxy');
 const runtime = require('../runtime');
+const allowScripts = require('../allow_scripts');
 const help = require('./help');
 
 module.exports = async function install(args, { ignorePkgNames = false, ignoreLockfile = false } = {}) {
@@ -50,6 +51,10 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
         'cafile',
         // 声明为字符串: 布尔类型在未传时默认为 false, 会被当作关闭证书校验
         'strict-ssl',
+        // 依赖脚本放行; 布尔开关同样声明为字符串, 未传时才会读取环境变量与 ~/.nprc
+        'allow-scripts',
+        'strict-allow-scripts',
+        'dangerously-allow-all-scripts',
         'dependencies-tree',
         // np foo --workspace=aa
         // np foo -w aa
@@ -333,6 +338,7 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
   // get config from npm settings instead of following user's specification,
   // should migrate to ?? or typeof.
   config.ignoreScripts = argv['ignore-scripts'] || getIgnoreScripts();
+  config.scriptPolicy = allowScripts.load({ root, global: !!argv.global, argv });
   config.rebuild = argv.rebuild;
   config.foregroundScripts = argv['foreground-scripts'];
   config.ignoreOptionalDependencies = !argv.optional;

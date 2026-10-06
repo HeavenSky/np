@@ -6,6 +6,7 @@ const chalk = require('chalk');
 const utils = require('./utils');
 const formatInstallOptions = require('./format_install_options');
 const { runLifecycleScripts } = require('./lifecycle_scripts');
+const allowScripts = require('./allow_scripts');
 
 module.exports = async options => {
   options = formatInstallOptions(options);
@@ -27,13 +28,18 @@ module.exports = async options => {
   for (const { pkg, dir } of targets) {
     const displayName = `${pkg.name}@${pkg.version}`;
     try {
-      await runLifecycleScripts(pkg, dir, { name: pkg.name, version: pkg.version }, displayName, options, 'preinstall');
+      // git 依赖按解析出的仓库地址比对 allowScripts
+      const isGit = pkg._resolved && /^git[+:]/.test(pkg._resolved);
+      const origin = { name: pkg.name, version: isGit ? pkg._resolved : pkg.version };
+      await runLifecycleScripts(pkg, dir, origin, displayName, options, 'preinstall');
       await utils.setInstallStage(dir);
       options.console.info(chalk.green('rebuilt %s'), displayName);
     } catch (err) {
       options.failures.push({ displayName, error: err, name: pkg.name });
     }
   }
+  const scriptPolicyError = allowScripts.report(options);
+  if (scriptPolicyError) options.failures.push({ displayName: 'allowScripts', error: scriptPolicyError });
   if (options.failures.length > 0) {
     // 被其他包依赖的子包不会被普通 np 遍历到, 只能再次 np-x rebuild
     const names = [...new Set(options.failures.map(item => item.name))].join(' ');

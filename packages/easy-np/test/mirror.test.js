@@ -8,6 +8,7 @@ const tar = require('tar');
 const coffee = require('coffee');
 const helper = require('./helper');
 const mirror = require('../lib/mirror');
+const allowScripts = require('../lib/allow_scripts');
 const { installLocal } = require('..');
 
 async function packTarball(dir, pkg, files = {}) {
@@ -310,6 +311,7 @@ describe('test/mirror.test.js', () => {
       order: ['mirror', 'official'],
       binaryOrder: ['official', 'mirror'],
       extra: {
+        scriptPolicy: allowScripts.load({ argv: { 'allow-scripts': 'bin-pkg' } }),
         binaryEnvs: { TEST_BINARY_ENV: '1' },
         binaryMirrors: {
           'bin-pkg': {

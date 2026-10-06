@@ -5,5 +5,8 @@
   },
   "dependencies": {
     "shameimaru": "^1.0.2"
+  },
+  "allowScripts": {
+    "httpsync": true
   }
 }
