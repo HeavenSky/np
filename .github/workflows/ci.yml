@@ -3,9 +3,9 @@ name: Node CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   # oxlint / oxfmt 需要 node ^20.19 || >=22.12, 与测试用的 node 版本分开跑
@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [ easy-np, easy-npd ]
+        package: [easy-np, easy-npd]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -32,8 +32,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [ easy-np, easy-npd ]
-        node-version: [ 14.18.0, 16.x ]
+        package: [easy-np, easy-npd]
+        node-version: [14.18.0, 16.x]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -56,9 +56,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [ easy-np, easy-npd ]
-        node-version: [ 18.x, 22.x ]
-        os: [ ubuntu-latest, windows-latest ]
+        package: [easy-np, easy-npd]
+        node-version: [18.x, 22.x]
+        os: [ubuntu-latest, windows-latest]
         # Windows 只测 Node 22, Node 18 由 Linux 覆盖
         exclude:
           - os: windows-latest
