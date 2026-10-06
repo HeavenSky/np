@@ -26,6 +26,24 @@ jobs:
       - run: npm i
       - run: npm run lint
 
+  # engines 下限 Node 16: mocha 11 不支持, 用 mocha 10 跑降级路径与基本安装的子集
+  test-node16:
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [ easy-np, easy-npd ]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 16.x
+      - run: npm i
+      - run: npx -y mocha@10 test/runtime.test.js test/proxy.test.js test/get.test.js test/np-lock.test.js test/installLocal.test.js test/postinstall.test.js
+
   test:
     strategy:
       fail-fast: false
