@@ -26,23 +26,31 @@ jobs:
       - run: npm i
       - run: npm run lint
 
-  # engines 下限 Node 16: mocha 11 不支持, 用 mocha 10 跑降级路径与基本安装的子集
-  test-node16:
+  # engines 下限 Node 14.18: mocha 11 不支持, 用 mocha 10 跑全量用例
+  # Node 14 自带的 npm 6 不认 npx -y, mocha 10 改为全局安装
+  test-legacy-node:
     strategy:
       fail-fast: false
       matrix:
         package: [ easy-np, easy-npd ]
+        node-version: [ 14.18.0, 16.x ]
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: packages/${{ matrix.package }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - uses: actions/setup-node@v4
         with:
-          node-version: 16.x
+          node-version: ${{ matrix.node-version }}
       - run: npm i
-      - run: npx -y mocha@10 test/runtime.test.js test/proxy.test.js test/get.test.js test/np-lock.test.js test/installLocal.test.js test/postinstall.test.js test/allow-scripts.test.js test/prune.test.js
+      - run: npm i -g mocha@10
+      - run: mocha "test/*.test.js"
+        env:
+          NODE_OPTIONS: --max_old_space_size=6144
 
   test:
     strategy:
