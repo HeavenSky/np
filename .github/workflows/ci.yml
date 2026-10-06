@@ -48,7 +48,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
       - run: npm i
       - run: npm i -g mocha@10
-      - run: mocha "test/*.test.js"
+      - run: mocha "test/*/*.test.js"
         env:
           NODE_OPTIONS: --max_old_space_size=6144
 
@@ -87,6 +87,6 @@ jobs:
           NODE_OPTIONS: --max_old_space_size=6144
       # 不用 npm test: 它会先跑 lint, 而 oxlint 不支持 Node 18, lint 已由上面的 job 负责
       - if: ${{ !matrix.coverage }}
-        run: npx mocha "test/*.test.js"
+        run: npx mocha "test/*/*.test.js"
         env:
           NODE_OPTIONS: --max_old_space_size=6144

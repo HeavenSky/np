@@ -31,6 +31,7 @@ npm run test:npd
 ```
 
 - 两个包的脚本名一致: `test`, `test-cov`, `lint`, `fmt`, `fmt:check`.
+- 测试按功能放在 `test/<目录>/` 下一层, 支持文件在 `test/support/`; package.json 与 CI 的 mocha spec 写作 `test/*/*.test.js`, 不能写成 `test/**`: fixtures 中依赖包自带的 `*.test.js` 会被当作用例; spec 也不能放进 `.mocharc.js`, 否则命令行指定单个文件时会与它合并成全量.
 - 一个修复要同时用到两个包时, 分别修改并分别提交, 不抽公共代码.
 - 版本号, `CHANGELOG.md` 与发布各自独立.
 
