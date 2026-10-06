@@ -21,6 +21,8 @@ const postinstall = require('./postinstall');
 const preinstall = require('./preinstall');
 const prepublish = require('./prepublish');
 const prepare = require('./prepare');
+const allowScripts = require('./allow_scripts');
+const npLock = require('./np_lock');
 const install = require('./install');
 const dependencies = require('./dependencies');
 const createResolution = require('./resolution');
@@ -210,6 +212,8 @@ async function _install(options, context) {
   recordDependenciesTree(options);
 
   printOptionalFailures(options);
+  const scriptPolicyError = allowScripts.report(options);
+  if (scriptPolicyError) options.failures.push({ displayName: 'allowScripts', error: scriptPolicyError });
   if (options.failures.length > 0) {
     throw utils.installFailuresError(options.failures);
   }
@@ -226,7 +230,7 @@ async function installOne(parentDir, childPkg, options, context) {
       chalk.cyan('Package '),
       chalk.gray(childPkg.name + '@' + childPkg.version),
       chalk.cyan('is skipped because it already exists at:'),
-      path.join(parentDir, 'node_modules', childPkg.name)
+      path.join(parentDir, 'node_modules', childPkg.alias || childPkg.name)
     );
     return;
   }
@@ -249,12 +253,25 @@ async function needInstall(parentDir, childPkg, options) {
   // always install if not install from package.json
   if (!options.installRoot || options.rebuild) return true;
 
-  const pkgDir = path.join(parentDir, 'node_modules', childPkg.name);
+  const pkgDir = path.join(parentDir, 'node_modules', childPkg.alias || childPkg.name);
   const pkg = await utils.readJSON(path.join(pkgDir, 'package.json'));
   try {
     if (pkg.name && pkg.version && childPkg.version && !(await utils.isInstallUnfinished(pkgDir))) {
-      if (semver.validRange(childPkg.version, true) && semver.satisfies(pkg.version, childPkg.version)) {
-        return false;
+      // 启用锁文件时已装的根依赖仍要走一遍安装, 否则子依赖不会按锁定版本校正, 也不会记进 np-lock.json; 已装的就是锁定版本时只是不删链接
+      const locked =
+        options.lockPackages && npLock.lookup(options.cache.dependenciesTree, `${childPkg.name}@${childPkg.version}`);
+      // 声明从 git / url / 本地路径改回 registry 版本时, 版本满足范围的旧包也要换成 registry 包
+      if (
+        semver.validRange(childPkg.version, true) &&
+        semver.satisfies(pkg.version, childPkg.version) &&
+        !utils.isNonRegistryInstall(pkg)
+      ) {
+        if (!options.lockPackages) return false;
+        if (locked && locked.version === pkg.version) return true;
+      }
+      // git 与 tarball url 依赖: 已装的就是锁定的 commit 或 url; 锁文件里的地址去掉了凭据
+      if (locked && locked._resolved && utils.stripUrlAuth(pkg._resolved) === utils.stripUrlAuth(locked._resolved)) {
+        return true;
       }
     }
   } catch (err) {
@@ -263,7 +280,7 @@ async function needInstall(parentDir, childPkg, options) {
   }
   // clean up
   if (childPkg.name) {
-    await utils.rimraf(path.join(parentDir, 'node_modules', childPkg.name));
+    await utils.rimraf(pkgDir);
   }
   return true;
 }
@@ -293,10 +310,9 @@ async function checkLinkPeerDependencies(params, options) {
 }
 
 async function validatePeerDependencies(params, options) {
-  const pkg = params.package;
   const parentDir = params.parentDir;
 
-  const peerDependencies = pkg.peerDependencies;
+  const peerDependencies = params.peerDependencies;
   const names = Object.keys(peerDependencies);
   const cacheKey = `nodemodule:path:${parentDir}`;
   let paths = options.cache[cacheKey];
@@ -410,7 +426,7 @@ async function linkLatestVersion(pkg, storeDir, options) {
   }
   await utils.rimraf(linkDir); // make sure to delete linkDir
   await utils.mkdirp(path.dirname(linkDir));
-  const realDir = utils.getPackageStorePath(storeDir, pkg);
+  const realDir = options.latestPackages.get(pkg.name);
   const relative = await utils.forceSymlink(realDir, linkDir);
   options.progresses.finishedLinkTasks++;
   debug(
@@ -631,7 +647,7 @@ function recordDependenciesTree(options) {
 
   const tree = {};
   for (const key in options.cache.dependenciesTree) {
-    tree[key] = omitPackage(options.cache.dependenciesTree[key]);
+    tree[key] = utils.omitPackage(options.cache.dependenciesTree[key]);
   }
   const installCacheFile = path.join(options.storeDir, '.dependencies_tree.json');
   writeFileSync(installCacheFile, JSON.stringify(tree, null, 2));
@@ -665,32 +681,4 @@ function finishInstall(options) {
   } else {
     options.console.info(...logArguments);
   }
-}
-
-function omitPackage(pkg) {
-  const keys = [
-    'name',
-    'version',
-    'dependencies',
-    'devDependencies',
-    'optionalDependencies',
-    'clientDependencies',
-    'buildDependencies',
-    'isomorphicDependencies',
-    'peerDependencies',
-    'publish_time',
-    'deprecate',
-    'license',
-    'os',
-    'engines',
-    'dist',
-    'scripts',
-    '_id',
-    '__fixDependencies',
-  ];
-  const res = {};
-  for (const key of keys) {
-    if (pkg[key]) res[key] = pkg[key];
-  }
-  return res;
 }

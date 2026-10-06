@@ -4,10 +4,13 @@ const debug = require('debug')('npd:utils');
 const fs = require('fs/promises');
 const { accessSync } = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const cp = require('child_process');
 const { promisify } = require('util');
 const { parse: urlparse } = require('url');
 const querystring = require('querystring');
+// 不能删: 加载时为 tar 补齐 Node < 16.6 缺少的内置方法
+require('./runtime');
 const tar = require('tar');
 const zlib = require('zlib');
 const runscript = require('runscript');
@@ -17,6 +20,9 @@ const destroy = require('destroy');
 const normalizeData = require('normalize-package-data');
 const normalizeBin = require('npm-normalize-package-bin');
 const semver = require('semver');
+const npa = require('npm-package-arg');
+const packlist = require('npm-packlist');
+const installState = require('./install_state');
 const utility = require('utility');
 const url = require('url');
 const config = require('./config');
@@ -171,26 +177,25 @@ exports.readPackageJSON = async root => {
   return pkg;
 };
 
-const INSTALL_DONE_KEY = '__npd_done';
-// 包安装中断或失败时停在的阶段, 按 INSTALL_STAGES 的顺序推进; 本次运行的脚本全部成功后删除该键
-const INSTALL_STAGE_KEY = '__npd_stage';
+// 包安装中断或失败时停在的阶段, 按 INSTALL_STAGES 的顺序推进; 本次运行的脚本全部成功后清除
 // finish: 包自身的步骤已完成, 但子依赖延后执行的脚本可能还没跑完, 下次运行仍要遍历它的子依赖
 exports.INSTALL_STAGES = ['preinstall', 'deps', 'install', 'postinstall', 'finish'];
 exports.FIRST_INSTALL_STAGE = exports.INSTALL_STAGES[0];
 
+// 状态写入 store 的 .npd-state.json; 不在 store 中的目录退回写 package.json
+async function updateInstallState(pkgRoot, patch) {
+  const legacy = await installState.update(pkgRoot, patch);
+  if (legacy) await exports.addMetaToJSONFile(path.join(pkgRoot, 'package.json'), legacy);
+}
+
 // 设置 pkg 解压完成的标记, 同一次写入记下起始阶段, 避免中断在两次写入之间时包被当作已完成
 exports.setInstallDone = async (pkgRoot, stage) => {
-  await exports.addMetaToJSONFile(path.join(pkgRoot, 'package.json'), {
-    [INSTALL_DONE_KEY]: true,
-    [INSTALL_STAGE_KEY]: stage,
-  });
+  await updateInstallState(pkgRoot, { done: true, stage });
 };
 
 // stage 为 undefined 时删除阶段标记
 exports.setInstallStage = async (pkgRoot, stage) => {
-  await exports.addMetaToJSONFile(path.join(pkgRoot, 'package.json'), {
-    [INSTALL_STAGE_KEY]: stage,
-  });
+  await updateInstallState(pkgRoot, { stage });
 };
 
 // 已解压的包要从哪个阶段继续; 无标记表示已完成, --rebuild 时先写回起始阶段再从头执行, 中断后仍能继续
@@ -199,8 +204,7 @@ exports.getResumeStage = async (pkgRoot, options) => {
     await exports.setInstallStage(pkgRoot, exports.FIRST_INSTALL_STAGE);
     return exports.FIRST_INSTALL_STAGE;
   }
-  const pkg = await exports.readJSON(path.join(pkgRoot, 'package.json'));
-  return pkg[INSTALL_STAGE_KEY];
+  return (await installState.get(pkgRoot))?.stage;
 };
 
 // 从 stage 继续时是否还要执行 step; 没有阶段(根包)或无法识别的阶段执行全部步骤
@@ -209,22 +213,22 @@ exports.shouldRunStage = (stage, step) => {
 };
 
 exports.unsetInstallDone = async pkgRoot => {
-  await exports.addMetaToJSONFile(path.join(pkgRoot, 'package.json'), {
-    [INSTALL_DONE_KEY]: false,
-  });
+  await updateInstallState(pkgRoot, { done: false });
 };
 
-// 判断 pkg 是否已经安装完成
+// 判断 pkg 是否已经安装完成; 目录被手动删除后状态文件里的记录不再算数
 exports.isInstallDone = async pkgRoot => {
-  const pkg = await exports.readJSON(path.join(pkgRoot, 'package.json'));
-  return !!pkg[INSTALL_DONE_KEY];
+  return !!(await installState.get(pkgRoot))?.done && (await exports.exists(path.join(pkgRoot, 'package.json')));
 };
 
 // 只认显式的 false 与阶段标记: fetch-only 留下的包与安装中断或失败的包; 不带标记的包可能由 npm 等其他工具装出, 不算未完成
 exports.isInstallUnfinished = async pkgRoot => {
-  const pkg = await exports.readJSON(path.join(pkgRoot, 'package.json'));
-  return pkg[INSTALL_DONE_KEY] === false || !!pkg[INSTALL_STAGE_KEY];
+  const state = await installState.get(pkgRoot);
+  return state?.done === false || !!state?.stage;
 };
+
+// 测试与排查用: 返回 { done, stage } 或 undefined
+exports.getInstallState = pkgRoot => installState.get(pkgRoot);
 
 exports.addMetaToJSONFile = async (filepath, meta) => {
   await fs.chmod(filepath, '644');
@@ -240,7 +244,7 @@ const INSTALL_FAILURES_CODE = 'NPD_INSTALL_FAILURES';
 exports.INSTALL_FAILURES_CODE = INSTALL_FAILURES_CODE;
 exports.installFailuresError = (failures, hint = 'run npd again to continue from where they stopped') => {
   const lines = failures.map(({ displayName, error }) => `  - ${displayName}: ${String(error.message).split('\n')[0]}`);
-  const err = new Error(`${failures.length} package(s) failed, ${hint}:\n${lines.join('\n')}`);
+  const err = new Error(exports.redactUrl(`${failures.length} package(s) failed, ${hint}:\n${lines.join('\n')}`));
   err.code = INSTALL_FAILURES_CODE;
   err.failures = failures;
   return err;
@@ -398,6 +402,202 @@ exports.runScript = async (pkgDir, script, options) => {
   }
 };
 
+// 结束整个进程树: 只结束直接子进程时, shell 或脚本再启动的孙进程会残留; POSIX 下要求子进程以 detached 启动成为进程组组长
+exports.killProcessTree = pid => {
+  if (!pid) return;
+  try {
+    if (process.platform === 'win32') {
+      cp.spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
+    } else {
+      process.kill(-pid, 'SIGKILL');
+    }
+  } catch {
+    // 进程已退出
+  }
+};
+
+// 登记中的子进程树: 本进程退出时直接结束, 收到 SIGINT / SIGTERM 时先 SIGTERM, 最多等 1 秒仍存活再强制结束
+const trackedPids = new Set();
+const SIGNAL_GRACE_MS = 1000;
+
+function signalTree(pid, signal) {
+  try {
+    process.kill(process.platform === 'win32' ? pid : -pid, signal);
+    return true;
+  } catch (err) {
+    return err.code === 'EPERM';
+  }
+}
+
+function killTrackedOnExit() {
+  for (const pid of trackedPids) exports.killProcessTree(pid);
+}
+
+let terminating = false;
+function terminateTracked(signal) {
+  if (terminating) return;
+  terminating = true;
+  const pids = [...trackedPids];
+  if (process.platform === 'win32') {
+    for (const pid of pids) exports.killProcessTree(pid);
+  } else {
+    for (const pid of pids) signalTree(pid, 'SIGTERM');
+  }
+  const deadline = Date.now() + SIGNAL_GRACE_MS;
+  const timer = setInterval(() => {
+    const alive = pids.filter(pid => signalTree(pid, 0));
+    if (alive.length && Date.now() < deadline) return;
+    clearInterval(timer);
+    for (const pid of alive) exports.killProcessTree(pid);
+    process.exit(signal === 'SIGINT' ? 130 : 143);
+  }, 50);
+}
+
+// 登记 / 注销都只在集合为空时增删一次监听, 并发子进程再多也不会触发 MaxListenersExceededWarning
+exports.trackChildProcess = pid => {
+  if (!pid) return () => {};
+  if (trackedPids.size === 0) {
+    process.on('exit', killTrackedOnExit);
+    process.on('SIGINT', terminateTracked);
+    process.on('SIGTERM', terminateTracked);
+  }
+  trackedPids.add(pid);
+  return () => {
+    if (!trackedPids.delete(pid) || trackedPids.size > 0) return;
+    process.removeListener('exit', killTrackedOnExit);
+    process.removeListener('SIGINT', terminateTracked);
+    process.removeListener('SIGTERM', terminateTracked);
+  };
+};
+
+// 超时或本进程退出时结束整个子进程树; 错误带上 stderr 供调用方附在报错末尾; shell 为 true 时 cmd 是完整的命令行
+exports.spawnWithTimeout = (cmd, args, { cwd, env, timeout, name, shell }) => {
+  return new Promise((resolve, reject) => {
+    const child = cp.spawn(cmd, args, {
+      cwd,
+      env,
+      shell,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+      detached: process.platform !== 'win32',
+    });
+    const killTree = () => exports.killProcessTree(child.pid);
+    const untrack = exports.trackChildProcess(child.pid);
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+    let settled = false;
+    child.stdout.setEncoding('utf8').on('data', data => (stdout += data));
+    child.stderr.setEncoding('utf8').on('data', data => (stderr += data));
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killTree();
+    }, timeout);
+    const finish = err => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      untrack();
+      if (err) {
+        err.stderr = stderr;
+        reject(err);
+      } else {
+        resolve({ stdout, stderr });
+      }
+    };
+    child.on('error', finish);
+    child.on('close', (code, signal) => {
+      if (timedOut) {
+        finish(new Error(`${name} timed out after ${timeout / 1000}s`));
+      } else if (code !== 0) {
+        const err = new Error(`${name} exited with ${signal ? `signal ${signal}` : `code ${code}`}`);
+        err.exitCode = code;
+        finish(err);
+      } else {
+        finish();
+      }
+    });
+  });
+};
+
+// 写入 np-lock.json 的地址去掉凭据: http(s) 去掉整段 userinfo(token 常作为用户名), 其他协议只去掉密码, 保留 git@ 这类用户名; 两个包必须逐字相同, 否则共用的 np-lock.json 键对不上
+const URL_AUTH_RE = /([a-z][a-z0-9+.-]*:\/\/)([^\s/'"]+)@/gi;
+exports.stripUrlAuth = str => {
+  if (typeof str !== 'string') return str;
+  return str.replace(URL_AUTH_RE, (match, scheme, userinfo) => {
+    if (/https?:\/\/$/i.test(scheme)) return scheme;
+    const colon = userinfo.indexOf(':');
+    return colon >= 0 ? `${scheme}${userinfo.slice(0, colon)}@` : match;
+  });
+};
+
+// 遮住 URL 中的 userinfo 与 .npmrc 风格的凭据, 用于报错, 日志与 debug 输出; 传给子进程的环境变量不经过这里
+exports.redactUrl = str => {
+  if (typeof str !== 'string') return str;
+  return str
+    .replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@'"]+@/gi, '$1***@')
+    .replace(/(_authToken|_auth|_password)("?\s*[=:]\s*"?)[^\s'",}]+/g, '$1$2***')
+    .replace(/([?&](?:token|access_token|auth|_authToken|password)=)[^&#\s]+/gi, '$1***');
+};
+
+const SECRET_KEYS = new Set([
+  'authorization',
+  'proxy-authorization',
+  'registryauthorization',
+  '_authtoken',
+  '_auth',
+  '_password',
+  'password',
+]);
+const isSecretKey = key => {
+  const lower = String(key).toLowerCase();
+  return SECRET_KEYS.has(lower) || lower.endsWith(':_authtoken');
+};
+
+// 返回深拷贝, 原对象不变; 类实例保留原型以便 util.inspect 显示类名
+exports.redact = value => redactValue(value, new WeakMap());
+
+function redactValue(value, seen) {
+  if (typeof value === 'string') return exports.redactUrl(value);
+  if (!value || typeof value !== 'object') return value;
+  if (seen.has(value)) return seen.get(value);
+  if (ArrayBuffer.isView(value) || value instanceof Date || value instanceof RegExp) return value;
+  if (Array.isArray(value)) {
+    const copy = [];
+    seen.set(value, copy);
+    for (const item of value) copy.push(redactValue(item, seen));
+    return copy;
+  }
+  if (value instanceof Map) {
+    const copy = new Map();
+    seen.set(value, copy);
+    for (const [key, item] of value) copy.set(key, isSecretKey(key) ? '***' : redactValue(item, seen));
+    return copy;
+  }
+  if (value instanceof Set) {
+    const copy = new Set();
+    seen.set(value, copy);
+    for (const item of value) copy.add(redactValue(item, seen));
+    return copy;
+  }
+  const copy = Object.create(Object.getPrototypeOf(value));
+  seen.set(value, copy);
+  if (value instanceof Error) {
+    Object.defineProperty(copy, 'message', { value: exports.redactUrl(value.message), configurable: true });
+    Object.defineProperty(copy, 'stack', { value: exports.redactUrl(value.stack), configurable: true });
+  }
+  for (const key of Object.keys(value)) {
+    let item;
+    try {
+      item = value[key];
+    } catch {
+      continue;
+    }
+    copy[key] = isSecretKey(key) ? '***' : redactValue(item, seen);
+  }
+  return copy;
+}
+
 exports.getMaxRange = spec => {
   // >=1.0.0 <2.0.0
   const r = /^>=.*?<(.*?)$/.exec(spec);
@@ -406,20 +606,51 @@ exports.getMaxRange = spec => {
   }
 };
 
-exports.findMaxSatisfyingVersion = (spec, distTags, allVersions) => {
+// 对齐 npm-pick-manifest: 未写版本或写的是 range 时, 优先选未 deprecated 的版本, 其次选 engines.node 兼容当前 Node.js 的版本;
+// 显式 tag 与精确版本原样使用; 范围内都不满足时仍返回原本会选中的版本, 由安装阶段告警
+// options.versions: manifest 的 versions 字段, 不传时不检查 deprecated 与 engines
+// options.implicitTag: spec 是未写版本时补上的 latest, 而不是用户显式写的 tag
+exports.findMaxSatisfyingVersion = (spec, distTags, allVersions, options = {}) => {
+  const { versions, nodeVersion = process.version, implicitTag = false } = options;
+  // 0 最优; deprecated 的权重高于 engines 不兼容, 与 npm-pick-manifest 的排序一致
+  const rank = version => {
+    const manifest = versions && versions[version];
+    if (!manifest) return 0;
+    const node = manifest.engines && manifest.engines.node;
+    return (manifest.deprecated ? 2 : 0) + (node && !semver.satisfies(nodeVersion, node) ? 1 : 0);
+  };
+  const maxSatisfying = range => {
+    const max = semver.maxSatisfying(allVersions, range);
+    if (!max || rank(max) === 0) return max;
+    for (let level = 0; level < rank(max); level++) {
+      const candidate = semver.maxSatisfying(
+        allVersions.filter(version => rank(version) === level),
+        range
+      );
+      if (candidate) return candidate;
+    }
+    return max;
+  };
+
   // try tag first
   let realPkgVersion = distTags[spec];
-
-  if (!realPkgVersion) {
+  if (realPkgVersion) {
+    if (implicitTag && rank(realPkgVersion) > 0) {
+      const better = maxSatisfying('*');
+      if (better && rank(better) < rank(realPkgVersion)) {
+        realPkgVersion = better;
+      }
+    }
+  } else {
     const version = semver.valid(spec);
     const range = semver.validRange(spec, true);
-    if (semver.satisfies(distTags.latest, spec)) {
+    if (semver.satisfies(distTags.latest, spec) && (version || rank(distTags.latest) === 0)) {
       realPkgVersion = distTags.latest;
     } else if (version) {
       // use the valid version
       realPkgVersion = version;
     } else if (range) {
-      realPkgVersion = semver.maxSatisfying(allVersions, range);
+      realPkgVersion = maxSatisfying(range);
       if (realPkgVersion) {
         // try to use latest-{major} tag version on range
         // ^1.0.1 =range=> get 1.0.3 in (1.0.2, 1.0.3), but latest-1 tag is 1.0.2
@@ -427,7 +658,11 @@ exports.findMaxSatisfyingVersion = (spec, distTags, allVersions) => {
         const major = semver.major(realPkgVersion);
         if (major) {
           const latestMajorVersion = distTags[`latest-${major}`];
-          if (latestMajorVersion && semver.satisfies(latestMajorVersion, spec)) {
+          if (
+            latestMajorVersion &&
+            semver.satisfies(latestMajorVersion, spec) &&
+            rank(latestMajorVersion) <= rank(realPkgVersion)
+          ) {
             realPkgVersion = latestMajorVersion;
           }
         }
@@ -438,11 +673,39 @@ exports.findMaxSatisfyingVersion = (spec, distTags, allVersions) => {
   return realPkgVersion;
 };
 
-exports.getPackageStorePath = (storeDir, pkg) => {
+// git / tarball url / 本地包的 store 目录名带来源后缀, 不占用同名同版本 registry 包的目录, 内容换了来源也不复用旧目录
+const SOURCE_SUFFIX_RE = /[+.]((?:git|url|file)\.[0-9a-f]{8})$/;
+
+exports.gitSource = sha => `git.${sha.slice(0, 8)}`;
+exports.urlSource = integrity => `url.${utility.sha1(integrity).slice(0, 8)}`;
+exports.fileSource = filepath => `file.${utility.sha1(filepath).slice(0, 8)}`;
+
+exports.getPackageStorePath = (storeDir, pkg, source) => {
   // name => _name@1.0.0@name
   // @scope/name => _@scope_name@1.0.0@scope/name
+  // 带来源时: _name@1.0.0+git.1a2b3c4d@name, 版本号已有 build metadata 时用 . 连接
   // some packages need name: https://github.com/BenoitZugmeyer/eslint-plugin-html/blob/master/src/index.js#L24
-  return path.join(storeDir, `_${pkg.name.replace(/\//g, '_')}@${pkg.version}@${pkg.name}`);
+  const version = source ? `${pkg.version}${String(pkg.version).includes('+') ? '.' : '+'}${source}` : pkg.version;
+  return path.join(storeDir, `_${pkg.name.replace(/\//g, '_')}@${version}@${pkg.name}`);
+};
+
+// getPackageStorePath 的逆运算, 不是 store 目录时返回 null; 只有不带 source 的结果才是 registry 包的身份
+exports.parsePackageStorePath = dir => {
+  const base = path.basename(dir);
+  let parsed = null;
+  const unscoped = /^_([^@]+)@([^@]+)@([^@]+)$/.exec(base);
+  if (unscoped && unscoped[1] === unscoped[3]) parsed = { name: unscoped[3], version: unscoped[2] };
+  const scoped = !parsed && /^_(@.+)@([^@]+)@(@[^@]+)$/.exec(path.basename(path.dirname(dir)));
+  if (scoped && scoped[1] === `${scoped[3]}/${base}`.replace(/\//g, '_')) {
+    parsed = { name: `${scoped[3]}/${base}`, version: scoped[2] };
+  }
+  if (!parsed) return null;
+  const source = SOURCE_SUFFIX_RE.exec(parsed.version);
+  if (source) {
+    parsed.version = parsed.version.slice(0, source.index);
+    parsed.source = source[1];
+  }
+  return parsed;
 };
 
 exports.unpack = (readstream, target, pkg) => {
@@ -502,7 +765,49 @@ exports.unpack = (readstream, target, pkg) => {
   });
 };
 
-exports.copyInstall = async (src, options) => {
+// 按 npm pack 的规则(files, .npmignore/.gitignore, 必含与必排文件)把要发布的文件复制到 dest, 不执行包内任何脚本
+exports.copyPackFiles = async (dir, dest) => {
+  const files = await packlist({ path: dir });
+  for (const file of files) {
+    const target = path.join(dest, file);
+    await exports.mkdirp(path.dirname(target));
+    await fs.copyFile(path.join(dir, file), target);
+  }
+};
+
+const NON_REGISTRY_SPEC_TYPES = new Set(['git', 'remote', 'file', 'directory']);
+// 按安装时写入的 _from / _resolved 判断包是否来自 git, tarball url 或本地路径; 没有这两个字段的包(npm 等工具装出)按 registry 包处理
+exports.isNonRegistryInstall = pkg => {
+  if (typeof pkg._resolved === 'string' && /^(?:git[+:]|file:)/.test(pkg._resolved)) return true;
+  if (typeof pkg._from !== 'string') return false;
+  try {
+    return NON_REGISTRY_SPEC_TYPES.has(npa(pkg._from).type);
+  } catch {
+    return false;
+  }
+};
+
+// 目录内全部文件的相对路径与内容的摘要, 与时间戳和权限无关; 符号链接不计入
+exports.hashDir = async dir => {
+  const hash = crypto.createHash('sha1');
+  const walk = async relative => {
+    const entries = await fs.readdir(path.join(dir, relative), { withFileTypes: true });
+    entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    for (const entry of entries) {
+      const file = relative ? `${relative}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        await walk(file);
+      } else if (entry.isFile()) {
+        const content = await fs.readFile(path.join(dir, file));
+        hash.update(`${file}\0${content.length}\0`).update(content);
+      }
+    }
+  };
+  await walk('');
+  return hash.digest('hex');
+};
+
+exports.copyInstall = async (src, options, source) => {
   // 1. make sure source folder has package.json, and package.json contains name
   // 2. get the target directory: $storeDir/${pkg.name}/${pkg.version}
   // 3. check if this package has been installed, and make sure only copy once.
@@ -517,7 +822,7 @@ exports.copyInstall = async (src, options) => {
     throw new Error(`package.json must contain name and version (${pkgpath})`);
   }
 
-  const targetdir = options.ungzipDir || exports.getPackageStorePath(options.storeDir, realPkg);
+  const targetdir = options.ungzipDir || exports.getPackageStorePath(options.storeDir, realPkg, source);
   const key = `copy:${targetdir}`;
   const result = {
     dir: targetdir,
@@ -539,7 +844,13 @@ exports.copyInstall = async (src, options) => {
     done: false,
   };
 
-  if (!(await exports.isInstallDone(targetdir))) {
+  // 本地包的版本号与路径不变时内容也可能变了, 已安装的目录要按内容摘要判断能否复用
+  const outdated = async () =>
+    !!realPkg._contentHash &&
+    (await exports.readJSON(path.join(targetdir, 'package.json')))._contentHash !== realPkg._contentHash;
+  if (!(await exports.isInstallDone(targetdir)) || (await outdated())) {
+    await exports.mkdirp(targetdir);
+    await installState.reset(targetdir);
     await fse.emptyDir(targetdir);
     await fse.copy(src, targetdir);
     await exports.setInstallDone(targetdir, exports.FIRST_INSTALL_STAGE);
@@ -552,6 +863,17 @@ exports.copyInstall = async (src, options) => {
   options.cache[key].done = true;
   options.events.emit(key);
   return result;
+};
+
+// np-lock.json 锁定的 git / tarball url 包已在 store 中装好时返回与 copyInstall 同形的结果, 否则返回 null; source 由调用方按锁定的 commit / integrity 算出
+exports.getLockedInstall = async (locked, options, source) => {
+  if (!locked || !locked._resolved || !locked.name || !locked.version || !source || options.rebuild) return null;
+  const dir = options.ungzipDir || exports.getPackageStorePath(options.storeDir, locked, source);
+  if (!(await exports.isInstallDone(dir)) || (await installState.get(dir))?.stage) return null;
+  const pkg = await exports.readPackageJSON(dir);
+  // 同版本号的包可能来自另一个 commit 或 url; 锁文件里的地址去掉了凭据
+  if (exports.stripUrlAuth(pkg._resolved) !== exports.stripUrlAuth(locked._resolved)) return null;
+  return { dir, package: pkg, exists: true };
 };
 
 exports.getPkgFromPaths = async (name, paths) => {
@@ -722,3 +1044,44 @@ exports.getDisplayName = (pkg, ancestors) => {
 };
 
 exports.exec = promisify(cp.exec);
+
+// 依赖树与 np-lock.json 只保存安装需要的 manifest 字段; cpu / libc / os 缺失会让换平台安装时选错可选依赖
+const LOCKED_PACKAGE_KEYS = [
+  'name',
+  'version',
+  'dependencies',
+  'optionalDependencies',
+  'clientDependencies',
+  'buildDependencies',
+  'isomorphicDependencies',
+  'peerDependencies',
+  'peerDependenciesMeta',
+  'bundleDependencies',
+  'bundledDependencies',
+  'bin',
+  'directories',
+  'publish_time',
+  'deprecated',
+  'license',
+  'os',
+  'cpu',
+  'libc',
+  'engines',
+  'dist',
+  // git 依赖锁定的 commit 记在这里; tarball url 依赖记录下载地址
+  '_resolved',
+  'scripts',
+  'hasInstallScript',
+  'gypfile',
+  '_id',
+  '__fixDependencies',
+  '__fixScripts',
+];
+
+exports.omitPackage = pkg => {
+  const res = {};
+  for (const key of LOCKED_PACKAGE_KEYS) {
+    if (pkg[key]) res[key] = pkg[key];
+  }
+  return res;
+};

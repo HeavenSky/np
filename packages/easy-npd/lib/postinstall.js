@@ -18,6 +18,7 @@ async function postinstall(pkg, root, optional, displayName, options, stage) {
   // If there is a binding.gyp file in the root of your package,
   // npm will default the install command to compile using node-gyp.
   if (
+    !options.ignoreScripts &&
     !scripts.install &&
     utils.shouldRunStage(stage, 'install') &&
     (await utils.exists(path.join(root, 'binding.gyp')))

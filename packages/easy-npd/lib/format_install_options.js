@@ -7,7 +7,9 @@ const awaitEvent = require('await-event');
 const assert = require('assert');
 const path = require('path');
 const EventEmitter = require('events');
+const util = require('util');
 const ora = require('ora');
+const { redactUrl } = require('./utils');
 
 module.exports = function formatInstallOptions(options) {
   options.trace = !!options.trace;
@@ -25,12 +27,14 @@ module.exports = function formatInstallOptions(options) {
   options.postInstallTasks = [];
   // 本次运行写过阶段标记的包目录, 脚本全部成功后统一清除
   options.stagedDirs = new Set();
+  // 启用锁文件时已装好的包也要遍历一次子依赖, 才能把整棵子树记进 np-lock.json; 每个包目录只遍历一次
+  options.visitedStoreDirs = new Set();
   // 失败的包不中止安装: { displayName, error }, 安装结束时汇总
   options.failures = [];
   // 失败后被跳过的可选依赖: { displayName, error, name? }, 带 name 的是脚本失败, 可用 rebuild 重跑
   options.optionalFailures = [];
   // [
-  //    {package: pkg, parentDir: 'parentDir', packageDir: 'packageDir'},
+  //    {package: pkg, displayName, parentDir: 'parentDir', peerDependencies: { name: range }},
   //   ...
   // ]
   options.peerDependencies = [];
@@ -49,7 +53,7 @@ module.exports = function formatInstallOptions(options) {
   }
 
   options.latestVersions = new Map();
-  // store latest packages
+  // 包名 => latestVersions 中那个版本的目录; git / url / 本地包的目录名带来源后缀, 不能按名称与版本拼出
   options.latestPackages = new Map();
   options.cache = {
     dependenciesTree: {},
@@ -70,7 +74,7 @@ module.exports = function formatInstallOptions(options) {
   }
   options.timeout = options.timeout || 60000;
   options.streamingTimeout = options.streamingTimeout || 120000;
-  const customConsole = options.detail
+  const baseConsole = options.detail
     ? console
     : {
         info: debug,
@@ -78,6 +82,11 @@ module.exports = function formatInstallOptions(options) {
         error: console.error,
         warn: console.warn,
       };
+  // 兜底脱敏: 各处日志可能直接拼入带凭据的 registry, tarball 或 git 地址
+  const customConsole = {};
+  for (const method of ['info', 'log', 'error', 'warn']) {
+    customConsole[method] = (...args) => baseConsole[method]('%s', redactUrl(util.format(...args)));
+  }
   options.console = options.console || customConsole;
   options.env = options.env || {};
   options.start = Date.now();

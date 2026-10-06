@@ -4,6 +4,65 @@ easy-npd 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 6.8.0, 上
 
 0.0.0 列出相对 npminstall 6.8.0 的全部变更, 分为「新增功能」与「与 npminstall 6.8.0 的差异」; 之后的版本只列相对上一个版本的变更.
 
+## 0.0.3 (2026-10-06)
+
+### 新增功能
+
+- `np-lock.json`: 安装成功后在项目根目录记录每个依赖声明解析出的版本, 再次安装直接复用; 每次安装都按锁文件遍历整棵依赖树, 已装好的包不重新下载也不执行脚本, 任何一层与锁定版本不同时都改为锁定版本; 完整安装删除不再使用的条目, 部分安装只追加; `npd <pkg>` 不写版本, 写 tag 或 `*` 时总是取最新版本, 按保存进 `package.json` 的声明记录; `--frozen-lockfile` 只按锁文件安装, 缺少条目时报错, 不能与包名同用; 已有其他包管理器的锁文件时不生成, `--no-lockfile` 或 `np_lockfile=false` 关闭. 与 easy-np 共用同一份文件. 用 0.0.3 正式发布前的版本生成过 `np-lock.json` 的项目建议删除它后重新安装一次: 之前可能漏记已装好的包的子依赖, 改写 peerDependencies, 或以命令行写法(如 `foo@*`)为键.
+- 支持 npm `overrides`: 包名, `name@<range>`, 嵌套对象, `.` 与 `$name` 引用; 同时存在 `resolutions` 时 `overrides` 优先.
+- 缺失的 peerDependencies 与 npm 7+ 一样自动安装, 失败时按可选依赖跳过并告警; `--legacy-peer-deps` 恢复只告警.
+- 公共源测速结果缓存在 `~/.np_tarball/np-probe.json`, 默认 5 分钟内复用; `--probe-cache=<分钟>` 或 `np_probe_cache` 修改, `0` 表示每次都测速.
+- 代理: `--proxy`, `--https-proxy`, `--noproxy`, 未传时依次读取 `npm_config_*`, `~/.nprc`, `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`; 同一份配置传给安装脚本, node-gyp 与 git.
+- `--cafile` 指定 CA 证书, `--no-strict-ssl` 关闭证书校验, 同样传给安装脚本与 git.
+- `np-lock.json` 锁定 git 依赖解析出的 commit 与 tarball url 依赖的 sha512 integrity: 再次安装直接检出锁定的 commit(不再 `git ls-remote`, 已装时不再克隆), tarball 内容变化时报错; `--frozen-lockfile` 下缺少条目同样报错. 本地目录依赖不锁定.
+- `npd-x prune`: 删除不再被任何链接引用的包版本目录, `--dry-run` 只列出; 安装不会自动删除.
+
+### 行为变更
+
+- **依赖的安装脚本默认不执行**: 与 npm 12 一致, 依赖的 preinstall / install / postinstall, `binding.gyp` 隐式构建与 git 依赖的 prepare 只有在根 `package.json` 的 `allowScripts` 中放行后才执行, 结束时列出被跳过的包; 新增 `npd-x approve-scripts`, `npd-x deny-scripts`, `--allow-scripts`, `--strict-allow-scripts`, `--dangerously-allow-all-scripts`(恢复旧行为). 根项目及其声明的本地目录依赖不受影响.
+- 依赖(registry / git / tarball url 包)声明的 `file:` 本地依赖改为按声明者所在目录解析, 之前按项目根目录解析; 它的脚本按声明者在 `allowScripts` 中的放行执行, 只执行 preinstall / install / postinstall, 打包时不执行 prepack / prepare.
+- git 依赖只要需要构建(声明了 prepare, build, install 等脚本或 workspaces)就先在 `allowScripts` 中审核, 之前只有声明了 prepare / prepublish 时才审核. 构建子进程不执行任何依赖脚本, 嵌套的 git 依赖不再构建, 本地目录依赖打包时不执行 prepack / prepare, 克隆仓库自带的 `allowScripts` 与 `~/.nprc` 不生效.
+- `--ignore-scripts` 同时跳过 git 依赖的构建与根项目, 依赖的 `binding.gyp` 隐式构建; 之前 git 依赖总会构建, `binding.gyp` 总会编译.
+- 未写版本或写 range 时与 npm 一致优先选 `engines.node` 兼容当前 Node.js 的版本, 例如 Node 18 下 `npd -g npm` 装 npm 10; 显式 tag 与精确版本不变. 不带版本安装时日志显示 `<name>@*`.
+- 未写版本或写 range 时与 npm 一致避开 deprecated 版本: 优先级为未 deprecated > `engines.node` 兼容 > 版本高低; 范围内只有 deprecated 版本时仍选中并告警.
+- git, tarball url 与本地依赖的包目录名在版本号后带来源后缀(`_foo@1.0.0+git.1a2b3c4d@foo`, `+url.<integrity 摘要>`, `+file.<源路径摘要>`): 不再按自称的名称与版本占用同名 registry 包的目录, git 依赖换了 commit 或 tarball 内容变化而版本号不变时也装上新内容. 升级后这类依赖会重新获取一次, 旧目录由 `npd-x prune` 删除; 删除之前不带后缀的旧目录装着 git / url / 本地包的内容时, 同名同版本的 registry 依赖不再复用它, 改为重新下载. 依赖声明从 git / url / 本地路径改回 registry 版本时, 已装的旧包版本满足范围也换成 registry 包. 本地目录与 tarball 文件依赖按内容摘要判断能否复用已装的目录, 内容变了而版本号与路径不变时重新安装.
+- 不受信的本地目录依赖与 `--ignore-scripts` 下的本地目录依赖不再调用 `npm pack`, 改为按 `files`, `.npmignore` / `.gitignore` 规则直接复制, 不执行任何脚本: npm 8 的 `npm pack --ignore-scripts` 仍会执行 prepack, 未放行的本地依赖因此能执行脚本, 脚本输出还会被当作 tgz 文件名导致安装失败(ENOENT). 根项目声明的本地目录在 npm >= 7 上仍用 `npm pack` 打包; npm 6 不支持 `--pack-destination`, 直接复制, 不再先失败再告警 `ENOLOCAL`, 也不再把整个目录(含 `node_modules`)复制进去. `npm pack` 的输出不再受 1 MB 上限(prepack 输出超限时之前退回复制, 装上的包缺少构建产物), 超时结束整个进程树, 失败告警附上 stderr 末尾几行.
+- 命令行参数重复传入时与 npm 一致取最后一个(`--allow-scripts` 除外, 各项合并); `--registry` 之前取第一个, 其余参数之前变成数组, 例如 `npd --root=a --root=b <pkg>` 报 `Invalid file: URL`.
+- `npd -g <pkg>`: 被装包声明的 `file:` 本地依赖改为按不受信的本地依赖处理, 脚本需要放行被装包(registry 包按名称与版本)才执行, 之前按受信的根项目依赖直接执行; 被装包自己的脚本不变. 跳过列表末尾给出带 `--allow-scripts` 的 `npd -g` 重装命令(`npd-x approve-scripts` 与 `npd-x rebuild` 不支持 `-g`).
+- 根 `package.json` 有 `workspaces` 时告警 npd 不支持 workspaces, 写 `np-lock.json` 只追加, 不再删除 easy-np 记录的成员条目.
+- 安装进度标记改记在 `node_modules/.npd-state.json`, 不再修改依赖包自己的 `package.json`; 之前版本写入的 `__npd_done` / `__npd_stage` 仍能识别, 升级后不必重装.
+
+- git 依赖改为直接调用 git CLI: 托管仓库也走 git 克隆(本机需要 git), 不再下载 codeload tarball; 需要构建时用 npd 自身安装依赖(含 devDependencies, 不执行依赖的安装脚本)再执行 prepare, 不再调用 `npm install`; 按 npm 的 `files`, `.npmignore` 规则打包.
+
+### 修复
+
+- 联网安装按 `dist.integrity` 中最强的算法(通常是 sha512)校验 tarball, 之前只校验 sha1.
+- `--save-dependencies-tree` 保存的依赖树补上 `cpu`, `libc`, `bin`, `peerDependenciesMeta`, `bundleDependencies` 等字段, 用它还原时不再在其他平台选错可选依赖.
+- git 依赖准备超时结束整个进程树, 不再残留 prepare 脚本启动的进程.
+- 同一个 git 仓库在一次安装中只执行一次 `git ls-remote`.
+- `package.json` 的 `config.np.lockfile: false` 关闭 `np-lock.json`, 与 easy-np 同一个键.
+- `npd-x prune`: `--root` 或 `node_modules` 经过符号链接时不再把全部包版本目录判为未引用; 删除目录时同时清掉 `.npd-state.json` 中对应与已不存在目录的记录. `npd-x uninstall` 同样清掉被删除包的记录.
+- 重新解压或复制包之前先把它标为未完成, 中途中断后再次安装会重新处理, 不再把只解压了一半的目录当作已安装.
+- 收到 Ctrl-C(SIGINT)或 SIGTERM 时结束正在运行的 git 子进程树(先 SIGTERM, 1 秒后强制结束), 再以 130 / 143 退出; 并发 git 操作不再触发 `MaxListenersExceededWarning`.
+- `--dangerously-allow-all-scripts`, `--strict-allow-scripts`, `--strict-ssl` 不再吞掉紧跟其后的包名(例如 `npd --strict-allow-scripts foo` 之前会把 `foo` 当作开关的值); 未传时仍读取环境变量与 `~/.nprc`; `--strict-ssl` 优先于 `npm_config_strict_ssl=false`. 接受 `--foreground-scripts`(无作用, 与 easy-np 保持一致), 不再吞掉其后的包名. `--allow-scripts` 可重复传入, 各项合并.
+- 报错, 告警, `npd-debug.log` 与 debug 输出中的 URL 凭据(`user:pass@`), `_authToken` / `_auth` / `_password` 的值, 以及查询串中 `token`, `access_token`, `auth`, `_authToken`, `password` 参数(不区分大小写)的值替换为 `***`; `npd-debug.log` 在安装出错时也会写入, 之前只在安装流程走完后退出码非 0 时写入.
+- registry 包的链接名, `allowScripts` 审核, `npd-x approve-scripts` 与 `npd-x rebuild` 按依赖名与 registry 上的版本识别包, 不再采用 tarball 内 `package.json` 自称的名称与版本, 两者不一致时告警 `manifest mismatch`; `npd <pkg>` 保存进 `package.json` 的名称与版本同样取 registry 上的值; 之前 tarball 可以冒充 `allowScripts` 中已放行的包执行脚本, 也会以自称的名称链接到 `node_modules`. 0.0.3 之前安装的 `node_modules` 可能按自称的名称链接, 建议删除后重新安装.
+- `npd-x approve-scripts` 列出并放行只因 prepare, build 等构建脚本被跳过的 git 依赖, 之前报 `has no installed version with install scripts`; 放行后提示删除它的包目录再运行 `npd` 构建.
+- `np-lock.json` 不再写入 URL 中的凭据(`_resolved`, `dist.tarball` 与键中 http(s) 地址的 userinfo); 按锁安装时凭据取自 `package.json` 的声明.
+- `npd-x approve-scripts` / `deny-scripts` 写入的 git 与 tarball url 键去掉地址中的凭据; `allowScripts` 比对时两侧都忽略凭据, 之前写入的带凭据条目仍然生效.
+- git 依赖构建时的子安装不再生成 `np-lock.json`, 不按 `files` 打包的仓库不会把它打进包里.
+- `--cafile` 的相对路径按当前目录转为绝对路径后再传给安装脚本与 git, 之前在包目录里运行的子进程找不到该文件.
+- 命令行显式传 `--strict-ssl` 时把 `npm_config_strict_ssl=true` 传给子进程并清除 `GIT_SSL_NO_VERIFY`, 之前继承的 `npm_config_strict_ssl=false` 与 `GIT_SSL_NO_VERIFY=true` 仍让安装脚本与 git 跳过证书校验.
+- 写入 `package.json` 时查询 `npm config get save-prefix` 设 30 秒超时, npm 卡住时退回 `^`.
+- Node.js 降级提示的恢复版本改为按能力范围计算(例如 Node 21.x 提示升级到 22.9.0, 不再提示 20.17.0), 预发布版 Node.js 按其正式版判断.
+
+### 运行环境
+
+- `engines` 下限从 16.14 降到 14.18; Node.js 低于 16.6 时自动补上 tar 7 用到的 `String.prototype.replaceAll` 与 `Array.prototype.at`.
+- 不再依赖 `node-gyp`: 依赖的安装脚本或 `binding.gyp` 构建首次调用 `node-gyp` 时, 联网把兼容当前 Node.js 的版本安装到 `<缓存目录>/npd-node-gyp/`(默认 `~/.np_tarball/npd-node-gyp/`), 之后同一 Node.js 版本直接复用, 每次安装 node-gyp 后删除其中超过 1 小时且未被引用的目录(中断的安装留下的); Node >= 16.14(17.x 除外)按 `engines.node` 选 `node-gyp`(20.17 ~ 20.x 与 >= 22.9 上为 12 及以上), 更低版本用 `@electron/node-gyp` 10.2(Electron 维护的 node-gyp 10 分支, 支持 Node >= 12.13 与 Python 3.12+). 安装失败时以退出码 1 结束并提示手动 `npm i -g` 安装对应的 node-gyp 后设置 `npm_config_node_gyp`(Windows 上给出 PowerShell 与 cmd.exe 写法); 设置了 `npm_config_node_gyp` 时总是用它. Node.js 低于 20.17(以及 21.x, 22.0 ~ 22.8)时每次运行打印一条 `npd WARN Node vX: ...` 说明降级项与恢复所需的 Node.js 版本, `np_node_warning=false` 关闭.
+- 移除 `pacote` 与 `@npmcli/arborist`, 新增 `npm-packlist` 5.
+- `urllib` 范围提到 `^3.27.3`, 保证使用跨源重定向时去掉认证头的 undici.
+
 ## 0.0.2 (2026-10-03)
 
 ### 新增功能

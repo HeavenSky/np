@@ -8,6 +8,7 @@ const semver = require('semver');
 const utils = require('./utils');
 const mirror = require('./mirror');
 const formatInstallOptions = require('./format_install_options');
+const allowScripts = require('./allow_scripts');
 
 module.exports = async options => {
   options = formatInstallOptions(options);
@@ -24,14 +25,19 @@ module.exports = async options => {
   }
 
   // 一个包失败不影响其余包, 结束时汇总; 失败的包阶段停在失败的脚本
-  for (const { pkg, dir } of targets) {
-    const displayName = `${pkg.name}@${pkg.version}`;
+  for (const { pkg, dir, name, version } of targets) {
+    const displayName = `${name}@${version}`;
     try {
+      // 与安装时一致要在 allowScripts 中放行, 按 package.json 记录的来源比对
+      const identity = allowScripts.identityOfInstalled(pkg, dir);
+      if (!(await allowScripts.allowPackage(pkg, dir, identity, displayName, options))) continue;
       await rebuildOne(pkg, dir, displayName, options);
     } catch (err) {
-      options.failures.push({ displayName, error: err, name: pkg.name });
+      options.failures.push({ displayName, error: err, name });
     }
   }
+  const scriptPolicyError = allowScripts.report(options);
+  if (scriptPolicyError) options.failures.push({ displayName: 'allowScripts', error: scriptPolicyError });
   if (options.failures.length > 0) {
     // 被其他包依赖的子包不会被普通 npd 遍历到, 只能再次 npd-x rebuild
     const names = [...new Set(options.failures.map(item => item.name))].join(' ');
@@ -85,7 +91,8 @@ async function findInstalled(spec, options) {
     if (spec.range && !semver.satisfies(version, spec.range)) continue;
     const dir = utils.getPackageStorePath(storeDir, { name: spec.name, version });
     const pkg = await utils.readJSON(path.join(dir, 'package.json'));
-    if (pkg.name === spec.name) matched.push({ pkg, dir });
+    // 包内 package.json 的 name 与 version 可以和 registry 不一致, 以目录名为准
+    if (pkg.name) matched.push({ pkg, dir, name: spec.name, version });
   }
   return matched;
 }

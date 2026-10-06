@@ -16,17 +16,26 @@ const { LOCAL_TYPES, REMOTE_TYPES, ALIAS_TYPES } = require('../npa_types');
 const Context = require('../context');
 const mirror = require('../mirror');
 const { lockfileConverter } = require('../lockfile_resolver');
+const npLock = require('../np_lock');
+const proxy = require('../proxy');
+const runtime = require('../runtime');
+const allowScripts = require('../allow_scripts');
 const help = require('./help');
 
-module.exports = async function install(args, { ignorePkgNames = false } = {}) {
+// 命令行未出现时删掉 minimist 补的默认 false, 否则会盖过环境变量与 ~/.nprc, 例如未传 --strict-ssl 也关闭证书校验
+const TRI_STATE_FLAGS = ['strict-ssl', 'strict-allow-scripts', 'dangerously-allow-all-scripts'];
+// 可以重复传入的参数, 其余参数重复时与 npm 一致取最后一个
+const MULTI_VALUE_ARGS = new Set(['_', 'allow-scripts', 'workspace', 'w']);
+
+module.exports = async function install(args, { ignorePkgNames = false, ignoreLockfile = false } = {}) {
   try {
-    await main(args, { ignorePkgNames });
+    await main(args, { ignorePkgNames, ignoreLockfile });
   } catch (err) {
     utils.exitWithError('np', err);
   }
 };
 
-async function main(args, { ignorePkgNames = false } = {}) {
+async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {}) {
   const originalArgv = args;
 
   // since minimist consider --no-xx is xx:false, we handle it manually here
@@ -41,7 +50,11 @@ async function main(args, { ignorePkgNames = false } = {}) {
         'forbidden-licenses',
         // {"http://a.com":"http://b.com"}
         'tarball-url-mapping',
-        // --proxy 已移除: urllib 3 不支持 proxy / enableProxy 参数, 传入后请求仍直连
+        'proxy',
+        'https-proxy',
+        'noproxy',
+        'cafile',
+        'allow-scripts',
         'dependencies-tree',
         // np foo --workspace=aa
         // np foo -w aa
@@ -58,6 +71,7 @@ async function main(args, { ignorePkgNames = false } = {}) {
          * 5. you're not supposed to install extra dependencies along with a lockfile.
          */
         'lockfile-path',
+        'probe-cache',
         'public-hoist-pattern',
       ],
       boolean: [
@@ -82,6 +96,7 @@ async function main(args, { ignorePkgNames = false } = {}) {
         'detail',
         'trace',
         'engine-strict',
+        'legacy-peer-deps',
         'flatten',
         'registry-only',
         'cache-strict',
@@ -94,7 +109,9 @@ async function main(args, { ignorePkgNames = false } = {}) {
         'workspaces',
         'offline',
         'refresh-cache',
+        'frozen-lockfile',
         'rebuild',
+        ...TRI_STATE_FLAGS,
       ],
       default: {
         optional: true,
@@ -114,6 +131,16 @@ async function main(args, { ignorePkgNames = false } = {}) {
       },
     })
   );
+
+  const flagArgs = originalArgv.includes('--') ? originalArgv.slice(0, originalArgv.indexOf('--')) : originalArgv;
+  for (const name of TRI_STATE_FLAGS) {
+    if (!flagArgs.some(arg => arg === `--${name}` || arg === `--no-${name}` || arg.startsWith(`--${name}=`))) {
+      delete argv[name];
+    }
+  }
+  for (const [name, value] of Object.entries(argv)) {
+    if (Array.isArray(value) && !MULTI_VALUE_ARGS.has(name)) argv[name] = value[value.length - 1];
+  }
 
   if (argv.version) {
     console.log(`np v${require('../../package.json').version}`);
@@ -135,6 +162,12 @@ async function main(args, { ignorePkgNames = false } = {}) {
     process.exit(0);
   }
 
+  // 首个网络请求与子进程启动之前写入, 安装脚本, node-gyp 与 git 通过环境变量继承
+  proxy.configure(argv);
+  // 下面按 argv 生成的 npm_config_* 会覆盖给安装脚本, 必须用 proxy 转换后的绝对路径
+  if (argv.cafile) argv.cafile = process.env.npm_config_cafile;
+  runtime.warnIfDegraded();
+
   const pkgs = [];
 
   if (ignorePkgNames) {
@@ -150,18 +183,15 @@ async function main(args, { ignorePkgNames = false } = {}) {
     pkgs.push({
       name: p.name,
       // `mozilla/nunjucks#0f8b21b8df7e8e852b2e1889388653b7075f0d09` should be rawSpec
-      version: p.fetchSpec || p.rawSpec,
+      // `np foo` 未写版本时 npa 补成 latest tag, 改传 `*` 以便选版时与显式的 `foo@latest` 区分并检查 engines
+      version: p.type === 'tag' && !p.rawSpec ? '*' : p.fetchSpec || p.rawSpec,
       type: p.type,
       alias: aliasPackageName,
       arg: p,
     });
   }
 
-  let root = argv.root || process.cwd();
-  if (Array.isArray(root)) {
-    // use last one, e.g.: $ np --root=abc --root=def
-    root = root[root.length - 1];
-  }
+  const root = argv.root || process.cwd();
   let installOnAllWorkspaces = argv.workspaces;
   let installWorkspaceNames = utils.formatWorkspaceNames(argv);
   const production = argv.production || process.env.NODE_ENV === 'production';
@@ -175,14 +205,15 @@ async function main(args, { ignorePkgNames = false } = {}) {
   if (process.env.np_cache) {
     cacheDir = process.env.np_cache;
   }
+  // 测速缓存不受 --production 关闭磁盘缓存影响, 只在 --no-cache 时停用
+  const probeCacheDir = argv.cache === false ? '' : process.env.np_cache || defaultCacheDir;
 
   let forbiddenLicenses = argv['forbidden-licenses'];
   forbiddenLicenses = forbiddenLicenses ? forbiddenLicenses.split(',') : null;
 
   const flatten = argv.flatten;
 
-  // example: np --registry xx --registry xxxx
-  let registry = (Array.isArray(argv.registry) ? argv.registry[0] : argv.registry) || process.env.npm_registry;
+  let registry = argv.registry || process.env.npm_registry;
   const offline = !!argv.offline;
   // rebuild 优先用磁盘缓存中的 manifest 与 tgz, 缓存缺失时才联网
   const preferOffline = !!argv.rebuild && !offline;
@@ -228,7 +259,7 @@ async function main(args, { ignorePkgNames = false } = {}) {
     }
   }
 
-  debug('argv: %j, env: %j', argv, env);
+  debug('argv: %j, env: %j', utils.redact(argv), utils.redact(env));
 
   const { workspaceRoots, workspacesMap } = await utils.readWorkspaces(root);
   // don't enable workspace on global install
@@ -254,7 +285,12 @@ async function main(args, { ignorePkgNames = false } = {}) {
     const probed =
       offline || preferOffline
         ? mirror.defaultOrder({ prefer: preferSource })
-        : await mirror.probe({ prefer: preferSource, globalOptions: { console } });
+        : await mirror.probe({
+            prefer: preferSource,
+            globalOptions: { console },
+            cacheDir: probeCacheDir,
+            cacheMinutes: mirror.parseProbeCacheMinutes(argv['probe-cache'] ?? process.env.np_probe_cache),
+          });
     binaryMirrors = probed.binaryMirrorConfig?.mirrors?.china;
     if (!binaryMirrors) {
       try {
@@ -273,7 +309,12 @@ async function main(args, { ignorePkgNames = false } = {}) {
     if (probed.binaryOrder[0] === 'mirror') {
       Object.assign(env, binaryEnvs);
     }
-    console.info(chalk.gray('np registry: %s, binary: %s'), probed.order.join(' > '), probed.binaryOrder.join(' > '));
+    console.info(
+      chalk.gray('np registry: %s, binary: %s%s'),
+      probed.order.join(' > '),
+      probed.binaryOrder.join(' > '),
+      probed.cached ? ' (cached)' : ''
+    );
   }
 
   const config = {
@@ -301,17 +342,22 @@ async function main(args, { ignorePkgNames = false } = {}) {
     // 本次只安装部分依赖树, 已提升的链接只允许升级不允许降级
     partialInstall: pkgs.length > 0 || installWorkspaceNames.length > 0 || !!installOnAllWorkspaces,
   };
-  // 不再读取 npm 的 strict-ssl: urllib 3 不支持 rejectUnauthorized, HTTPS 证书始终校验
   // when ignore-scripts is set to `false` by user, np will still
   // get config from npm settings instead of following user's specification,
   // should migrate to ?? or typeof.
-  config.ignoreScripts = argv['ignore-scripts'] || getIgnoreScripts();
+  // git 依赖构建的子安装: root 是克隆的仓库, 它的 allowScripts 与 npm 配置都不可信
+  const gitPrepareChild = process.env[allowScripts.GIT_PREPARE_CHILD_ENV] === '1';
+  config.ignoreScripts = gitPrepareChild || argv['ignore-scripts'] || getIgnoreScripts();
+  config.scriptPolicy = gitPrepareChild
+    ? allowScripts.empty()
+    : allowScripts.load({ root, global: !!argv.global, argv });
   config.rebuild = argv.rebuild;
   config.foregroundScripts = argv['foreground-scripts'];
   config.ignoreOptionalDependencies = !argv.optional;
   config.detail = argv.detail;
   config.trace = argv.trace;
   config.engineStrict = argv['engine-strict'];
+  config.legacyPeerDeps = argv['legacy-peer-deps'];
   config.registryOnly = argv['registry-only'];
   if (config.production || argv.global) {
     // make sure show detail on production install or global install
@@ -340,15 +386,21 @@ async function main(args, { ignorePkgNames = false } = {}) {
 
   const lockfilePath = argv['lockfile-path'];
   if (lockfilePath) {
-    // lockfileConverter 查不到 workspace 子包的依赖, 且依赖树的键不区分 workspace, 放行会静默装错版本
-    if (enableWorkspace) {
-      throw new Error('--lockfile-path is not supported with npm workspaces');
-    }
     // 加载失败必须中止: 回退到联网解析会装出与 lockfile 不一致的版本且退出码为 0
     try {
       const lockfileData = await fs.readFile(lockfilePath, 'utf8');
       config.dependenciesTree = lockfileConverter(JSON.parse(lockfileData), {
         ignoreOptionalDependencies: true,
+        onConflict(key, kept, ignored) {
+          console.warn(
+            chalk.yellow('np WARN %s is locked to both %s and %s in %s, installing %s everywhere'),
+            key,
+            kept,
+            ignored,
+            lockfilePath,
+            kept
+          );
+        },
       });
     } catch (error) {
       throw new Error(`load lockfile from ${lockfilePath} error: ${error.message}`, { cause: error });
@@ -368,9 +420,36 @@ async function main(args, { ignorePkgNames = false } = {}) {
     config.saveDependenciesTree = true;
   }
 
+  // 默认读写 <root>/np-lock.json; --lockfile-path, --dependencies-tree 与 -g 有各自的版本来源, 不使用它
+  let lockState = null;
+  const rootConfig = (await utils.readJSON(path.join(root, 'package.json'))).config?.np || {};
+  const lockfileDisabled = argv.lockfile === false || ['0', 'false'].includes(process.env.np_lockfile);
+  if (!argv.global && !lockfilePath && !dependenciesTree && !lockfileDisabled && rootConfig.lockfile !== false) {
+    if (argv['frozen-lockfile'] && pkgs.length > 0 && !argv.rebuild && !argv['fetch-only']) {
+      throw new Error(
+        `--frozen-lockfile only installs from ${npLock.LOCKFILE_NAME}, it can not be used with package names`
+      );
+    }
+    const lockExists = await npLock.exists(root);
+    if (argv['frozen-lockfile'] && !lockExists) {
+      throw new Error(`--frozen-lockfile requires ${npLock.LOCKFILE_NAME} in ${root}`);
+    }
+    if (lockExists || !(await npLock.hasForeignLockfile(root))) {
+      const previous = lockExists ? await npLock.read(root) : {};
+      // np-x update 要升级到范围内的最新版本, 不复用已锁定的版本
+      config.dependenciesTree = ignoreLockfile ? {} : { ...previous };
+      for (const pkg of pkgs) {
+        if (isFloating(pkg)) delete config.dependenciesTree[npLock.keyOf(pkg.name, pkg.version)];
+      }
+      config.lockPackages = {};
+      config.frozenLockfile = !!argv['frozen-lockfile'];
+      lockState = { previous };
+    }
+  }
+
   process.on('exit', code => {
     if (code !== 0) {
-      writeFileSync(path.join(root, 'np-debug.log'), util.inspect(config, { depth: 2 }));
+      writeFileSync(path.join(root, 'np-debug.log'), util.inspect(utils.redact(config), { depth: 2 }));
     }
   });
 
@@ -522,27 +601,80 @@ async function main(args, { ignorePkgNames = false } = {}) {
         'save-build': 'buildDependencies',
         'save-isomorphic': 'isomorphicDependencies',
       };
+      const saved = [];
       // install saves any specified packages into dependencies by default.
       if (Object.keys(map).every(key => !argv[key]) && !argv['no-save']) {
-        await updateDependencies(installConfig.root, pkgs, map.save, argv['save-exact'], installConfig.remoteNames);
+        saved.push(
+          ...(await updateDependencies(installConfig.root, pkgs, map.save, argv['save-exact'], installConfig))
+        );
       } else {
         for (const key in map) {
           if (argv[key]) {
-            await updateDependencies(installConfig.root, pkgs, map[key], argv['save-exact'], installConfig.remoteNames);
+            saved.push(
+              ...(await updateDependencies(installConfig.root, pkgs, map[key], argv['save-exact'], installConfig))
+            );
           }
         }
       }
+      if (lockState) relockRequested(lockState, config.lockPackages, pkgs, saved);
     }
   }
   await validatePendingPeerDependencies(context);
   if (failures.length > 0) throw utils.installFailuresError(failures);
+  await writeLockfile(root, lockState, config, {
+    full:
+      pkgs.length === 0 &&
+      !installOnAllWorkspaces &&
+      installWorkspaceNames.length === 0 &&
+      !config.production &&
+      argv.optional !== false &&
+      !argv.client,
+  });
 }
 
+// 命令行显式写的 tag 与 `*`(含裸包名 `np foo`)每次取最新版本: 不复用锁定的版本, 也不写进锁文件
+function isFloating(pkg) {
+  const spec = pkg.type === ALIAS_TYPES ? pkg.arg.subSpec : pkg.arg;
+  return spec.type === 'tag' || spec.rawSpec === '*';
+}
+
+// 命令行指定的包按命令行的写法解析并记锁, 改挂到保存进 package.json 的声明上, 之后的 np 与 --frozen-lockfile 才能按声明找到它
+function relockRequested(lockState, lockPackages, pkgs, saved) {
+  const targets = new Set();
+  for (const { item, saveName, saveSpec } of saved) {
+    const target = npLock.keyOf(saveName, saveSpec);
+    const entry = item.lockKey && lockPackages[item.lockKey];
+    if (!target || !entry) continue;
+    lockPackages[target] = entry;
+    targets.add(target);
+  }
+  for (const pkg of pkgs) {
+    if (!pkg.lockKey || !isFloating(pkg) || targets.has(pkg.lockKey)) continue;
+    delete lockPackages[pkg.lockKey];
+    delete lockState.previous[pkg.lockKey];
+  }
+}
+
+// 完整安装用本次实际用到的条目覆盖锁文件; 部分安装(指定包, -w, --workspaces, --production 等)只追加, 保留其余条目
+async function writeLockfile(root, lockState, config, { full }) {
+  if (!lockState || config.frozenLockfile) return;
+  const packages = full ? config.lockPackages : { ...lockState.previous, ...config.lockPackages };
+  if (await npLock.write(root, packages)) {
+    console.info(chalk.gray('np %s updated'), npLock.LOCKFILE_NAME);
+  }
+}
+
+const NPM_CONFIG_TIMEOUT = 30 * 1000;
 let _versionSavePrefix = null;
 function getVersionSavePrefix() {
   if (_versionSavePrefix === null) {
     try {
-      _versionSavePrefix = execSync('npm config get save-prefix').toString().trim();
+      _versionSavePrefix = execSync('npm config get save-prefix', {
+        timeout: NPM_CONFIG_TIMEOUT,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
+        .toString()
+        .trim();
     } catch (err) {
       debug(`exec npm config get save-prefix ERROR: ${err.message}`);
       _versionSavePrefix = '^';
@@ -561,10 +693,12 @@ function getIgnoreScripts() {
   }
 }
 
-async function updateDependencies(root, pkgs, propName, saveExact, remoteNames) {
+// 返回 [{ item, saveName, saveSpec }]
+async function updateDependencies(root, pkgs, propName, saveExact, options) {
   const pkgFile = path.join(root, 'package.json');
   const pkg = await utils.readJSON(pkgFile);
   const deps = (pkg[propName] = pkg[propName] || {});
+  const saved = [];
   console.log('%s:', chalk.cyanBright(propName));
   for (const item of pkgs) {
     let saveName;
@@ -576,7 +710,7 @@ async function updateDependencies(root, pkgs, propName, saveExact, remoteNames) 
         saveName = item.name;
         saveSpec = item.version;
       } else {
-        saveName = remoteNames[item.version];
+        saveName = options.remoteNames[item.version];
         saveSpec = item.version;
       }
     } else if (item.type === ALIAS_TYPES) {
@@ -587,11 +721,17 @@ async function updateDependencies(root, pkgs, propName, saveExact, remoteNames) 
       if (item.workspacePackage) {
         saveName = item.workspacePackage.name;
         saveVersion = item.workspacePackage.version || item.version;
-      } else {
-        const pkgDir = LOCAL_TYPES.includes(item.type) ? item.version : path.join(root, 'node_modules', item.name);
-        const itemPkg = await utils.readJSON(path.join(pkgDir, 'package.json'));
+      } else if (LOCAL_TYPES.includes(item.type)) {
+        const itemPkg = await utils.readJSON(path.join(item.version, 'package.json'));
         saveName = itemPkg.name;
         saveVersion = itemPkg.version;
+      } else {
+        // 磁盘上的 package.json 来自 tarball, 可能自称其他包: 按依赖名保存, 版本取 registry 的解析结果
+        const resolved =
+          options.cache.dependenciesTree[item.lockKey] ||
+          (await utils.readJSON(path.join(root, 'node_modules', item.name, 'package.json')));
+        saveName = item.name;
+        saveVersion = resolved.version;
       }
       // If install with `np foo`, the type is tag but rawSpec is empty string
       if (item.arg.type === 'tag' && item.arg.rawSpec) {
@@ -602,6 +742,7 @@ async function updateDependencies(root, pkgs, propName, saveExact, remoteNames) 
       }
     }
     deps[saveName] = saveSpec;
+    saved.push({ item, saveName, saveSpec });
     console.log('%s %s %s', chalk.green('+'), chalk.bold(saveName), chalk.gray(saveSpec));
   }
   console.log('');
@@ -612,4 +753,5 @@ async function updateDependencies(root, pkgs, propName, saveExact, remoteNames) 
   }
   pkg[propName] = newDeps;
   await fs.writeFile(pkgFile, JSON.stringify(pkg, null, 2) + '\n');
+  return saved;
 }

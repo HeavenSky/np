@@ -1,6 +1,5 @@
 'use strict';
 
-const path = require('node:path');
 const assert = require('node:assert');
 const dependencies = require('./dependencies');
 
@@ -9,7 +8,7 @@ const NODE_MODULES_DIR = 'node_modules/';
 /**
  * The lockfileConverter converts a npm package-lockfile.json to np .dependencies-tree.json.
  * Only lockfileVersion >= 2 is supported.
- * The `.dependencies-tree.json` does not recognize a npm-workspaces package, so we don't need to handle it neither for now.
+ * Workspace packages (`link: true` entries) are skipped, np links the local workspaces itself.
  * @param {Object} lockfile package-lock.json data
  * @param {Object} options installation options
  * @param {Nested} nested Nested
@@ -28,8 +27,8 @@ exports.lockfileConverter = function lockfileConverter(lockfile, options, nested
     const allMap = deps.allMap;
     for (const key in allMap) {
       const mani = exports.nodeModulesPath(pkgPath, key, packages);
+      if (!mani || mani.link) continue;
       const dist = {
-        checkSSRI: true,
         integrity: mani.integrity,
         tarball: mani.resolved,
       };
@@ -38,7 +37,15 @@ exports.lockfileConverter = function lockfileConverter(lockfile, options, nested
       const maniClone = Object.assign({}, mani);
       delete maniClone.integrity;
       delete maniClone.resolved;
-      tree[`${key}@${allMap[key]}`] = {
+      // 依赖树按 name@spec 建键, 不区分位置: 同一声明在不同位置锁定了不同版本时保留先遇到的(更靠近根目录), 交给调用方告警
+      const treeKey = `${key}@${allMap[key]}`;
+      if (tree[treeKey]) {
+        if (tree[treeKey].version !== mani.version && options.onConflict) {
+          options.onConflict(treeKey, tree[treeKey].version, mani.version);
+        }
+        continue;
+      }
+      tree[treeKey] = {
         name: key,
         ...maniClone,
         dist,
@@ -79,16 +86,13 @@ exports.lockfileConverter = function lockfileConverter(lockfile, options, nested
  * @param {Object} packages the lockfile packages
  */
 exports.nodeModulesPath = function nodeModulesPath(currentPath, name, packages) {
-  const dirs = currentPath.split(NODE_MODULES_DIR);
-  dirs.push(name);
-
-  do {
-    const dir = path.normalize('.' + dirs.join('/' + NODE_MODULES_DIR));
-    const pkg = packages[dir];
-    if (pkg) {
-      return pkg;
-    }
-
-    dirs.splice(dirs.length - 2, 1);
-  } while (dirs.length > 1);
+  // 从当前目录逐级向上查找 <dir>/node_modules/<name>; workspace 目录(例如 packages/a)的上一级是根目录
+  let base = currentPath;
+  for (;;) {
+    const dir = base ? `${base}/${NODE_MODULES_DIR}${name}` : `${NODE_MODULES_DIR}${name}`;
+    if (packages[dir]) return packages[dir];
+    if (!base) return undefined;
+    const index = base.lastIndexOf(NODE_MODULES_DIR);
+    base = index > 0 ? base.slice(0, index - 1) : '';
+  }
 };

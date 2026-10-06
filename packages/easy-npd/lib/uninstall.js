@@ -5,6 +5,7 @@ const fs = require('fs/promises');
 const chalk = require('chalk');
 const normalize = require('npm-normalize-package-bin');
 const utils = require('./utils');
+const installState = require('./install_state');
 const preUninstall = require('./preuninstall');
 const postUninstall = require('./postuninstall');
 
@@ -109,6 +110,17 @@ async function readStoreLink(linkDir, nodeModules) {
   }
 }
 
+// git / url / 本地包的目录名带来源后缀, 只能从链接目标取; 链接不指向 storeDir 下的包目录时退回按名称与版本拼出
+async function installedStorePath(pkgRoot, storeDir, pkgInfo) {
+  const target = await fs.realpath(pkgRoot).catch(() => null);
+  const realStore = await fs.realpath(storeDir).catch(() => storeDir);
+  const relative = target && path.relative(realStore, target);
+  if (relative && !relative.startsWith('..') && !path.isAbsolute(relative) && utils.parsePackageStorePath(target)) {
+    return path.join(storeDir, relative);
+  }
+  return utils.getPackageStorePath(storeDir, pkgInfo);
+}
+
 async function uninstall(pkg, options) {
   const storeDir = options.global
     ? path.join(options.targetDir, 'node_modules', `.${pkg.name}_npd/node_modules`)
@@ -120,13 +132,14 @@ async function uninstall(pkg, options) {
   if (pkgInfo.name !== pkg.name) return null;
   if (pkg.version && pkg.version !== pkgInfo.version) return null;
 
-  const realRoot = utils.getPackageStorePath(storeDir, pkgInfo);
+  const realRoot = await installedStorePath(pkgRoot, storeDir, pkgInfo);
 
   await preUninstall(pkgInfo, realRoot, options);
   if (options.global) {
     await utils.rimraf(pkgRoot);
     await utils.rimraf(storeDir);
   } else {
+    await installState.remove(realRoot);
     await utils.rimraf(pkgRoot);
     await utils.rimraf(realRoot);
   }

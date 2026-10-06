@@ -14,7 +14,10 @@
 - 用户配置: 两个包读取同一份 `~/.nprc`(registry, scope registry 与认证).
 - 磁盘缓存: 两个包共用 `~/.np_tarball`, 可用 `np_cache` 或 `npm_config_cache` 改写. 用其中一个装过的包, 另一个安装时直接命中缓存.
 - 缓存文件: manifest 存为 `np-manifests/<name>/<md5(manifest url)>.json`, 公共源统一按官方源的 manifest 地址计算; tgz 存为 `np-tgz/<name>/<version>-<shasum>.tgz`.
-- 同步修改: 改任一个包的缓存路径, 文件名或 manifest 缓存的 JSON 结构时, MUST 同步修改另一个包; 否则两者会静默读到对方写入的不兼容缓存.
+- 测速缓存: 公共源测速结果存为 `~/.np_tarball/np-probe.json`, 两个包共用.
+- node-gyp: 两个包都不自带 node-gyp, 首次编译原生模块时按当前 Node.js 版本安装到 `~/.np_tarball/np-node-gyp`(easy-np)与 `~/.np_tarball/npd-node-gyp`(easy-npd), 两者各自独立, 不互相读取.
+- 锁文件: 两个包读写项目根目录同一份 `np-lock.json`, 格式见各包 `lib/np_lock.js`.
+- 同步修改: 改任一个包的缓存路径, 文件名, manifest 缓存, 测速缓存或 `np-lock.json` 的 JSON 结构时, MUST 同步修改另一个包; 否则两者会静默读到对方写入的不兼容文件.
 
 ## 开发
 
@@ -28,6 +31,7 @@ npm run test:npd
 ```
 
 - 两个包的脚本名一致: `test`, `test-cov`, `lint`, `fmt`, `fmt:check`.
+- 测试按功能放在 `test/<目录>/` 下一层, 支持文件在 `test/support/`; package.json 与 CI 的 mocha spec 写作 `test/*/*.test.js`, 不能写成 `test/**`: fixtures 中依赖包自带的 `*.test.js` 会被当作用例; spec 也不能放进 `.mocharc.js`, 否则命令行指定单个文件时会与它合并成全量.
 - 一个修复要同时用到两个包时, 分别修改并分别提交, 不抽公共代码.
 - 版本号, `CHANGELOG.md` 与发布各自独立.
 

@@ -1,4 +1,5 @@
-const debug = require('node:util').debuglog('np:format_install_options');
+const util = require('node:util');
+const debug = util.debuglog('np:format_install_options');
 const { randomUUID } = require('node:crypto');
 const assert = require('node:assert');
 const path = require('node:path');
@@ -6,6 +7,7 @@ const EventEmitter = require('node:events');
 const awaitEvent = require('await-event');
 const ora = require('ora');
 const globalConfig = require('./config');
+const utils = require('./utils');
 
 module.exports = function formatInstallOptions(options) {
   options.trace = !!options.trace;
@@ -26,9 +28,11 @@ module.exports = function formatInstallOptions(options) {
   options.optionalFailures = [];
   // 本次运行完成了自身步骤的包目录, 运行没有失败时统一清除阶段标记
   options.stagedDirs = new Set();
+  // 本次运行已遍历过子依赖的 store 包目录; 启用锁文件时已完成的包也要遍历一次, 子树才会记进 np-lock.json
+  options.visitedStoreDirs = new Set();
   options.runscriptTime = 0;
   // [
-  //    {package: pkg, parentDir: 'parentDir', packageDir: 'packageDir'},
+  //    {package: pkg, parentDir: 'parentDir', packageDir: 'packageDir', peerDependencies: unmatched},
   //   ...
   // ]
   options.peerDependencies = [];
@@ -70,14 +74,18 @@ module.exports = function formatInstallOptions(options) {
   }
   options.timeout = options.timeout || 60000;
   options.streamingTimeout = options.streamingTimeout || 120000;
-  const customConsole = options.detail
-    ? console
-    : {
-        info: debug,
-        log: debug,
-        error: console.error,
-        warn: console.warn,
-      };
+  // 兜底遮住各处日志中漏掉的 URL 凭据
+  const format = args => utils.redactUrl(util.format(...args));
+  const print = method => {
+    return (...args) => console[method](format(args));
+  };
+  const quiet = (...args) => debug.enabled && debug(format(args));
+  const customConsole = {
+    info: options.detail ? print('info') : quiet,
+    log: options.detail ? print('log') : quiet,
+    error: print('error'),
+    warn: print('warn'),
+  };
   options.console = options.console || customConsole;
   options.env = options.env || {};
   options.start = Date.now();

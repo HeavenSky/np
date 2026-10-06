@@ -53,5 +53,5 @@ async function main(args) {
   }
 
   console.log('[np-x update] reinstall on %s', root);
-  await install(args, { ignorePkgNames: true });
+  await install(args, { ignorePkgNames: true, ignoreLockfile: true });
 }

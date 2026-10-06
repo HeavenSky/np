@@ -1,7 +1,7 @@
 {
   "name": "easy-npd",
-  "version": "0.0.2",
-  "description": "Fast npm installer forked from npminstall 6.8.0, with flat _name@version@name layout, latest-version hoisting and node 16 support",
+  "version": "0.0.3",
+  "description": "Fast npm installer forked from npminstall 6.8.0, with flat _name@version@name layout, latest-version hoisting and node 14 support",
   "keywords": [
     "dedup",
     "hoist",
@@ -36,9 +36,9 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "test": "npm run lint && mocha \"test/*.test.js\"",
-    "test-cov": "c8 --reporter=text --reporter=lcov mocha \"test/*.test.js\"",
-    "test-local": "npm_china=true local=true mocha --full-trace \"test/*.test.js\"",
+    "test": "npm run lint && mocha \"test/*/*.test.js\"",
+    "test-cov": "c8 --reporter=text --reporter=lcov mocha \"test/*/*.test.js\"",
+    "test-local": "npm_china=true local=true mocha --full-trace \"test/*/*.test.js\"",
     "lint": "oxlint",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
@@ -46,7 +46,6 @@
     "prepublishOnly": "npm run lint"
   },
   "dependencies": {
-    "@npmcli/arborist": "^6.1.3",
     "await-event": "^2.1.0",
     "bin-links": "^2.3.0",
     "binary-mirror-config": "^1.19.0",
@@ -62,18 +61,17 @@
     "minimatch": "^3.0.4",
     "minimist": "^1.2.0",
     "ms": "^2.1.1",
-    "node-gyp": "^10.0.0",
     "node-homedir": "^1.1.1",
     "normalize-package-data": "^5.0.0",
     "npm-normalize-package-bin": "^3.0.0",
     "npm-package-arg": "^8.1.5",
+    "npm-packlist": "^5.1.3",
     "ora": "^4.0.5",
     "p-map": "^2.1.0",
-    "pacote": "^15.0.0",
     "runscript": "^1.3.0",
     "semver": "^7.0.0",
     "tar": "^7.5.22",
-    "urllib": "^3.0.3",
+    "urllib": "^3.27.3",
     "utility": "^1.16.1"
   },
   "devDependencies": {
@@ -85,6 +83,6 @@
     "oxlint": "^1.85.0"
   },
   "engines": {
-    "node": ">=16.14.0"
+    "node": ">=14.18.0"
   }
 }

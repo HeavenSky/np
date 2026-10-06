@@ -17,6 +17,7 @@ const get = require('../get');
 
 const { MIRROR_ATTEMPTS } = get;
 const utils = require('../utils');
+const installState = require('../install_state');
 const config = require('../np_config');
 
 module.exports = async (pkg, options) => {
@@ -34,7 +35,13 @@ async function resolve(pkg, options) {
   // check cache first
   if (dependenciesTree[pkg.raw]) {
     debug('resolve hit dependencies cache: %s', pkg.raw);
+    if (options.lockPackages) options.lockPackages[pkg.raw] = dependenciesTree[pkg.raw];
     return dependenciesTree[pkg.raw];
+  }
+  if (options.frozenLockfile) {
+    throw new Error(
+      `[${pkg.displayName}] ${pkg.raw} is not in np-lock.json, run np without --frozen-lockfile to update it`
+    );
   }
 
   const packageMetaKey = `npm:resolve:package:${pkg.name}`;
@@ -68,13 +75,20 @@ async function resolve(pkg, options) {
   }
 
   let spec = pkg.fetchSpec;
+  // 未写版本(`np i foo`)或写 `*` 时按 latest 取, 但 latest 的 engines 不兼容当前 Node.js 时改选兼容的版本
+  const implicitTag = spec === '*' || pkg.rawSpec === '';
   if (spec === '*') {
     spec = 'latest';
   }
 
   let distTags = packageMeta['dist-tags'];
+  const pickVersion = () =>
+    utils.findMaxSatisfyingVersion(spec, distTags, packageMeta.allVersions, {
+      versions: packageMeta.versions,
+      implicitTag,
+    });
 
-  let realPkgVersion = utils.findMaxSatisfyingVersion(spec, distTags, packageMeta.allVersions);
+  let realPkgVersion = pickVersion();
   // preferOffline 直接用了缓存的 manifest: 缓存里没有需要的版本时联网重新校验一次
   if (
     (!realPkgVersion || !packageMeta.versions[realPkgVersion]) &&
@@ -86,7 +100,7 @@ async function resolve(pkg, options) {
       const fullMeta = await getFullPackageMeta(pkg.name, options, { revalidate: true });
       Object.assign(packageMeta, fullMeta, { revalidated: true, allVersions: Object.keys(fullMeta.versions) });
       distTags = packageMeta['dist-tags'];
-      realPkgVersion = utils.findMaxSatisfyingVersion(spec, distTags, packageMeta.allVersions);
+      realPkgVersion = pickVersion();
     } catch (err) {
       debug('[%s] revalidate cached manifests error: %s', pkg.name, err.message);
     }
@@ -98,7 +112,7 @@ async function resolve(pkg, options) {
       const fullMeta = await getFullPackageMeta(pkg.name, options, { officialOnly: true });
       Object.assign(packageMeta, fullMeta, { fromOfficial: true, allVersions: Object.keys(fullMeta.versions) });
       distTags = packageMeta['dist-tags'];
-      realPkgVersion = utils.findMaxSatisfyingVersion(spec, distTags, packageMeta.allVersions);
+      realPkgVersion = pickVersion();
     } catch (err) {
       debug('[%s] refetch manifests from official registry error: %s', pkg.name, err.message);
     }
@@ -171,6 +185,7 @@ async function resolve(pkg, options) {
 
   // cache resolve result
   dependenciesTree[pkg.raw] = realPkg;
+  if (options.lockPackages) options.lockPackages[pkg.raw] = realPkg;
   return realPkg;
 }
 
@@ -269,7 +284,7 @@ async function _fetchFullPackageMetaWithCache(pkgUrl, globalOptions, cacheFile, 
     result = await _fetchFullPackageMeta(pkgUrl, globalOptions, etag, !!cache, mirrorUrls);
   } catch (err) {
     if (cache) {
-      globalOptions.console.warn('[np:download:npm] Request %s error, use cache instead', pkgUrl);
+      globalOptions.console.warn('[np:download:npm] Request %s error, use cache instead', utils.redactUrl(pkgUrl));
       return cache.manifests;
     }
     throw err;
@@ -291,7 +306,7 @@ async function _fetchFullPackageMetaWithCache(pkgUrl, globalOptions, cacheFile, 
       }
     }
   }
-  debug('GET %s with etag: %j, status: %s, maxAge: %s', pkgUrl, etag, result.status, maxAge);
+  debug('GET %s with etag: %j, status: %s, maxAge: %s', utils.redactUrl(pkgUrl), etag, result.status, maxAge);
   const expired = Date.now() + maxAge * 1000;
   // etag match
   if (result.status === 304) {
@@ -392,10 +407,14 @@ async function download(pkg, options) {
     done: false,
   };
 
-  if (await utils.isInstallDone(ungzipDir)) {
+  const done = await utils.isInstallDone(ungzipDir);
+  // 来源后缀出现之前, git / url / 本地包装在不带后缀的同一目录里, 不能当作 registry 包复用
+  if (done && utils.isNonRegistryInstall(await utils.readJSON(path.join(ungzipDir, 'package.json')))) {
+    await utils.rimraf(ungzipDir);
+  } else if (done) {
     // 上次安装中断或失败的包带回阶段, 由本次运行第一个到达的调用方继续安装; 继续执行脚本需要解压出的 scripts
     const stage = await utils.getResumeStage(ungzipDir, options);
-    if (stage) await mergePackageMeta(pkg, ungzipDir);
+    if (stage) await mergePackageMeta(pkg, ungzipDir, options);
     options.cache[key].done = true;
     options.events.emit(key);
     // debug('[%s@%s] Exists', pkg.name, pkg.version);
@@ -407,6 +426,7 @@ async function download(pkg, options) {
   }
 
   await utils.mkdirp(ungzipDir);
+  await installState.reset(ungzipDir);
 
   // download tar and unzip
   let lastErr;
@@ -441,9 +461,9 @@ async function download(pkg, options) {
       count++;
       options.console.warn(
         `[${pkg.name}@${pkg.version}] download %s %s: %s, fail count: %s`,
-        tarballUrl,
+        utils.redactUrl(tarballUrl),
         err.name,
-        err.message,
+        utils.redactUrl(err.message),
         count
       );
       // 缓存中的 tgz 校验或解压失败时删除, 否则之后每次重试都读到同一个损坏文件
@@ -464,7 +484,7 @@ async function download(pkg, options) {
     throw lastErr;
   }
 
-  await mergePackageMeta(pkg, ungzipDir);
+  await mergePackageMeta(pkg, ungzipDir, options);
 
   await utils.setInstallDone(ungzipDir, utils.FIRST_INSTALL_STAGE);
 
@@ -523,7 +543,7 @@ async function getTarballStream(tarballUrl, pkg, options, mirrored = false) {
   if (!options.cacheDir || utils.isSudo()) {
     // sudo don't touch the cacheDir
     // production mode
-    debug('[%s@%s] GET streaming %j', pkg.name, pkg.version, tarballUrl);
+    debug('[%s@%s] GET streaming %j', pkg.name, pkg.version, utils.redactUrl(tarballUrl));
     const result = await get(
       tarballUrl,
       {
@@ -541,7 +561,7 @@ async function getTarballStream(tarballUrl, pkg, options, mirrored = false) {
       } catch (err) {
         options.console.warn('[np:download:npm] ignore destroy response stream error: %s', err);
       }
-      throw new Error(`Download ${tarballUrl} status: ${result.status} error, should be 200`);
+      throw new Error(`Download ${utils.redactUrl(tarballUrl)} status: ${result.status} error, should be 200`);
     }
 
     // record size
@@ -581,7 +601,7 @@ async function getTarballStream(tarballUrl, pkg, options, mirrored = false) {
     );
 
     if (result.status !== 200) {
-      throw new Error(`Download ${tarballUrl} status: ${result.status} error, should be 200`);
+      throw new Error(`Download ${utils.redactUrl(tarballUrl)} status: ${result.status} error, should be 200`);
     }
     // make sure tarball file is not exists again
     exists = (options.offline || !options.refreshCache) && (await utils.exists(tarballFile));
@@ -610,7 +630,14 @@ async function getTarballStream(tarballUrl, pkg, options, mirrored = false) {
       await fs.rm(tmpFile, { force: true });
     }
     const stat = await fs.stat(tarballFile);
-    debug('[%s@%s] saved %s %s => %s', pkg.name, pkg.version, bytes(stat.size), tarballUrl, tarballFile);
+    debug(
+      '[%s@%s] saved %s %s => %s',
+      pkg.name,
+      pkg.version,
+      bytes(stat.size),
+      utils.redactUrl(tarballUrl),
+      tarballFile
+    );
     options.totalTarballSize += stat.size;
   }
 
@@ -620,12 +647,29 @@ async function getTarballStream(tarballUrl, pkg, options, mirrored = false) {
   return stream;
 }
 
+// 与 npm 一致按 dist.integrity 中最强的算法校验; 只有 manifest 没有可用的 integrity 时才退回 dist.shasum 的 sha1
+const INTEGRITY_ALGORITHMS = ['sha512', 'sha384', 'sha256', 'sha1'];
+function getExpectedDigest(dist) {
+  const entries = String(dist.integrity || '')
+    .trim()
+    .split(/\s+/)
+    .map(item => {
+      const index = item.indexOf('-');
+      // ssri 允许在摘要后附加 `?opt` 选项, 不参与比较
+      return index > 0 ? { algorithm: item.slice(0, index), digest: item.slice(index + 1).split('?')[0] } : null;
+    })
+    .filter(Boolean);
+  for (const algorithm of INTEGRITY_ALGORITHMS) {
+    const entry = entries.find(item => item.algorithm === algorithm);
+    if (entry) return { algorithm, encoding: 'base64', digest: entry.digest };
+  }
+  return { algorithm: 'sha1', encoding: 'hex', digest: dist.shasum };
+}
+
 function checkShasumAndUngzip(ungzipDir, readstream, pkg, useTarFormat) {
   return new Promise((resolve, reject) => {
-    const shasum = pkg.dist.shasum;
-    const integrity = pkg.dist.integrity;
-    const algorithmType = pkg.dist.checkSSRI ? 'sha512' : 'sha1';
-    const hash = crypto.createHash(algorithmType);
+    const expected = getExpectedDigest(pkg.dist);
+    const hash = crypto.createHash(expected.algorithm);
     let tarballSize = 0;
     const opts = {
       cwd: ungzipDir,
@@ -668,18 +712,10 @@ function checkShasumAndUngzip(ungzipDir, readstream, pkg, useTarFormat) {
     });
     readstream.on('end', () => {
       // this will be fire before extracter `env` event fire.
-      let hashResult = '';
-      let hashString = '';
-      if (pkg.dist.checkSSRI) {
-        hashResult = algorithmType + '-' + hash.digest('base64');
-        hashString = integrity;
-      } else {
-        hashResult = hash.digest('hex');
-        hashString = shasum;
-      }
-      if (hashResult !== hashString) {
+      const hashResult = hash.digest(expected.encoding);
+      if (hashResult !== expected.digest) {
         const err = new Error(
-          `real ${algorithmType}:${hashResult} not equal to remote:${hashString}, download url ${readstream.tarballUrl || ''}, download size ${tarballSize}`
+          `real ${expected.algorithm}:${hashResult} not equal to remote:${expected.digest}, download url ${utils.redactUrl(readstream.tarballUrl || '')}, download size ${tarballSize}`
         );
         err.name = 'ShasumNotMatchError';
         handleCallback(err);
@@ -797,9 +833,20 @@ function binaryMirrorFiles(pkg, binaryMirror) {
 }
 
 // read package.json to merge into realPkg
-async function mergePackageMeta(pkg, ungzipDir) {
+// name, version 与 dist 保留 registry 的值: tarball 可以自称其他包, 冒用其 allowScripts 放行与链接名
+async function mergePackageMeta(pkg, ungzipDir, options) {
+  const trusted = { name: pkg.name, version: pkg.version, dist: pkg.dist };
   const fullMeta = await utils.readPackageJSON(ungzipDir);
-  Object.assign(pkg, fullMeta);
+  if (fullMeta.name !== pkg.name || fullMeta.version !== pkg.version) {
+    options.pendingMessages.push([
+      'warn',
+      '%s %s: package.json in the tarball declares %s, using the registry name and version',
+      chalk.magenta('manifest mismatch'),
+      chalk.gray(`${pkg.name}@${pkg.version}`),
+      chalk.yellow(`${fullMeta.name}@${fullMeta.version}`),
+    ]);
+  }
+  Object.assign(pkg, fullMeta, trusted);
   if (pkg.__fixDependencies) {
     pkg.dependencies = Object.assign({}, pkg.dependencies, pkg.__fixDependencies);
   }

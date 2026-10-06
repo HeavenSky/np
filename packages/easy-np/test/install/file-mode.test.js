@@ -1,0 +1,26 @@
+const assert = require('node:assert');
+const path = require('node:path');
+const fs = require('node:fs');
+const coffee = require('coffee');
+const helper = require('../support/helper');
+
+if (process.platform !== 'win32') {
+  describe('test/install/file-mode.test.js', () => {
+    const [homedir, cleanup] = helper.tmp();
+
+    beforeEach(cleanup);
+    afterEach(cleanup);
+
+    it('should fix file mode success', async () => {
+      await coffee
+        .fork(helper.npminstall, ['array-unique@0.2.1'], {
+          cwd: homedir,
+        })
+        .debug()
+        .end();
+      const stat = fs.statSync(path.join(homedir, 'node_modules/array-unique/index.js'));
+      // 700 -> 744
+      assert(stat.mode === 33252);
+    });
+  });
+}

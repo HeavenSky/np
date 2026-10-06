@@ -8,6 +8,9 @@ const SUMMARIES = {
   link: 'link local folders or global packages',
   fetch: 'only download and extract packages, no dependencies or scripts',
   rebuild: 'rerun lifecycle scripts of installed dependencies',
+  'approve-scripts': 'allow install scripts of dependencies in package.json allowScripts',
+  'deny-scripts': 'deny install scripts of dependencies in package.json allowScripts',
+  prune: 'remove _<name>@<version>@<name> folders in node_modules that nothing links to',
 };
 
 // commands: [{ name, aliases }], 顺序即展示顺序
@@ -61,6 +64,10 @@ Options:
   --no-save: Prevents saving to dependencies
   -g, --global: install packages to the global directory specified by 'npm config get prefix'
   -r, --registry: specify custom registry
+  --proxy, --https-proxy: proxy for http / https requests, also passed to install scripts, node-gyp and git; default from npm_config_proxy, ~/.nprc, HTTP_PROXY / HTTPS_PROXY
+  --noproxy: comma separated hosts that bypass the proxy, default from NO_PROXY
+  --cafile: CA certificate file for https requests
+  --no-strict-ssl: skip https certificate verification
   --root: install root directory, default is current working directory
   --prefix: global install prefix used with -g, default is '$npm config get prefix'
   --no-cache: don't use the tarball disk cache, ignored when --cache-strict is set
@@ -70,14 +77,21 @@ Options:
   -v, --version: show version
   -h, --help: show help
   --refresh-cache: ignore cached manifests and tarballs, download again and overwrite the cache
+  --no-lockfile: don't read or write np-lock.json, same as env np_lockfile=false, or set config.np.lockfile=false in package.json
+  --frozen-lockfile: install exactly the versions in np-lock.json, fail if a dependency is not locked, never update it
+  --probe-cache: minutes to reuse the last registry speed test result, 0 to test on every run, default 5, also read from env np_probe_cache
   --offline: only use the disk cache and never request the network, fail when a manifest or tarball is not cached. git and remote url packages are not supported.
   -d, --detail: show detail log of installation
   --trace: show memory and CPU usage traces of the installation
   --ignore-scripts: ignore all preinstall / install and postinstall scripts during the installation
+  --allow-scripts=<pkg>[,<pkg>]: allow install scripts of these dependencies, overrides allowScripts in package.json; mainly for -g
+  --strict-allow-scripts: fail the install when a dependency has install scripts not reviewed in allowScripts
+  --dangerously-allow-all-scripts: run install scripts of every dependency, ignoring allowScripts
   --rebuild: same as npd-x rebuild, rerun lifecycle scripts of installed dependencies, see npd-x rebuild --help
   --no-optional: ignore all optionalDependencies during the installation
   --forbidden-licenses: forbid installing packages that use these licenses
   --engine-strict: refuse to install (or even consider installing) any package that claims to not be compatible with the current Node.js version.
+  --legacy-peer-deps: don't install missing peerDependencies automatically, only warn like npm 6
   --flatten: flatten dependencies by matching ancestors' dependencies
   --registry-only: make sure all packages are installed from the registry, installing any package from a remote source (e.g.: git, remote url) fails the install.
   --cache-strict: use disk cache even on production env.
@@ -146,6 +160,10 @@ git packages are not supported, fetching them runs their prepare script.
 Options:
 
   -r, --registry: specify custom registry
+  --proxy, --https-proxy: proxy for http / https requests, also passed to install scripts, node-gyp and git; default from npm_config_proxy, ~/.nprc, HTTP_PROXY / HTTPS_PROXY
+  --noproxy: comma separated hosts that bypass the proxy, default from NO_PROXY
+  --cafile: CA certificate file for https requests
+  --no-strict-ssl: skip https certificate verification
   --root: install root directory, default is current working directory
   --no-cache: don't use the tarball disk cache
   --refresh-cache: ignore cached manifests and tarballs, download again and overwrite the cache
@@ -172,5 +190,62 @@ Options:
 
   --root: install root directory, default is current working directory
   -v, --version: show version
+  -h, --help: show help
+`;
+
+exports.approveScripts = () => `
+Usage:
+
+  npd-x approve-scripts <pkg> [<pkg> ...]
+  npd-x approve-scripts --all
+  npd-x approve-scripts --pending
+
+Install scripts (preinstall / install / postinstall, binding.gyp builds and prepare of git dependencies) of dependencies
+only run when the dependency is allowed in the allowScripts field of the root package.json, same as npm 12.
+Scripts of the root project and local folder dependencies always run.
+This command writes allowScripts entries for installed packages; run npd-x rebuild <pkg> afterwards to run their scripts,
+reinstall git dependencies to run their prepare script.
+
+Options:
+
+  --all: approve every installed package whose install scripts are not reviewed yet
+  --pending: only list installed packages whose install scripts are not reviewed yet
+  --no-pin: write name-only entries that allow any version, default writes <pkg>@<installed version>
+  --root: project root directory, default is current working directory
+  -h, --help: show help
+`;
+
+exports.prune = () => `
+Usage:
+
+  npd-x prune
+  npd-x prune --dry-run
+
+Uninstalling or upgrading packages leaves their old versions as _<name>@<version>@<name> folders in node_modules.
+This command walks the links from the top level of node_modules, removes the version folders that are not reachable.
+Installs never remove these folders by themselves.
+
+Options:
+
+  --dry-run: only list what would be removed
+  --root: project root directory, default is current working directory
+  -h, --help: show help
+`;
+
+exports.denyScripts = () => `
+Usage:
+
+  npd-x deny-scripts <pkg> [<pkg> ...]
+  npd-x deny-scripts --all
+
+Writes name-only false entries into the allowScripts field of the root package.json, same as npm 12:
+the install scripts of these dependencies never run and they are no longer listed as unreviewed.
+Existing true entries of the same packages are removed. Packages that are not installed can be denied by name.
+Git and tarball url dependencies are denied by their repository or url.
+
+Options:
+
+  --all: deny every installed package whose install scripts are not reviewed yet
+  --root: project root directory, default is current working directory
   -h, --help: show help
 `;

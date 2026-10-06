@@ -3,9 +3,9 @@ name: Node CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   # oxlint / oxfmt 需要 node ^20.19 || >=22.12, 与测试用的 node 版本分开跑
@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [ easy-np, easy-npd ]
+        package: [easy-np, easy-npd]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -26,13 +26,39 @@ jobs:
       - run: npm i
       - run: npm run lint
 
+  # engines 下限 Node 14.18: mocha 11 不支持, 用 mocha 10 跑全量用例
+  # Node 14 自带的 npm 6 不认 npx -y, mocha 10 改为全局安装
+  test-legacy-node:
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [easy-np, easy-npd]
+        node-version: [14.18.0, 16.x]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: npm i
+      - run: npm i -g mocha@10
+      - run: mocha "test/*/*.test.js"
+        env:
+          NODE_OPTIONS: --max_old_space_size=6144
+
   test:
     strategy:
       fail-fast: false
       matrix:
-        package: [ easy-np, easy-npd ]
-        node-version: [ 18.x, 22.x ]
-        os: [ ubuntu-latest, windows-latest ]
+        package: [easy-np, easy-npd]
+        node-version: [18.x, 22.x]
+        os: [ubuntu-latest, windows-latest]
         # Windows 只测 Node 22, Node 18 由 Linux 覆盖
         exclude:
           - os: windows-latest
@@ -61,6 +87,6 @@ jobs:
           NODE_OPTIONS: --max_old_space_size=6144
       # 不用 npm test: 它会先跑 lint, 而 oxlint 不支持 Node 18, lint 已由上面的 job 负责
       - if: ${{ !matrix.coverage }}
-        run: npx mocha "test/*.test.js"
+        run: npx mocha "test/*/*.test.js"
         env:
           NODE_OPTIONS: --max_old_space_size=6144

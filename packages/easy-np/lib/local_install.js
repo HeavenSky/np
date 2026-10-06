@@ -21,6 +21,7 @@ const createResolution = require('./resolution');
 const formatInstallOptions = require('./format_install_options');
 const Context = require('./context');
 const { runLifecycleScripts } = require('./lifecycle_scripts');
+const allowScripts = require('./allow_scripts');
 
 /**
  * npm install
@@ -119,7 +120,14 @@ async function _install(options, context) {
   let pkgs = options.pkgs;
   const rootPkgDependencies = dependencies(rootPkg, options, context.nested);
   options.rootPkgDependencies = rootPkgDependencies;
-  options.resolution = createResolution(rootPkg, options);
+  // 与 npm 一致, workspace 只认 workspace 根 package.json 的 overrides
+  const overridesPkg =
+    options.enableWorkspace && options.isWorkspacePackage
+      ? await utils.readJSON(path.join(options.workspaceRoot, 'package.json'))
+      : rootPkg;
+  options.resolution = createResolution(rootPkg, options, overridesPkg);
+  // peer 自动安装要知道 workspace 根已声明哪些依赖, 在安装子依赖之前加载
+  if (options.enableWorkspace && options.isWorkspacePackage) await getWorkspaceRootDepNames(options, context);
   if (pkgs.length === 0) {
     if (options.client) {
       pkgs = rootPkgDependencies.client;
@@ -225,6 +233,8 @@ async function _install(options, context) {
   recordDependenciesTree(options);
 
   printOptionalFailures(options);
+  const scriptPolicyError = allowScripts.report(options);
+  if (scriptPolicyError) options.failures.push({ displayName: 'allowScripts', error: scriptPolicyError });
   if (options.failures.length > 0) {
     throw utils.installFailuresError(options.failures);
   }
@@ -257,7 +267,7 @@ async function _installOne(parentDir, childPkg, options, context) {
       workspaceInfo
         ? chalk.cyan('is skipped because it resolves to the local workspace:')
         : chalk.cyan('is skipped because it already exists at:'),
-      workspaceInfo ? workspaceInfo.root : path.join(parentDir, 'node_modules', childPkg.name)
+      workspaceInfo ? workspaceInfo.root : path.join(parentDir, 'node_modules', childPkg.alias || childPkg.name)
     );
     return;
   }
@@ -302,12 +312,27 @@ async function needInstall(parentDir, childPkg, options) {
   // always install if not install from package.json
   if (!options.installRoot || options.rebuild) return true;
 
-  const pkgDir = path.join(parentDir, 'node_modules', childPkg.name);
+  // alias 依赖装在别名目录下, 按真实包名检查与清理会误删同名的另一个根依赖
+  const pkgDir = path.join(parentDir, 'node_modules', childPkg.alias || childPkg.name);
   const pkg = await utils.readJSON(path.join(pkgDir, 'package.json'));
   try {
     if (pkg.name && pkg.version && childPkg.version && !(await utils.isInstallUnfinished(pkgDir))) {
-      if (semver.validRange(childPkg.version, true) && utils.fastSemverSatisfies(pkg.version, childPkg.version)) {
-        return false;
+      // 启用锁文件时已装的依赖也要安装一遍, 遍历子树才能把它们记进 np-lock.json; 已装的等于锁定版本时只是不删除
+      const locked =
+        options.lockPackages &&
+        utils.lockedEntry(options.cache.dependenciesTree, `${childPkg.name}@${childPkg.version}`);
+      // 声明从 git / url / 本地路径改回 registry 版本时, 版本满足范围的旧包也要换成 registry 包
+      if (
+        semver.validRange(childPkg.version, true) &&
+        utils.fastSemverSatisfies(pkg.version, childPkg.version) &&
+        !utils.isNonRegistryInstall(pkg)
+      ) {
+        if (!options.lockPackages) return false;
+        if (locked && locked.version === pkg.version) return true;
+      }
+      // git 与 tarball url 依赖: 已装的就是锁定的 commit 或 url 时不删除, 下载时直接复用 store 中已完成的包
+      if (locked && locked._resolved && utils.stripUrlAuth(pkg._resolved) === utils.stripUrlAuth(locked._resolved)) {
+        return true;
       }
     }
   } catch (err) {
@@ -316,16 +341,15 @@ async function needInstall(parentDir, childPkg, options) {
   }
   // clean up
   if (childPkg.name) {
-    await utils.rimraf(path.join(parentDir, 'node_modules', childPkg.name));
+    await utils.rimraf(pkgDir);
   }
   return true;
 }
 
 async function validatePeerDependencies(params, options) {
-  const pkg = params.package;
   const packageDir = params.packageDir;
 
-  const peerDependencies = pkg.peerDependencies;
+  const peerDependencies = params.peerDependencies;
   const names = Object.keys(peerDependencies);
   const cacheKey = `nodemodule:path:${packageDir}`;
   let paths = options.cache[cacheKey];
@@ -640,7 +664,7 @@ function recordDependenciesTree(options) {
 
   const tree = {};
   for (const key in options.cache.dependenciesTree) {
-    tree[key] = omitPackage(options.cache.dependenciesTree[key]);
+    tree[key] = utils.omitPackage(options.cache.dependenciesTree[key]);
   }
   const installCacheFile = path.join(options.storeDir, '.dependencies_tree.json');
   writeFileSync(installCacheFile, JSON.stringify(tree, null, 2));
@@ -674,32 +698,4 @@ function finishInstall(options) {
   } else {
     options.console.info(...logArguments);
   }
-}
-
-function omitPackage(pkg) {
-  const keys = [
-    'name',
-    'version',
-    'dependencies',
-    'devDependencies',
-    'optionalDependencies',
-    'clientDependencies',
-    'buildDependencies',
-    'isomorphicDependencies',
-    'peerDependencies',
-    'publish_time',
-    'deprecate',
-    'license',
-    'os',
-    'engines',
-    'dist',
-    'scripts',
-    '_id',
-    '__fixDependencies',
-  ];
-  const res = {};
-  for (const key of keys) {
-    if (pkg[key]) res[key] = pkg[key];
-  }
-  return res;
 }

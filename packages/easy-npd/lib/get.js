@@ -4,6 +4,7 @@ const destroy = require('destroy');
 const CacheableLookup = require('cacheable-lookup');
 const utils = require('./utils');
 const npConfig = require('./np_config');
+const proxy = require('./proxy');
 const urlParser = require('url');
 
 module.exports = get;
@@ -11,9 +12,15 @@ module.exports = get;
 const USER_AGENT = 'easy-npd/' + require('../package.json').version + ' ' + urllib.USER_AGENT;
 const MAX_RETRY = 5;
 const cacheable = new CacheableLookup();
-const httpclient = new urllib.HttpClient({
-  lookup: cacheable.lookup,
-});
+// strict-ssl / cafile 由 CLI 在首个请求前写入 proxy 配置, 客户端要在那之后创建
+let httpclient;
+function getHttpClient() {
+  if (!httpclient) {
+    const tls = proxy.tlsOptions();
+    httpclient = new urllib.HttpClient({ lookup: cacheable.lookup, ...(tls && { connect: tls }) });
+  }
+  return httpclient;
+}
 
 // 公共源交替尝试的总次数: 两个源各 2 次
 const MIRROR_ATTEMPTS = 4;
@@ -25,7 +32,6 @@ async function get(url, options, globalOptions) {
   }
   options.headers = options.headers || {};
   options.headers['User-Agent'] = USER_AGENT;
-  // 不传 rejectUnauthorized / proxy / enableProxy: urllib 3 均不支持, 传入不生效
   if (globalOptions && globalOptions.referer) {
     options.headers.Referer = globalOptions.referer;
   }
@@ -42,7 +48,7 @@ async function get(url, options, globalOptions) {
   }
   const retry = options.retry || options.retry === 0 ? options.retry : MAX_RETRY;
   options.retry = undefined;
-  debug('GET %s with headers: %j', url, options.headers);
+  debug('GET %s with headers: %j', utils.redactUrl(url), utils.redact(options.headers));
   const result = await _get(url, options, retry, globalOptions);
   debug('Response %s, headers: %j', result.status, result.headers);
   if (result.status < 100 || result.status >= 400) {
@@ -56,7 +62,7 @@ async function get(url, options, globalOptions) {
         logger.warn('[npd:get] ignore destroy response stream error: %s', err);
       }
     }
-    let message = `GET ${url} response ${result.status} status`;
+    let message = `GET ${utils.redactUrl(url)} response ${result.status} status`;
     if (result.headers && result.headers['npm-notice']) {
       message += `, ${result.headers['npm-notice']}`;
     }
@@ -78,7 +84,7 @@ async function getFromMirrors(options, globalOptions) {
       return await get(url, { ...requestOptions, headers: { ...requestOptions.headers }, retry: 1 }, globalOptions);
     } catch (err) {
       lastErr = err;
-      debug('mirror attempt %s GET %s error: %s', i + 1, url, err.message);
+      debug('mirror attempt %s GET %s error: %s', i + 1, utils.redactUrl(url), utils.redactUrl(err.message));
     }
   }
   throw lastErr;
@@ -98,7 +104,8 @@ async function _get(url, options, retry, globalOptions) {
     if (process.env.MOCK_AGENT) {
       return await urllib.request(url, options);
     }
-    return await httpclient.request(url, options);
+    const dispatcher = proxy.dispatcherFor(url);
+    return await getHttpClient().request(url, dispatcher ? { ...options, dispatcher } : options);
   } catch (err) {
     retry--;
     if (retry > 0) {
@@ -106,11 +113,11 @@ async function _get(url, options, retry, globalOptions) {
       const logger = (globalOptions && globalOptions.console) || console;
       logger.warn(
         '[npd:get] retry GET %s after %sms, retry left %s, %s: %s, status: %s, headers: %j',
-        url,
+        utils.redactUrl(url),
         delay,
         retry,
         err.name,
-        err.message,
+        utils.redactUrl(err.message),
         err.status,
         err.headers
       );

@@ -6,6 +6,7 @@ const chalk = require('chalk');
 const utils = require('./utils');
 const formatInstallOptions = require('./format_install_options');
 const { runLifecycleScripts } = require('./lifecycle_scripts');
+const allowScripts = require('./allow_scripts');
 
 module.exports = async options => {
   options = formatInstallOptions(options);
@@ -24,16 +25,25 @@ module.exports = async options => {
   }
 
   // 一个包失败不影响其余包, 结束时汇总; 失败的包阶段停在失败的脚本
-  for (const { pkg, dir } of targets) {
-    const displayName = `${pkg.name}@${pkg.version}`;
+  for (const { pkg, dir, name, version } of targets) {
+    const owner = allowScripts.ownerOfInstalled(pkg);
+    const displayName = owner ? `${name}@${version} (declared by ${owner})` : `${name}@${version}`;
     try {
-      await runLifecycleScripts(pkg, dir, { name: pkg.name, version: pkg.version }, displayName, options, 'preinstall');
+      // 与安装时一致要在 allowScripts 中放行: git 与 url 依赖按 package.json 记录的解析地址比对
+      const identity = allowScripts.identityOfInstalled(pkg, dir);
+      const { skipped } = allowScripts.ensure(options);
+      const skippedBefore = skipped.length;
+      await runLifecycleScripts({ ...pkg, name, version }, dir, {}, displayName, options, 'preinstall', { identity });
+      // 未放行时脚本没有执行, 阶段标记保持原样, 由结束时的跳过列表提示如何放行
+      if (skipped.length > skippedBefore) continue;
       await utils.setInstallStage(dir);
       options.console.info(chalk.green('rebuilt %s'), displayName);
     } catch (err) {
-      options.failures.push({ displayName, error: err, name: pkg.name });
+      options.failures.push({ displayName, error: err, name });
     }
   }
+  const scriptPolicyError = allowScripts.report(options);
+  if (scriptPolicyError) options.failures.push({ displayName: 'allowScripts', error: scriptPolicyError });
   if (options.failures.length > 0) {
     // 被其他包依赖的子包不会被普通 np 遍历到, 只能再次 np-x rebuild
     const names = [...new Set(options.failures.map(item => item.name))].join(' ');
@@ -56,15 +66,16 @@ async function findInstalled(spec, options) {
   const matched = [];
   for (const entry of entries.sort()) {
     if (!entry.startsWith(prefix)) continue;
-    const version = entry.slice(prefix.length);
+    const { version, suffix } = utils.parseStoreVersion(entry.slice(prefix.length));
     if (spec.range && !utils.fastSemverSatisfies(version, spec.range)) continue;
     const dir = utils.getPackageStorePath(
       path.join(options.root, 'node_modules'),
       { name: spec.name, version },
-      options
+      options,
+      suffix
     );
     const pkg = await utils.readJSON(path.join(dir, 'package.json'));
-    if (pkg.name === spec.name) matched.push({ pkg, dir });
+    if (pkg.name) matched.push({ pkg, dir, name: spec.name, version });
   }
   return matched;
 }

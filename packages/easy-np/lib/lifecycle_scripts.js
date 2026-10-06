@@ -7,6 +7,7 @@ const { LOCAL_TYPES } = require('./npa_types');
 const utils = require('./utils');
 const { MIRROR_ATTEMPTS } = require('./get');
 const { useBinarySource } = require('./download/npm');
+const allowScripts = require('./allow_scripts');
 
 // scripts that should run in root package and linked package
 exports.DEFAULT_ROOT_SCRIPTS = [
@@ -23,6 +24,7 @@ exports.DEFAULT_ROOT_SCRIPTS = [
 exports.DEFAULT_DEP_SCRIPTS = ['preinstall', 'install', 'postinstall'];
 
 // stage: 依赖包上次停在的阶段, 从该脚本继续并逐个推进阶段标记; 根包不传, 不写标记
+// source: 不传时按 originPkg 的声明推导来源, 本地包按根包执行; 传 { identity } 时只执行依赖脚本并按该身份审核, identity 为 null 不审核
 // 返回可选依赖第一个失败的脚本名, 其余失败直接抛出
 exports.runLifecycleScripts = async function runLifecycleScripts(
   pkg,
@@ -30,7 +32,8 @@ exports.runLifecycleScripts = async function runLifecycleScripts(
   originPkg,
   displayName,
   globalOptions,
-  stage
+  stage,
+  source
 ) {
   const scripts = pkg.scripts || {};
 
@@ -39,7 +42,7 @@ exports.runLifecycleScripts = async function runLifecycleScripts(
   // If there is a binding.gyp file in the root of your package,
   // npm will default the install command to compile using node-gyp.
   if (!scripts.install && (await utils.exists(path.join(root, 'binding.gyp')))) {
-    globalOptions.console.warn(
+    globalOptions.console.info(
       '[np:runscript] %s found binding.gyp file, auto run "node-gyp rebuild", root: %j',
       displayName,
       root
@@ -49,12 +52,20 @@ exports.runLifecycleScripts = async function runLifecycleScripts(
 
   let scriptList = exports.DEFAULT_DEP_SCRIPTS;
   let runInForeground = !!globalOptions.foregroundScripts;
-  if (
-    (root === globalOptions.root && !globalOptions.global) ||
-    LOCAL_TYPES.includes(npa(`${originPkg.name}@${originPkg.version}`).type)
-  ) {
+  const isRoot = root === globalOptions.root && !globalOptions.global;
+  const originType = isRoot || source ? null : typeOf(originPkg);
+  if (isRoot || LOCAL_TYPES.includes(originType)) {
     scriptList = exports.DEFAULT_ROOT_SCRIPTS;
     runInForeground = true;
+  } else {
+    const pending = scriptList.filter(script => scripts[script]);
+    const identity = source ? source.identity : allowScripts.identityOf(originType, pkg, originPkg.version);
+    if (
+      pending.length > 0 &&
+      !allowScripts.allow(globalOptions, identity, { displayName, name: pkg.name, scripts: pending })
+    ) {
+      return undefined;
+    }
   }
 
   // 依赖的安装脚本会自行下载二进制, 失败时切换二进制镜像与官方地址重试
@@ -98,6 +109,13 @@ exports.runLifecycleScripts = async function runLifecycleScripts(
   }
   return failedScript;
 };
+
+// 全局安装的包自身作为根传入, 没有依赖声明, 按 registry 包处理;
+// 命令行直接安装本地目录时 name 为空, 拼成 `@../dir` 会被当作 tag 而按依赖处理
+function typeOf(originPkg) {
+  if (!originPkg.version) return 'version';
+  return npa(originPkg.name ? `${originPkg.name}@${originPkg.version}` : originPkg.version).type;
+}
 
 async function runScriptWithMirrors(root, cmd, displayName, script, binarySource, globalOptions, runInForeground) {
   const mirrorState = binarySource.current && globalOptions.mirror;

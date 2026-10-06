@@ -19,6 +19,7 @@ coverage/
 .tmp
 .tmp_*
 test/fixtures/.home
+test/fixtures/.registry-snapshot-record
 test/fixtures/tmp
 .idea
 npm-debug.log.*
