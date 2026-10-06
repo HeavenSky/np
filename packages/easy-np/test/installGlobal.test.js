@@ -124,7 +124,7 @@ describe('test/installGlobal.test.js', () => {
           'inner/package.json': JSON.stringify({
             name: 'inner',
             version: '1.0.0',
-            scripts: { postinstall: `node -e "require('fs').writeFileSync('${marker}', '')"` },
+            scripts: { postinstall: `node -e "require('fs').writeFileSync('${marker.replace(/\\/g, '/')}', '')"` },
           }),
         }
       );

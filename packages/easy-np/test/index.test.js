@@ -3,6 +3,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const npminstall = require('./npminstall');
 const { readJSON, rimraf, exists, isInstallDone } = require('../lib/utils');
+const installState = require('../lib/install_state');
 const helper = require('./helper');
 
 describe('test/index.test.js', () => {
@@ -49,7 +50,14 @@ describe('test/index.test.js', () => {
         { name: 'contributors' },
       ],
     });
-    assert(await isInstallDone(path.join(tmp, 'node_modules/mocha')));
+    const mochaDir = path.join(tmp, 'node_modules/mocha');
+    if (!(await isInstallDone(mochaDir))) {
+      // CI 上偶发失败且本地无法复现, 失败时带出实际链接目标与状态记录, 见根目录 ISSUE.md
+      const realDir = await fs.realpath(mochaDir).catch(err => err.code);
+      const state = await installState.get(mochaDir).catch(err => err.message);
+      const hasPkg = await exists(path.join(mochaDir, 'package.json'));
+      assert.fail(`mocha is not done: realpath=${realDir} state=${JSON.stringify(state)} package.json=${hasPkg}`);
+    }
   });
 
   it('should handle @types/escodegen@0.0.2 tgz', async () => {

@@ -186,7 +186,7 @@ describe('test/installLocal.test.js', () => {
           name: 'dep',
           version: '1.0.0',
           files: ['lib'],
-          scripts: { prepack: `node -e "require('fs').writeFileSync('${marker}', '')"` },
+          scripts: { prepack: `node -e "require('fs').writeFileSync('${marker.replace(/\\/g, '/')}', '')"` },
         })
       );
       await fs.writeFile(path.join(dep, 'lib/index.js'), '');
