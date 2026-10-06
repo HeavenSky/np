@@ -84,6 +84,48 @@ describe('test/installGlobal.test.js', () => {
     assert(await exists(path.join(libDir, 'node_modules/contributors')));
   });
 
+  it('should review scripts of local dependencies declared by the global package', async () => {
+    const registry = helper.createRegistry('local', []);
+    await new Promise(resolve => registry.server.listen(0, '127.0.0.1', resolve));
+    registry.prefix = `http://127.0.0.1:${registry.server.address().port}/`;
+    const mark = name => `node -e "require('fs').writeFileSync('${path.join(tmp, name).replace(/\\/g, '/')}', 'x')"`;
+    const marked = name => exists(path.join(tmp, name));
+    try {
+      registry.packages['global-host'] = {
+        '1.0.0': await helper.packTarball(
+          tmp,
+          {
+            name: 'global-host',
+            version: '1.0.0',
+            dependencies: { inner: 'file:./inner' },
+            scripts: { postinstall: mark('host-postinstall') },
+          },
+          {
+            'inner/package.json': JSON.stringify({
+              name: 'inner',
+              version: '1.0.0',
+              scripts: { postinstall: mark('inner-postinstall') },
+            }),
+          }
+        ),
+      };
+      const install = args =>
+        coffee.fork(helper.npminstall, [`--prefix=${tmp}`, `--registry=${registry.prefix}`, '-g', ...args]).debug();
+      await install(['global-host'])
+        .expect('stderr', /inner@file:\.\/inner \(declared by global-host@1\.0\.0\)/)
+        .expect('code', 0)
+        .end();
+      assert(await exists(path.join(libDir, 'node_modules/global-host/node_modules/inner/package.json')));
+      assert.equal(await marked('host-postinstall'), true);
+      assert.equal(await marked('inner-postinstall'), false);
+
+      await install(['global-host', '--allow-scripts=global-host']).expect('code', 0).end();
+      assert.equal(await marked('inner-postinstall'), true);
+    } finally {
+      registry.server.close();
+    }
+  });
+
   it('should install success with alias package', async () => {
     await coffee
       .fork(helper.npminstall, [`--prefix=${tmp}`, '-g', 'lodash-has@npm:lodash.has@4'])

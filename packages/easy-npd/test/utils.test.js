@@ -299,6 +299,19 @@ describe('test/utils.test.js', () => {
       }
     });
 
+    it('should separate the source suffix of git, url and local packages', () => {
+      const sha = '1a2b3c4d5e6f7a8b9c0d1a2b3c4d5e6f7a8b9c0d';
+      const dir = utils.getPackageStorePath('/store', { name: 'foo', version: '1.0.0' }, utils.gitSource(sha));
+      assert.equal(path.basename(dir), '_foo@1.0.0+git.1a2b3c4d@foo');
+      assert.deepEqual(utils.parsePackageStorePath(dir), { name: 'foo', version: '1.0.0', source: 'git.1a2b3c4d' });
+      const scoped = { name: '@a/b', version: '1.0.0+build.1' };
+      const source = utils.fileSource('/abs/dir');
+      const scopedDir = utils.getPackageStorePath('/store', scoped, source);
+      assert.match(scopedDir, /_@a_b@1\.0\.0\+build\.1\.file\.[0-9a-f]{8}@@a[/\\]b$/);
+      assert.deepEqual(utils.parsePackageStorePath(scopedDir), { ...scoped, source });
+      assert.match(utils.urlSource('sha512-abc'), /^url\.[0-9a-f]{8}$/);
+    });
+
     it('should return null for other directories', () => {
       assert.equal(utils.parsePackageStorePath('/store/foo'), null);
       assert.equal(utils.parsePackageStorePath('/store/_foo@1.0.0@bar'), null);
@@ -369,6 +382,20 @@ describe('test/utils.test.js', () => {
     });
   });
 
+  describe('stripUrlAuth()', () => {
+    it('should drop credentials but keep the ssh user', () => {
+      const sha = 'a'.repeat(40);
+      assert.equal(
+        utils.stripUrlAuth(`git+https://user:tok@github.com/a/b.git#${sha}`),
+        `git+https://github.com/a/b.git#${sha}`
+      );
+      assert.equal(utils.stripUrlAuth('https://tok@r.com/a/-/a-1.0.0.tgz'), 'https://r.com/a/-/a-1.0.0.tgz');
+      assert.equal(utils.stripUrlAuth('git+ssh://git@github.com/a/b.git'), 'git+ssh://git@github.com/a/b.git');
+      assert.equal(utils.stripUrlAuth('git+ssh://u:pw@host/a/b.git'), 'git+ssh://u@host/a/b.git');
+      assert.equal(utils.stripUrlAuth('https://r.com/a@1.0.0'), 'https://r.com/a@1.0.0');
+    });
+  });
+
   describe('redact()', () => {
     it('should hide credentials in urls and npmrc style tokens', () => {
       assert.equal(utils.redactUrl('http://u:p@h:8080'), 'http://***@h:8080');
@@ -378,6 +405,13 @@ describe('test/utils.test.js', () => {
       );
       assert.equal(utils.redactUrl('git@github.com:a/b'), 'git@github.com:a/b');
       assert.equal(utils.redactUrl('//r.com/:_authToken=abc x'), '//r.com/:_authToken=*** x');
+      assert.equal(
+        utils.redactUrl('GET https://h/a.tgz?token=abc&v=1#x failed'),
+        'GET https://h/a.tgz?token=***&v=1#x failed'
+      );
+      assert.equal(utils.redactUrl('https://h/a?v=1&access_token=abc'), 'https://h/a?v=1&access_token=***');
+      assert.equal(utils.redactUrl('https://h/a?auth=abc&password=p'), 'https://h/a?auth=***&password=***');
+      assert.equal(utils.redactUrl('https://h/a?mytoken=abc'), 'https://h/a?mytoken=abc');
     });
 
     it('should return a redacted copy and keep the original', () => {

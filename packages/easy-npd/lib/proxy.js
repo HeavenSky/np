@@ -1,5 +1,6 @@
 // 代理与 TLS 配置: 解析一次并写回 process.env 供子进程(安装脚本, node-gyp, git)继承, 同时按请求 URL 给 urllib 选择 dispatcher
 const fs = require('node:fs');
+const path = require('node:path');
 const urllib = require('urllib');
 const npConfig = require('./np_config');
 
@@ -29,7 +30,9 @@ exports.configure = (argv = {}) => {
   const httpsProxy = pick(argv, 'https-proxy', ['HTTPS_PROXY', 'https_proxy']) || httpProxy;
   const noProxy = pick(argv, 'noproxy', ['NO_PROXY', 'no_proxy']) || undefined;
   const strictSsl = pick(argv, 'strict-ssl', []) !== false;
-  const cafile = pick(argv, 'cafile', []) || undefined;
+  const cafileOption = pick(argv, 'cafile', []);
+  // 安装脚本与 git 在包目录里运行, 导出相对路径会让它们读到别处的文件
+  const cafile = typeof cafileOption === 'string' ? path.resolve(cafileOption) : undefined;
   const ca = cafile ? fs.readFileSync(cafile, 'utf8') : undefined;
 
   // 子进程各自读取不同的变量名: curl / git 读小写, node-gyp 与 npm 读 npm_config_*
@@ -39,6 +42,8 @@ exports.configure = (argv = {}) => {
   if (!strictSsl) {
     process.env.npm_config_strict_ssl = 'false';
     process.env.GIT_SSL_NO_VERIFY = 'true';
+  } else if (argv['strict-ssl'] === true) {
+    process.env.npm_config_strict_ssl = 'true';
   }
   setEnv(['npm_config_cafile', 'GIT_SSL_CAINFO'], cafile);
 

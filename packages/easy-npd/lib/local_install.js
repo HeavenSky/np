@@ -22,6 +22,7 @@ const preinstall = require('./preinstall');
 const prepublish = require('./prepublish');
 const prepare = require('./prepare');
 const allowScripts = require('./allow_scripts');
+const npLock = require('./np_lock');
 const install = require('./install');
 const dependencies = require('./dependencies');
 const createResolution = require('./resolution');
@@ -257,13 +258,16 @@ async function needInstall(parentDir, childPkg, options) {
   try {
     if (pkg.name && pkg.version && childPkg.version && !(await utils.isInstallUnfinished(pkgDir))) {
       // 启用锁文件时已装的根依赖仍要走一遍安装, 否则子依赖不会按锁定版本校正, 也不会记进 np-lock.json; 已装的就是锁定版本时只是不删链接
-      const locked = options.lockPackages && options.cache.dependenciesTree[`${childPkg.name}@${childPkg.version}`];
+      const locked =
+        options.lockPackages && npLock.lookup(options.cache.dependenciesTree, `${childPkg.name}@${childPkg.version}`);
       if (semver.validRange(childPkg.version, true) && semver.satisfies(pkg.version, childPkg.version)) {
         if (!options.lockPackages) return false;
         if (locked && locked.version === pkg.version) return true;
       }
-      // git 与 tarball url 依赖: 已装的就是锁定的 commit 或 url
-      if (locked && locked._resolved && pkg._resolved === locked._resolved) return true;
+      // git 与 tarball url 依赖: 已装的就是锁定的 commit 或 url; 锁文件里的地址去掉了凭据
+      if (locked && locked._resolved && utils.stripUrlAuth(pkg._resolved) === utils.stripUrlAuth(locked._resolved)) {
+        return true;
+      }
     }
   } catch (err) {
     // ignore, maybe pkg.version invalid
@@ -417,7 +421,7 @@ async function linkLatestVersion(pkg, storeDir, options) {
   }
   await utils.rimraf(linkDir); // make sure to delete linkDir
   await utils.mkdirp(path.dirname(linkDir));
-  const realDir = utils.getPackageStorePath(storeDir, pkg);
+  const realDir = options.latestPackages.get(pkg.name);
   const relative = await utils.forceSymlink(realDir, linkDir);
   options.progresses.finishedLinkTasks++;
   debug(

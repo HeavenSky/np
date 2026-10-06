@@ -11,6 +11,8 @@ const runtime = require('./runtime');
 const SHIM_DIR = path.join(__dirname, '../node-gyp-bin');
 const CLI = path.join(__dirname, '../bin/i.js');
 const INSTALL_TIMEOUT = 10 * 60 * 1000;
+const ORPHAN_AGE = 60 * 60 * 1000;
+const INSTALL_DIR_RE = /^v.+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 // 取值顺序必须与 cli/install.js 的磁盘缓存目录一致
 function cacheDir() {
@@ -56,6 +58,33 @@ function writePointer(pointer, dir) {
   fs.renameSync(tmp, pointer);
 }
 
+// 安装被中断或指针被替换后留下的目录; 并发安装中的目录还没有指针引用, 只删超过 ORPHAN_AGE 的
+function removeOrphans(root) {
+  let entries;
+  try {
+    entries = fs.readdirSync(root);
+  } catch {
+    return;
+  }
+  const used = new Set();
+  for (const entry of entries.filter(name => name.endsWith('.json'))) {
+    try {
+      used.add(path.resolve(JSON.parse(fs.readFileSync(path.join(root, entry), 'utf8')).dir));
+    } catch {
+      // 损坏的指针不引用任何目录
+    }
+  }
+  for (const entry of entries) {
+    const dir = path.join(root, entry);
+    if (!INSTALL_DIR_RE.test(entry) || used.has(dir)) continue;
+    try {
+      if (Date.now() - fs.statSync(dir).mtimeMs > ORPHAN_AGE) fs.rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // 清理失败不影响本次安装
+    }
+  }
+}
+
 function fail({ name, spec }, reason) {
   process.stderr.write(
     [
@@ -91,6 +120,7 @@ function install(dir, pointer, { name, spec }) {
   if (result.status !== 0) throw new Error(`exit code ${result.status}`);
   if (!isFile(bin)) throw new Error(`${bin} not found`);
   writePointer(pointer, dir);
+  removeOrphans(path.dirname(pointer));
   return bin;
 }
 

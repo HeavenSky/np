@@ -56,12 +56,25 @@ exports.read = async root => {
   return data.packages;
 };
 
+// 写入时锁键去掉了 URL 凭据, 带凭据的声明直接按 raw 查找会静默错过锁定条目
+exports.lookup = (tree, raw) => tree[raw] || tree[utils.stripUrlAuth(raw)];
+
+// URL 中的凭据不写进锁文件; 按锁安装时 git / url 依赖仍从 package.json 的声明取地址, 凭据随声明带上
+function withoutCredentials(pkg) {
+  const res = { ...pkg };
+  if (res._resolved) res._resolved = utils.stripUrlAuth(res._resolved);
+  if (res.dist && res.dist.tarball) res.dist = { ...res.dist, tarball: utils.stripUrlAuth(res.dist.tarball) };
+  return res;
+}
+
 // 内容不变时不写盘; 返回是否写入
 exports.write = async (root, packages) => {
-  const sorted = {};
-  for (const key of Object.keys(packages).sort()) {
-    sorted[key] = utils.omitPackage(packages[key]);
+  const entries = {};
+  for (const key of Object.keys(packages)) {
+    entries[utils.stripUrlAuth(key)] = withoutCredentials(utils.omitPackage(packages[key]));
   }
+  const sorted = {};
+  for (const key of Object.keys(entries).sort()) sorted[key] = entries[key];
   const content = `${JSON.stringify({ lockfileVersion: LOCKFILE_VERSION, packages: sorted }, null, 2)}\n`;
   const file = path.join(root, LOCKFILE_NAME);
   const previous = await fs.readFile(file, 'utf8').catch(() => null);

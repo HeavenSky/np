@@ -5,14 +5,19 @@ const path = require('path');
 const fs = require('fs/promises');
 const npminstall = require('./npminstall');
 const helper = require('./helper');
-const { getInstallState } = require('../lib/utils');
+const { realpathSync } = require('fs');
+const { getInstallState, getPackageStorePath, fileSource } = require('../lib/utils');
 const { rebuild: rebuildPackages } = require('..');
 
 describe('test/resume-install.test.js', () => {
   const [root, cleanup] = helper.tmp();
   const logFile = path.join(root, 'scripts.log');
   const flagFile = path.join(root, 'postinstall.ok');
-  const pkgDir = path.join(root, 'node_modules/_resume-scripts@1.0.0@resume-scripts');
+  const pkgDir = getPackageStorePath(
+    path.join(root, 'node_modules'),
+    { name: 'resume-scripts', version: '1.0.0' },
+    fileSource(realpathSync(helper.fixtures('resume-scripts')))
+  );
   const install = (extra = {}) =>
     npminstall({
       root,

@@ -90,6 +90,22 @@ describe('test/proxy.test.js', () => {
     process.env.npm_config_strict_ssl = 'false';
     proxy.configure({ 'strict-ssl': true });
     assert.equal(proxy.tlsOptions(), undefined);
+    assert.equal(process.env.npm_config_strict_ssl, 'true');
+  });
+
+  describe('cafile', () => {
+    const [dir, cleanup] = helper.tmp();
+    before(cleanup);
+    after(() => fs.rm(dir, { recursive: true, force: true }));
+
+    it('should export --cafile to child processes as an absolute path', async () => {
+      const cafile = path.join(dir, 'ca.pem');
+      await fs.writeFile(cafile, 'not a real certificate');
+      proxy.configure({ cafile: path.relative(process.cwd(), cafile) });
+      assert.equal(process.env.npm_config_cafile, cafile);
+      assert.equal(process.env.GIT_SSL_CAINFO, cafile);
+      assert.equal(proxy.tlsOptions().ca, 'not a real certificate');
+    });
   });
 
   describe('credentials', () => {

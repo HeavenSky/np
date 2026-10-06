@@ -14,6 +14,7 @@ const utils = require('./utils');
 const download = require('./download');
 const bin = require('./bin');
 const formatInstallOptions = require('./format_install_options');
+const allowScripts = require('./allow_scripts');
 
 module.exports = async (options, context) => {
   const pkgs = options.pkgs || [];
@@ -69,6 +70,11 @@ module.exports = async (options, context) => {
         // don't install devDeps
         production: true,
       });
+      // 被装的包不是用户的项目: 它声明的本地依赖与 overrides 按不受信处理, 脚本要放行它本身(registry 身份)才执行; 用户指定的本地目录除外
+      const identity = allowScripts.identityOf(p.type, result.package, p.fetchSpec);
+      if (identity) {
+        pkgOptions.rootDeclarer = { where: targetDir, trustedLocal: false, scriptIdentity: identity };
+      }
 
       await installLocal(pkgOptions, context);
 

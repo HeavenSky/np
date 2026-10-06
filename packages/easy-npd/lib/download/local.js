@@ -6,7 +6,11 @@ const fs = require('fs/promises');
 const { createReadStream } = require('fs');
 const path = require('path');
 const chalk = require('chalk');
+const semver = require('semver');
 const utils = require('../utils');
+
+const NPM_VERSION_TIMEOUT = 30 * 1000;
+const NPM_PACK_TIMEOUT = 30 * 60 * 1000;
 
 module.exports = async (pkg, options) => {
   const { fetchSpec, displayName } = pkg;
@@ -22,45 +26,64 @@ module.exports = async (pkg, options) => {
     };
     // 不受信的本地包按声明者审核脚本, 之后 approve-scripts 与 rebuild 据此还原身份
     if (pkg.untrustedLocal) meta._scriptsOwner = pkg.scriptsOwner;
+    const source = utils.fileSource(filepath);
     return stat.isDirectory()
-      ? await localFolder(filepath, pkg, meta, options)
-      : await localTarball(filepath, pkg, meta, options);
+      ? await localFolder(filepath, pkg, meta, source, options)
+      : await localTarball(filepath, pkg, meta, source, options);
   } catch (err) {
     throw new Error(`[${displayName}] resolved target ${filepath} error: ${err.message}`);
   }
 };
 
-async function localFolder(filepath, pkg, meta, options) {
+async function localFolder(filepath, pkg, meta, source, options) {
   debug(`install ${pkg.name}@${pkg.rawSpec} from local folder ${filepath}`);
+  // everytime copy to a different directory to avoid parallel install
+  const tmpDir = path.join(options.storeDir, '.tmp', randomUUID());
+  await utils.mkdirp(tmpDir);
   try {
-    // everytime copy to a different directory to avoid parallel install
-    const tmpDir = path.join(options.storeDir, '.tmp', randomUUID());
-    await utils.mkdirp(tmpDir);
-    // use npm pack to ensure npmignore/gitignore/package.files work fine
-    // 不受信的本地包只在放行后执行 preinstall / install / postinstall, npm pack 不能执行它的 prepack / prepare
-    const ignoreScripts = pkg.untrustedLocal || options.ignoreScripts ? ' --ignore-scripts' : '';
-    const res = await utils.exec(`npm pack --pack-destination ${tmpDir}${ignoreScripts}`, { cwd: filepath });
-    if (res && res.stdout) {
-      const tarball = path.join(tmpDir, res.stdout.trim());
+    // 不受信的本地包只在放行后执行 preinstall / install / postinstall; npm 8 的 npm pack --ignore-scripts 仍会执行 prepack, 不能交给 npm pack
+    if (!pkg.untrustedLocal && !options.ignoreScripts && (await npmMajor()) >= 7) {
+      let tarball;
       try {
-        return await localTarball(tarball, pkg, meta, options);
-      } finally {
-        await utils.rimraf(tarball);
+        tarball = await npmPack(filepath, tmpDir);
+      } catch (err) {
+        options.console.warn(
+          `[npd:download:local] install ${pkg.displayName} from local folder ${filepath} with npm pack failed(${err.message}), use copy`
+        );
       }
+      if (tarball) return await localTarball(tarball, pkg, meta, source, options);
     }
-  } catch (err) {
-    // fallback to copy
-    options.console.warn(
-      `[npd:download:local] install ${pkg.displayName} from local folder ${filepath} with npm pack failed(${err.message}), use copy`
-    );
-    const res = await utils.copyInstall(filepath, options);
-    if (!res.exists) await utils.addMetaToJSONFile(path.join(res.dir, 'package.json'), meta);
-    Object.assign(res.package, meta);
-    return res;
+    const packageDir = path.join(tmpDir, 'package');
+    await utils.copyPackFiles(filepath, packageDir);
+    const pkgFile = path.join(packageDir, 'package.json');
+    if (await utils.exists(pkgFile)) await utils.addMetaToJSONFile(pkgFile, meta);
+    return await utils.copyInstall(packageDir, options, source);
+  } finally {
+    await removeTmpDir(tmpDir, pkg, options);
   }
 }
 
-async function localTarball(filepath, pkg, meta, options) {
+// npm 6 不支持 --pack-destination; 取不到版本时同样不用 npm pack
+let npmMajorVersion;
+function npmMajor() {
+  if (!npmMajorVersion) {
+    npmMajorVersion = utils.exec('npm --version', { timeout: NPM_VERSION_TIMEOUT }).then(
+      ({ stdout }) => semver.major(semver.coerce(stdout) || '0.0.0'),
+      () => 0
+    );
+  }
+  return npmMajorVersion;
+}
+
+async function npmPack(filepath, dest) {
+  await utils.exec(`npm pack --pack-destination "${dest}"`, { cwd: filepath, timeout: NPM_PACK_TIMEOUT });
+  // prepack / prepare 的输出也写在 stdout 里, 文件名只能从空的输出目录取
+  const tarballs = (await fs.readdir(dest)).filter(file => file.endsWith('.tgz'));
+  if (tarballs.length !== 1) throw new Error(`npm pack created ${tarballs.length} tarballs in ${dest}`);
+  return path.join(dest, tarballs[0]);
+}
+
+async function localTarball(filepath, pkg, meta, source, options) {
   debug(`install ${pkg.name}@${pkg.rawSpec} from local tarball ${filepath}`);
   const readstream = createReadStream(filepath);
   // everytime unpack to a different directory
@@ -70,17 +93,18 @@ async function localTarball(filepath, pkg, meta, options) {
     await utils.unpack(readstream, ungzipDir, pkg);
     const pkgFile = path.join(ungzipDir, 'package.json');
     if (await utils.exists(pkgFile)) await utils.addMetaToJSONFile(pkgFile, meta);
-    return await utils.copyInstall(ungzipDir, options);
+    return await utils.copyInstall(ungzipDir, options, source);
   } finally {
-    // clean up
-    try {
-      await utils.rimraf(ungzipDir);
-    } catch (err) {
-      options.console.warn(
-        chalk.yellow(
-          `[npd:download:local] ${pkg.displayName} rmdir local ungzip dir: ${ungzipDir} error: ${err}, ignore it`
-        )
-      );
-    }
+    await removeTmpDir(ungzipDir, pkg, options);
+  }
+}
+
+async function removeTmpDir(dir, pkg, options) {
+  try {
+    await utils.rimraf(dir);
+  } catch (err) {
+    options.console.warn(
+      chalk.yellow(`[npd:download:local] ${pkg.displayName} rmdir local tmp dir: ${dir} error: ${err}, ignore it`)
+    );
   }
 }

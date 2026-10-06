@@ -121,21 +121,22 @@ exports.check = (policy, identity) => {
   return allowed || null;
 };
 
+// git 与 url 身份两侧都去掉凭据再比对: 写入的键不带凭据, 旧版本写入的带凭据键也要继续生效
 function matches(key, identity) {
   let parsed;
   try {
-    parsed = npa(key);
+    parsed = npa(utils.stripUrlAuth(key));
   } catch {
     return false;
   }
   if (identity.git) {
     if (parsed.type !== 'git') return false;
-    const target = npa(identity.git);
+    const target = npa(utils.stripUrlAuth(identity.git));
     if (repoId(parsed) !== repoId(target)) return false;
     return !parsed.gitCommittish || parsed.gitCommittish === target.gitCommittish;
   }
   if (identity.url) {
-    return parsed.type === 'remote' && parsed.fetchSpec === identity.url;
+    return parsed.type === 'remote' && parsed.fetchSpec === utils.stripUrlAuth(identity.url);
   }
   if (!['version', 'range', 'tag'].includes(parsed.type) || parsed.name !== identity.name) return false;
   if (parsed.rawSpec === '' || parsed.rawSpec === '*') return true;
@@ -158,10 +159,13 @@ exports.identityOf = (originType, realPkg, originSpec) => {
   return { name: realPkg.name, version: realPkg.version };
 };
 
-// 写入 allowScripts 时使用的键
+// 写入 allowScripts 时使用的键; package.json 会被提交, git 与 url 键不能带凭据
 exports.keyOf = (identity, pin = true) => {
-  if (identity.git) return pin ? identity.git : identity.git.replace(/#.*$/, '');
-  if (identity.url) return identity.url;
+  if (identity.git) {
+    const git = utils.stripUrlAuth(identity.git);
+    return pin ? git : git.replace(/#.*$/, '');
+  }
+  if (identity.url) return utils.stripUrlAuth(identity.url);
   return pin ? `${identity.name}@${identity.version}` : identity.name;
 };
 
@@ -244,6 +248,7 @@ exports.identityOfInstalled = (pkg, dir) => {
   if (type === 'remote' && pkg._resolved) return { url: pkg._resolved };
   if (type === 'file' || type === 'directory') return pkg._scriptsOwner ? identityOfKey(pkg._scriptsOwner) : null;
   const stored = dir && utils.parsePackageStorePath(dir);
+  if (stored && stored.source) return null;
   if (stored) return stored;
   if (from && from.type === 'version' && from.name) return { name: from.name, version: from.fetchSpec };
   return { name: pkg.name, version: pkg.version };

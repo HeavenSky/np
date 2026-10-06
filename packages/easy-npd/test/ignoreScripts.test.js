@@ -19,10 +19,12 @@ describe('test/ignoreScripts.test.js', () => {
       ignoreScripts: true,
     });
 
-    const dirs = await fs.readdir(path.join(root, 'node_modules'));
+    const dirs = (await fs.readdir(path.join(root, 'node_modules'))).map(dir =>
+      dir.replace(/\+file\.[0-9a-f]{8}@/, '+file.*@')
+    );
     assert.deepEqual(
       dirs.sort(),
-      ['_pkg@1.0.0@pkg', '.npd-state.json', '.package_versions.json', '.tmp', 'pkg'].sort()
+      ['_pkg@1.0.0+file.*@pkg', '.npd-state.json', '.package_versions.json', '.tmp', 'pkg'].sort()
     );
     const files = await fs.readdir(path.join(root, 'node_modules/pkg'));
     assert.deepEqual(files, ['index.js', 'package.json']);

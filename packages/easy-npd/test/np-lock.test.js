@@ -162,6 +162,54 @@ describe('test/np-lock.test.js', () => {
     assert(!('pedding@*' in (await readLock()).packages));
   });
 
+  it('should lock aliases installed by name under the saved spec', async () => {
+    await writePkg({});
+    await run(helper.npminstall, ['x@npm:pedding@^1']).expect('code', 0).end();
+    assert.deepEqual(Object.keys((await readLock()).packages), ['pedding@^1']);
+
+    // 不带版本的 alias 与显式 tag 一样不复用锁文件, 安装后按保存的声明(npm:pedding)记录
+    await lockManifest('pedding@latest', 'pedding/1.1.0');
+    await run(helper.npminstall, ['y@npm:pedding']).expect('code', 0).end();
+    assert.equal(await installedVersion('y'), '2.0.1');
+    const pkg = await helper.readJSON(path.join(tmp, 'package.json'));
+    assert.deepEqual(pkg.dependencies, { x: 'npm:pedding@^1', y: 'npm:pedding' });
+    const lock = await readLock();
+    assert.deepEqual(Object.keys(lock.packages), ['pedding@^1', 'pedding@latest']);
+    assert.equal(lock.packages['pedding@latest'].version, '2.0.1');
+    await run(helper.npminstall, ['--frozen-lockfile']).expect('code', 0).end();
+    await run(helper.npminstall, []).expect('code', 0).end();
+    assert.deepEqual(await readLock(), lock);
+  });
+
+  it('should keep entries of other workspace packages in a workspace root', async () => {
+    await fs.writeFile(
+      path.join(tmp, 'package.json'),
+      JSON.stringify({ name: 'root', version: '1.0.0', workspaces: ['packages/*'], dependencies: { pedding: '1.1.0' } })
+    );
+    await fs.writeFile(lockFile, JSON.stringify({ lockfileVersion: 1, packages: {} }));
+    await lockManifest('debug@4.1.0', 'debug/4.1.0');
+    await run(helper.npminstall, [])
+      .expect('code', 0)
+      .expect('stderr', /workspaces are not supported/)
+      .end();
+    assert.deepEqual(Object.keys((await readLock()).packages), ['debug@4.1.0', 'pedding@1.1.0']);
+  });
+
+  it('should not write credentials in urls to the lockfile', async () => {
+    const npLock = require('../lib/np_lock');
+    const sha = 'a'.repeat(40);
+    const url = 'git+https://user:tok@github.com/a/b.git';
+    await npLock.write(tmp, {
+      [`b@${url}`]: { name: 'b', version: '1.0.0', _resolved: `${url}#${sha}`, _from: `b@${url}` },
+      'c@https://tok@r.com/c.tgz': { name: 'c', version: '1.0.0', dist: { tarball: 'https://tok@r.com/c.tgz' } },
+    });
+    const text = await fs.readFile(lockFile, 'utf8');
+    assert(!text.includes('tok'), text);
+    const packages = await npLock.read(tmp);
+    assert.equal(npLock.lookup(packages, `b@${url}`)._resolved, `git+https://github.com/a/b.git#${sha}`);
+    assert.equal(npLock.lookup(packages, 'c@https://tok@r.com/c.tgz').dist.tarball, 'https://r.com/c.tgz');
+  });
+
   it('should keep the original peerDependencies in the lockfile', async () => {
     await writePkg({ 'use-sync-external-store': '1.2.0', react: '18.3.1' });
     for (let i = 0; i < 2; i++) {
@@ -252,7 +300,95 @@ describe('test/np-lock.test.js', () => {
       // 已装的就是锁定的 commit, 再次安装不重新克隆
       await run(helper.npminstall, []).expect('code', 0).notExpect('stderr', /install git-lock-demo from git/).end();
     });
+
+    it('should install the new commit of a git dependency that keeps its version', async () => {
+      const { execFileSync } = require('child_process');
+      const repo = path.join(tmp, 'repo');
+      await fs.mkdir(repo, { recursive: true });
+      const git = args => execFileSync('git', args, { cwd: repo, stdio: 'ignore' });
+      const commit = async content => {
+        await fs.writeFile(
+          path.join(repo, 'package.json'),
+          JSON.stringify({ name: 'git-same-version', version: '1.0.0' })
+        );
+        await fs.writeFile(path.join(repo, 'index.js'), content);
+        git(['add', '-A']);
+        git(['-c', 'user.name=test', '-c', 'user.email=test@example.com', 'commit', '-q', '-m', content]);
+      };
+      const installed = () => fs.readFile(path.join(tmp, 'node_modules/git-same-version/index.js'), 'utf8');
+      git(['init', '-q']);
+      await commit('first');
+      await writePkg({ 'git-same-version': `git+file://${repo}` });
+      await run(helper.npminstall, []).expect('code', 0).end();
+      assert.equal(await installed(), 'first');
+
+      await commit('second');
+      await fs.rm(lockFile);
+      await run(helper.npminstall, []).expect('code', 0).end();
+      assert.equal(await installed(), 'second');
+      const dirs = (await fs.readdir(path.join(tmp, 'node_modules'))).filter(dir =>
+        dir.startsWith('_git-same-version@')
+      );
+      assert.equal(dirs.length, 2, dirs.join(', '));
+      assert(
+        dirs.every(dir => /^_git-same-version@1\.0\.0\+git\.[0-9a-f]{8}@git-same-version$/.test(dir)),
+        dirs.join(', ')
+      );
+    });
+
+    it('should not let a git dependency take the directory of a registry package', async () => {
+      const { execFileSync } = require('child_process');
+      const repo = path.join(tmp, 'repo');
+      await fs.mkdir(repo, { recursive: true });
+      // 自称 registry 上的 ms@2.1.3
+      await fs.writeFile(path.join(repo, 'package.json'), JSON.stringify({ name: 'ms', version: '2.1.3' }));
+      await fs.writeFile(path.join(repo, 'index.js'), "module.exports = 'fake';\n");
+      const git = args => execFileSync('git', args, { cwd: repo, stdio: 'ignore' });
+      git(['init', '-q']);
+      git(['add', '-A']);
+      git(['-c', 'user.name=test', '-c', 'user.email=test@example.com', 'commit', '-q', '-m', 'fake']);
+      await writePkg({});
+      await run(helper.npminstall, [`git+file://${repo}`])
+        .expect('code', 0)
+        .end();
+      await run(helper.npminstall, ['ms@2.1.3']).expect('code', 0).end();
+      const registryDir = path.join(tmp, 'node_modules/_ms@2.1.3@ms');
+      assert.equal(await fs.realpath(path.join(tmp, 'node_modules/ms')), await fs.realpath(registryDir));
+      assert(!(await fs.readFile(path.join(registryDir, 'index.js'), 'utf8')).includes('fake'));
+    });
   }
+
+  it('should lock tarball url dependencies without their credentials', async () => {
+    const registry = helper.createRegistry('local', []);
+    await new Promise(resolve => registry.server.listen(0, '127.0.0.1', resolve));
+    try {
+      const port = registry.server.address().port;
+      registry.packages['url-demo'] = {
+        '1.0.0': await helper.packTarball(tmp, { name: 'url-demo', version: '1.0.0' }),
+      };
+      const url = `http://user:tok@127.0.0.1:${port}/url-demo/-/url-demo-1.0.0.tgz`;
+      await writePkg({ 'url-demo': url });
+      await run(helper.npminstall, []).expect('code', 0).end();
+      const text = await fs.readFile(lockFile, 'utf8');
+      assert(!text.includes('tok'), text);
+      assert.match(
+        await fs.realpath(path.join(tmp, 'node_modules/url-demo')),
+        /_url-demo@1\.0\.0\+url\.[0-9a-f]{8}@url-demo$/
+      );
+
+      // 已装的就是锁定的内容, 不重新下载; 删掉 node_modules 后按声明里的地址与凭据下载并校验锁定的 integrity
+      await run(helper.npminstall, [])
+        .expect('code', 0)
+        .notExpect('stderr', /install url-demo from remote/)
+        .end();
+      await fs.rm(path.join(tmp, 'node_modules'), { recursive: true, force: true });
+      await run(helper.npminstall, ['--frozen-lockfile']).expect('code', 0).end();
+      assert.equal(await installedVersion('url-demo'), '1.0.0');
+      assert.equal(await fs.readFile(lockFile, 'utf8'), text);
+    } finally {
+      registry.server.close();
+    }
+  });
 
   it('should record and verify the integrity of tarball url dependencies', async () => {
     const url = 'https://registry.npmmirror.com/pedding/-/pedding-1.1.0.tgz';

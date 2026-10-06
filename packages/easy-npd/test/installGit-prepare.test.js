@@ -91,6 +91,29 @@ describe('test/installGit-prepare.test.js', () => {
       await assertPrepared();
     });
 
+    it('should not write np-lock.json into the built package', async () => {
+      // 不按 files 白名单打包, 构建目录里多出的文件都会进入包
+      const pkgFile = path.join(repo, 'package.json');
+      const pkg = await helper.readJSON(pkgFile);
+      delete pkg.files;
+      await fs.writeFile(pkgFile, JSON.stringify(pkg));
+      await fs.writeFile(path.join(repo, '.npmignore'), 'node_modules\n');
+      const git = args => execFileSync('git', args, { cwd: repo, stdio: 'ignore' });
+      git(['add', '-A']);
+      git(['-c', 'user.name=test', '-c', 'user.email=test@example.com', 'commit', '-q', '-m', 'no files']);
+      git(['tag', 'v1.0.1']);
+      const lockfileEnv = process.env.np_lockfile;
+      delete process.env.np_lockfile;
+      try {
+        await npminstall({ root });
+      } finally {
+        process.env.np_lockfile = lockfileEnv;
+      }
+      const files = await fs.readdir(path.join(root, 'node_modules/prep-demo'));
+      assert(files.includes('dist'), files.join(','));
+      assert(!files.includes('np-lock.json'), files.join(','));
+    });
+
     it('should skip prepare with ignoreScripts', async () => {
       await npminstall({ root, ignoreScripts: true });
       const files = (await fs.readdir(path.join(root, 'node_modules/prep-demo'))).sort();
@@ -136,6 +159,29 @@ describe('test/installGit-prepare.test.js', () => {
       await npminstall({ root, console: silent });
       assert.equal(await marked('evil-prepare'), false);
       assert.equal(await marked('evil-prepack'), false);
+    });
+
+    it('should approve an unreviewed git dependency that only has a build script', async () => {
+      const buildRepo = path.join(tmp, 'build-repo');
+      await writePackage(buildRepo, { name: 'build-demo', version: '1.0.0', scripts: { build: 'echo build' } });
+      const sha = commitRepo(buildRepo);
+      await writePackage(root, {
+        name: 'app',
+        version: '1.0.0',
+        dependencies: { 'build-demo': `git+file://${buildRepo}` },
+      });
+      await npminstall({ root, console: silent });
+      const run = args => coffee.fork(x, args, { cwd: root });
+      await run(['approve-scripts', '--pending'])
+        .expect('stdout', /build-demo@1\.0\.0 \(build\)/)
+        .end();
+      await run(['approve-scripts', 'build-demo'])
+        .expect('code', 0)
+        .expect('stdout', /remove node_modules[/\\]_build-demo@1\.0\.0\+git\.[0-9a-f]{8}@build-demo and run npd again/)
+        .notExpect('stdout', /npd-x rebuild/)
+        .end();
+      const pkg = await helper.readJSON(path.join(root, 'package.json'));
+      assert.deepEqual(pkg.allowScripts, { [`git+file://${buildRepo}#${sha}`]: true });
     });
 
     it('should not run scripts of nested git and local dependencies when building an approved repository', async () => {

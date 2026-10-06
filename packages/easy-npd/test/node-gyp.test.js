@@ -3,6 +3,7 @@
 const assert = require('assert');
 const path = require('path');
 const fs = require('fs/promises');
+const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const helper = require('./helper');
 const runtime = require('../lib/runtime');
@@ -26,6 +27,14 @@ describe('test/node-gyp.test.js', () => {
   after(cleanup);
 
   it('should install node-gyp on first use and reuse it afterwards', async () => {
+    // 中断的安装留下的孤儿目录: 超过一小时的被清理, 可能仍在安装中的保留
+    const staleOrphan = `${process.version}-${crypto.randomUUID()}`;
+    const freshOrphan = `${process.version}-${crypto.randomUUID()}`;
+    await fs.mkdir(path.join(cacheDir, staleOrphan), { recursive: true });
+    await fs.mkdir(path.join(cacheDir, freshOrphan), { recursive: true });
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    await fs.utimes(path.join(cacheDir, staleOrphan), twoHoursAgo, twoHoursAgo);
+
     const first = nodeGyp(['--version'], { np_cache: cache });
     assert.equal(first.status, 0, first.stderr);
     // 原生模块的构建脚本会解析 node-gyp 的 stdout, 安装日志只能出现在 stderr
@@ -39,7 +48,7 @@ describe('test/node-gyp.test.js', () => {
     assert.equal(second.stdout, first.stdout);
     assert(!second.stderr.includes('installing'), second.stderr);
     const entries = (await fs.readdir(cacheDir)).sort();
-    assert.deepEqual(entries, [path.basename(pointer.dir), `${process.version}.json`].sort());
+    assert.deepEqual(entries, [path.basename(pointer.dir), freshOrphan, `${process.version}.json`].sort());
   });
 
   it('should use npm_config_node_gyp when it points to an existing file', async () => {

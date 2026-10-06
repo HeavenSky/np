@@ -19,6 +19,7 @@ const destroy = require('destroy');
 const normalizeData = require('normalize-package-data');
 const normalizeBin = require('npm-normalize-package-bin');
 const semver = require('semver');
+const packlist = require('npm-packlist');
 const installState = require('./install_state');
 const utility = require('utility');
 const url = require('url');
@@ -467,12 +468,24 @@ exports.trackChildProcess = pid => {
   };
 };
 
+// 写入 np-lock.json 的地址去掉凭据: http(s) 去掉整段 userinfo(token 常作为用户名), 其他协议只去掉密码, 保留 git@ 这类用户名; 两个包必须逐字相同, 否则共用的 np-lock.json 键对不上
+const URL_AUTH_RE = /([a-z][a-z0-9+.-]*:\/\/)([^\s/'"]+)@/gi;
+exports.stripUrlAuth = str => {
+  if (typeof str !== 'string') return str;
+  return str.replace(URL_AUTH_RE, (match, scheme, userinfo) => {
+    if (/https?:\/\/$/i.test(scheme)) return scheme;
+    const colon = userinfo.indexOf(':');
+    return colon >= 0 ? `${scheme}${userinfo.slice(0, colon)}@` : match;
+  });
+};
+
 // 遮住 URL 中的 userinfo 与 .npmrc 风格的凭据, 用于报错, 日志与 debug 输出; 传给子进程的环境变量不经过这里
 exports.redactUrl = str => {
   if (typeof str !== 'string') return str;
   return str
     .replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@'"]+@/gi, '$1***@')
-    .replace(/(_authToken|_auth|_password)("?\s*[=:]\s*"?)[^\s'",}]+/g, '$1$2***');
+    .replace(/(_authToken|_auth|_password)("?\s*[=:]\s*"?)[^\s'",}]+/g, '$1$2***')
+    .replace(/([?&](?:token|access_token|auth|_authToken|password)=)[^&#\s]+/g, '$1***');
 };
 
 const SECRET_KEYS = new Set([
@@ -608,22 +621,39 @@ exports.findMaxSatisfyingVersion = (spec, distTags, allVersions, options = {}) =
   return realPkgVersion;
 };
 
-exports.getPackageStorePath = (storeDir, pkg) => {
+// git / tarball url / 本地包的 store 目录名带来源后缀, 不占用同名同版本 registry 包的目录, 内容换了来源也不复用旧目录
+const SOURCE_SUFFIX_RE = /[+.]((?:git|url|file)\.[0-9a-f]{8})$/;
+
+exports.gitSource = sha => `git.${sha.slice(0, 8)}`;
+exports.urlSource = integrity => `url.${utility.sha1(integrity).slice(0, 8)}`;
+exports.fileSource = filepath => `file.${utility.sha1(filepath).slice(0, 8)}`;
+
+exports.getPackageStorePath = (storeDir, pkg, source) => {
   // name => _name@1.0.0@name
   // @scope/name => _@scope_name@1.0.0@scope/name
+  // 带来源时: _name@1.0.0+git.1a2b3c4d@name, 版本号已有 build metadata 时用 . 连接
   // some packages need name: https://github.com/BenoitZugmeyer/eslint-plugin-html/blob/master/src/index.js#L24
-  return path.join(storeDir, `_${pkg.name.replace(/\//g, '_')}@${pkg.version}@${pkg.name}`);
+  const version = source ? `${pkg.version}${String(pkg.version).includes('+') ? '.' : '+'}${source}` : pkg.version;
+  return path.join(storeDir, `_${pkg.name.replace(/\//g, '_')}@${version}@${pkg.name}`);
 };
 
-// getPackageStorePath 的逆运算, 不是 store 目录时返回 null
+// getPackageStorePath 的逆运算, 不是 store 目录时返回 null; 只有不带 source 的结果才是 registry 包的身份
 exports.parsePackageStorePath = dir => {
   const base = path.basename(dir);
+  let parsed = null;
   const unscoped = /^_([^@]+)@([^@]+)@([^@]+)$/.exec(base);
-  if (unscoped && unscoped[1] === unscoped[3]) return { name: unscoped[3], version: unscoped[2] };
-  const scoped = /^_(@.+)@([^@]+)@(@[^@]+)$/.exec(path.basename(path.dirname(dir)));
-  if (!scoped) return null;
-  const name = `${scoped[3]}/${base}`;
-  return scoped[1] === name.replace(/\//g, '_') ? { name, version: scoped[2] } : null;
+  if (unscoped && unscoped[1] === unscoped[3]) parsed = { name: unscoped[3], version: unscoped[2] };
+  const scoped = !parsed && /^_(@.+)@([^@]+)@(@[^@]+)$/.exec(path.basename(path.dirname(dir)));
+  if (scoped && scoped[1] === `${scoped[3]}/${base}`.replace(/\//g, '_')) {
+    parsed = { name: `${scoped[3]}/${base}`, version: scoped[2] };
+  }
+  if (!parsed) return null;
+  const source = SOURCE_SUFFIX_RE.exec(parsed.version);
+  if (source) {
+    parsed.version = parsed.version.slice(0, source.index);
+    parsed.source = source[1];
+  }
+  return parsed;
 };
 
 exports.unpack = (readstream, target, pkg) => {
@@ -683,7 +713,17 @@ exports.unpack = (readstream, target, pkg) => {
   });
 };
 
-exports.copyInstall = async (src, options) => {
+// 按 npm pack 的规则(files, .npmignore/.gitignore, 必含与必排文件)把要发布的文件复制到 dest, 不执行包内任何脚本
+exports.copyPackFiles = async (dir, dest) => {
+  const files = await packlist({ path: dir });
+  for (const file of files) {
+    const target = path.join(dest, file);
+    await exports.mkdirp(path.dirname(target));
+    await fs.copyFile(path.join(dir, file), target);
+  }
+};
+
+exports.copyInstall = async (src, options, source) => {
   // 1. make sure source folder has package.json, and package.json contains name
   // 2. get the target directory: $storeDir/${pkg.name}/${pkg.version}
   // 3. check if this package has been installed, and make sure only copy once.
@@ -698,7 +738,7 @@ exports.copyInstall = async (src, options) => {
     throw new Error(`package.json must contain name and version (${pkgpath})`);
   }
 
-  const targetdir = options.ungzipDir || exports.getPackageStorePath(options.storeDir, realPkg);
+  const targetdir = options.ungzipDir || exports.getPackageStorePath(options.storeDir, realPkg, source);
   const key = `copy:${targetdir}`;
   const result = {
     dir: targetdir,
@@ -737,14 +777,14 @@ exports.copyInstall = async (src, options) => {
   return result;
 };
 
-// np-lock.json 锁定的 git / tarball url 包已在 store 中装好时返回与 copyInstall 同形的结果, 否则返回 null
-exports.getLockedInstall = async (locked, options) => {
-  if (!locked || !locked._resolved || !locked.name || !locked.version || options.rebuild) return null;
-  const dir = options.ungzipDir || exports.getPackageStorePath(options.storeDir, locked);
+// np-lock.json 锁定的 git / tarball url 包已在 store 中装好时返回与 copyInstall 同形的结果, 否则返回 null; source 由调用方按锁定的 commit / integrity 算出
+exports.getLockedInstall = async (locked, options, source) => {
+  if (!locked || !locked._resolved || !locked.name || !locked.version || !source || options.rebuild) return null;
+  const dir = options.ungzipDir || exports.getPackageStorePath(options.storeDir, locked, source);
   if (!(await exports.isInstallDone(dir)) || (await installState.get(dir))?.stage) return null;
   const pkg = await exports.readPackageJSON(dir);
-  // 同版本号的包可能来自另一个 commit 或 url
-  if (pkg._resolved !== locked._resolved) return null;
+  // 同版本号的包可能来自另一个 commit 或 url; 锁文件里的地址去掉了凭据
+  if (exports.stripUrlAuth(pkg._resolved) !== exports.stripUrlAuth(locked._resolved)) return null;
   return { dir, package: pkg, exists: true };
 };
 

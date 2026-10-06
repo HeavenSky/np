@@ -53,7 +53,7 @@ module.exports = function formatInstallOptions(options) {
   }
 
   options.latestVersions = new Map();
-  // store latest packages
+  // 包名 => latestVersions 中那个版本的目录; git / url / 本地包的目录名带来源后缀, 不能按名称与版本拼出
   options.latestPackages = new Map();
   options.cache = {
     dependenciesTree: {},

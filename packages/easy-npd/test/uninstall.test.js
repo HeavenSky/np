@@ -5,12 +5,15 @@ const path = require('path');
 const coffee = require('coffee');
 const fs = require('fs/promises');
 const helper = require('./helper');
-const { rimraf, existsSync } = require('../lib/utils');
+const { realpathSync } = require('fs');
+const { rimraf, existsSync, fileSource } = require('../lib/utils');
 
 describe('test/uninstall.test.js', () => {
   const npmuninstall = path.join(__dirname, '../bin/x.js');
   const root = helper.fixtures('uninstall');
   const cleanupModules = helper.cleanup(root);
+  // 本地目录依赖的 store 目录名带源目录路径的摘要
+  const storeName = `_pkg@1.0.0+${fileSource(realpathSync(path.join(root, 'pkg')))}@pkg`;
 
   async function cleanup() {
     await cleanupModules();
@@ -39,15 +42,15 @@ describe('test/uninstall.test.js', () => {
       .end();
     assert(!existsSync(path.join(root, 'node_modules/koa')));
     assert(!existsSync(path.join(root, 'node_modules/pkg')));
-    assert(!existsSync(path.join(root, 'node_modules/_pkg@1.0.0@pkg')));
+    assert(!existsSync(path.join(root, `node_modules/${storeName}`)));
   });
 
   it('should drop the install state of the removed package', async () => {
     const stateKeys = async () =>
       Object.keys(JSON.parse(await fs.readFile(path.join(root, 'node_modules/.npd-state.json'), 'utf8')).packages);
-    assert((await stateKeys()).includes('_pkg@1.0.0@pkg'));
+    assert((await stateKeys()).includes(storeName));
     await coffee.fork(npmuninstall, ['uninstall', 'pkg@1.0.0'], { cwd: root, stdio: 'pipe' }).expect('code', 0).end();
-    assert(!(await stateKeys()).includes('_pkg@1.0.0@pkg'));
+    assert(!(await stateKeys()).includes(storeName));
   });
 
   it('should uninstall --save', async () => {
@@ -58,7 +61,7 @@ describe('test/uninstall.test.js', () => {
       })
       .end();
 
-    assert(!existsSync(path.join(root, 'node_modules/_pkg@1.0.0@pkg')));
+    assert(!existsSync(path.join(root, `node_modules/${storeName}`)));
     const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json')));
     assert(!pkg.dependencies.pkg);
   });
@@ -72,7 +75,7 @@ describe('test/uninstall.test.js', () => {
       .end();
 
     assert(!existsSync(path.join(path.join(root, 'node_modules/pkg'))));
-    assert(!existsSync(path.join(path.join(root, 'node_modules/_pkg@1.0.0@pkg'))));
+    assert(!existsSync(path.join(path.join(root, `node_modules/${storeName}`))));
     const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json')));
     assert(!pkg.devDependencies.pkg);
   });
@@ -86,7 +89,7 @@ describe('test/uninstall.test.js', () => {
       .end();
 
     assert(!existsSync(path.join(path.join(root, 'node_modules/pkg'))));
-    assert(!existsSync(path.join(path.join(root, 'node_modules/_pkg@1.0.0@pkg'))));
+    assert(!existsSync(path.join(path.join(root, `node_modules/${storeName}`))));
     const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json')));
     assert(!pkg.optionalDependencies.pkg);
   });
@@ -112,7 +115,7 @@ describe('test/uninstall.test.js', () => {
       .end();
 
     assert(existsSync(path.join(root, 'node_modules/pkg')));
-    assert(existsSync(path.join(root, 'node_modules/_pkg@1.0.0@pkg')));
+    assert(existsSync(path.join(root, `node_modules/${storeName}`)));
   });
 
   it('should not uninstall when name not match', async () => {
@@ -123,6 +126,6 @@ describe('test/uninstall.test.js', () => {
       })
       .end();
 
-    assert(existsSync(path.join(root, 'node_modules/_pkg@1.0.0@pkg')));
+    assert(existsSync(path.join(root, `node_modules/${storeName}`)));
   });
 });

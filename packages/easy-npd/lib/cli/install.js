@@ -27,6 +27,8 @@ const help = require('./help');
 
 // 三态开关: 命令行开 / 关, 未传时由环境变量与 ~/.nprc 决定
 const TRISTATE_FLAGS = ['dangerously-allow-all-scripts', 'strict-allow-scripts', 'strict-ssl'];
+// 可重复传入且各项合并的参数; 其余参数重复传入时与 npm 一致取最后一个
+const MULTI_VALUE_FLAGS = ['allow-scripts'];
 
 module.exports = async function install(args, { ignorePkgNames = false, ignoreLockfile = false } = {}) {
   try {
@@ -134,6 +136,11 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
   );
 
   dropUnsetFlags(argv, originalArgv);
+  for (const key of Object.keys(argv)) {
+    if (key !== '_' && !MULTI_VALUE_FLAGS.includes(key) && Array.isArray(argv[key])) {
+      argv[key] = argv[key][argv[key].length - 1];
+    }
+  }
 
   if (argv.version) {
     console.log(`npd v${require('../../package.json').version}`);
@@ -176,8 +183,9 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
     const version = p.type === 'tag' && !p.rawSpec ? '*' : p.fetchSpec || p.rawSpec;
     const spec = p.type === ALIAS_TYPES ? p.subSpec : p;
     pkgs.push({
-      name: p.name,
-      version,
+      // alias 与 package.json 里的声明一样拆成真实包名与版本(dependencies.js), 安装时记录的锁键才与 npLock.keyOf 一致
+      name: spec.name,
+      version: p.type === ALIAS_TYPES ? spec.fetchSpec : version,
       type: p.type,
       alias: aliasPackageName,
       arg: p,
@@ -190,11 +198,7 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
     throw new Error('--frozen-lockfile can not be used with package arguments, they would change np-lock.json');
   }
 
-  let root = argv.root || process.cwd();
-  if (Array.isArray(root)) {
-    // use last one, e.g.: $ npd --root=abc --root=def
-    root = root[root.length - 1];
-  }
+  const root = argv.root || process.cwd();
   const production = argv.production || process.env.NODE_ENV === 'production';
   let cacheDir = argv.cache === false ? '' : null;
   if (production) {
@@ -229,8 +233,7 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
 
   const flatten = argv.flatten;
 
-  // example: npd --registry xx --registry xxxx
-  let registry = (Array.isArray(argv.registry) ? argv.registry[0] : argv.registry) || process.env.npm_registry;
+  let registry = argv.registry || process.env.npm_registry;
   // 未指定 registry 或指定的是 npmmirror / npmjs 时自动换源, 指定私有源时全部关闭; 指定公共源时跳过测速并以它优先
   const preferSource = registry ? mirror.sourceOf(registry) : null;
   const autoMirror = !registry || !!preferSource;
@@ -395,7 +398,8 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
   // 默认读写 <root>/np-lock.json; --lockfile-path, --dependencies-tree 与 -g 有各自的版本来源, 不使用它
   let lockState = null;
   // 与 easy-np 共用同一份锁文件, 开关也读同一个 config.np.lockfile
-  const rootConfig = (await utils.readJSON(path.join(root, 'package.json'))).config?.np || {};
+  const rootPkg = await utils.readJSON(path.join(root, 'package.json'));
+  const rootConfig = rootPkg.config?.np || {};
   const lockfileDisabled = argv.lockfile === false || ['0', 'false'].includes(process.env.np_lockfile);
   if (!argv.global && !lockfilePath && !dependenciesTree && !lockfileDisabled && rootConfig.lockfile !== false) {
     const lockExists = await npLock.exists(root);
@@ -411,8 +415,15 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
       }
       config.lockPackages = {};
       config.frozenLockfile = !!argv['frozen-lockfile'];
-      lockState = { previous };
+      // 锁文件与 easy-np 共用, easy-np 在 workspace 根记录全部成员的依赖; 按完整安装覆盖会删掉它们
+      lockState = { previous, workspaces: !!rootPkg.workspaces };
     }
+  }
+  if (rootPkg.workspaces && !argv.global) {
+    console.warn(
+      chalk.yellow('npd WARN workspaces are not supported, only dependencies of %s are installed'),
+      path.join(root, 'package.json')
+    );
   }
 
   if (argv['high-speed-store']) {
@@ -508,7 +519,7 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
 function cliLockKey(p, version) {
   if (LOCAL_TYPES.includes(p.type)) return null;
   if (!p.name) return version;
-  if (p.type === ALIAS_TYPES) return p.subSpec.raw;
+  if (p.type === ALIAS_TYPES) return npLock.keyOf(p.name, p.rawSpec);
   return npLock.keyOf(p.name, version);
 }
 
@@ -545,7 +556,8 @@ function dropUnsetFlags(argv, args) {
 // 完整安装用本次实际用到的条目覆盖锁文件; 部分安装(指定包, --production 等)只追加, 保留其余条目
 async function writeLockfile(root, lockState, config, { full }) {
   if (!lockState || config.frozenLockfile) return;
-  const packages = full ? config.lockPackages : { ...lockState.previous, ...config.lockPackages };
+  const packages =
+    full && !lockState.workspaces ? config.lockPackages : { ...lockState.previous, ...config.lockPackages };
   if (await npLock.write(root, packages)) {
     console.info(chalk.gray('npd %s updated'), npLock.LOCKFILE_NAME);
   }
@@ -584,8 +596,8 @@ async function updateDependencies(root, pkgs, propName, saveExact, remoteNames) 
       saveName = item.name || remoteNames[item.version];
       saveSpec = item.version;
     } else if (item.type === ALIAS_TYPES) {
-      saveName = item.name;
-      saveSpec = item.version;
+      saveName = item.alias;
+      saveSpec = item.arg.rawSpec;
     } else {
       let version;
       if (LOCAL_TYPES.includes(item.type)) {

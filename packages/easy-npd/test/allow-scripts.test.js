@@ -44,6 +44,18 @@ describe('test/allow-scripts.test.js', () => {
       assert.equal(warnings.length, 2);
     });
 
+    it('should write git and url keys without credentials and still match old keys with credentials', () => {
+      const git = { git: 'git+https://user:tok@example.com/x/y.git#abc' };
+      const url = { url: 'https://user:tok@example.com/y/-/y-1.0.0.tgz' };
+      assert.equal(allowScripts.keyOf(git), 'git+https://example.com/x/y.git#abc');
+      assert.equal(allowScripts.keyOf(git, false), 'git+https://example.com/x/y.git');
+      assert.equal(allowScripts.keyOf(url), 'https://example.com/y/-/y-1.0.0.tgz');
+      assert.equal(allowScripts.check({ 'git+https://example.com/x/y.git': true }, git), true);
+      assert.equal(allowScripts.check({ 'git+https://user:old@example.com/x/y.git#abc': true }, git), true);
+      assert.equal(allowScripts.check({ 'https://example.com/y/-/y-1.0.0.tgz': true }, url), true);
+      assert.equal(allowScripts.check({ 'https://user:old@example.com/y/-/y-1.0.0.tgz': true }, url), true);
+    });
+
     it('should merge repeated --allow-scripts', () => {
       const state = allowScripts.load({ argv: { 'allow-scripts': ['a', 'b,c'] } });
       assert.deepEqual(state.policy, { a: true, b: true, c: true });
@@ -157,6 +169,55 @@ describe('test/allow-scripts.test.js', () => {
       const pkg = await helper.readJSON(path.join(root, 'package.json'));
       assert.deepEqual(pkg.allowScripts, { [url]: true });
       await run(x, ['rebuild', 'postinstall-hello']).expect('code', 0).expect('stdout', /run on postinstall-hello/).end();
+    });
+  });
+
+  describe('tarball url with credentials', () => {
+    const [tmp, cleanup] = helper.tmp();
+    const root = path.join(tmp, 'root');
+    const marker = path.join(tmp, 'marker');
+    let registry;
+    const run = (bin, args) =>
+      coffee.fork(bin, args, { cwd: root, env: { ...process.env, np_cache: path.join(tmp, 'cache') } });
+
+    before(async () => {
+      await cleanup();
+      registry = helper.createRegistry('local', []);
+      await new Promise(resolve => registry.server.listen(0, '127.0.0.1', resolve));
+      registry.prefix = `http://127.0.0.1:${registry.server.address().port}/`;
+      const script = `node -e "require('fs').writeFileSync('${marker.replace(/\\/g, '/')}', 'x')"`;
+      registry.packages['url-dep'] = {
+        '1.0.0': await helper.packTarball(tmp, { name: 'url-dep', version: '1.0.0', scripts: { postinstall: script } }),
+      };
+    });
+    after(() => registry.server.close());
+
+    it('should approve by the url without credentials and run the script on the next install', async () => {
+      const port = registry.server.address().port;
+      const url = `http://user:s3cret@127.0.0.1:${port}/url-dep/-/url-dep-1.0.0.tgz`;
+      await fs.mkdir(root, { recursive: true });
+      await fs.writeFile(
+        path.join(root, 'package.json'),
+        JSON.stringify({ name: 'root', version: '1.0.0', dependencies: { 'url-dep': url } })
+      );
+      await run(helper.npminstall, [])
+        .expect('code', 0)
+        .expect('stderr', /were skipped/)
+        .end();
+      await assert.rejects(fs.access(marker));
+      await run(x, ['approve-scripts', 'url-dep'])
+        .expect('code', 0)
+        .notExpect('stdout', /s3cret/)
+        .end();
+      const pkg = await helper.readJSON(path.join(root, 'package.json'));
+      assert.deepEqual(pkg.allowScripts, { [`http://127.0.0.1:${port}/url-dep/-/url-dep-1.0.0.tgz`]: true });
+
+      await fs.rm(path.join(root, 'node_modules'), { recursive: true, force: true });
+      await run(helper.npminstall, [])
+        .expect('code', 0)
+        .notExpect('stderr', /were skipped/)
+        .end();
+      await fs.access(marker);
     });
   });
 

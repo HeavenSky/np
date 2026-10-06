@@ -8,6 +8,7 @@ const npa = require('npm-package-arg');
 const parseArgs = require('minimist');
 const utils = require('../utils');
 const allowScripts = require('../allow_scripts');
+const { buildTriggers } = require('../download/git');
 const help = require('./help');
 
 module.exports = args => runCommand('approve-scripts', args);
@@ -73,8 +74,15 @@ async function main(command, args) {
   await fs.writeFile(pkgFile, JSON.stringify(rootPkg, null, indent) + (text.endsWith('\n') ? '\n' : ''));
   for (const key of changed.keys) console.log(deny ? chalk.yellow('denied %s') : chalk.green('approved %s'), key);
   if (!deny) {
-    const rebuildNames = [...new Set(changed.targets.map(item => item.name))].join(' ');
-    console.log('run npd-x rebuild %s to run their install scripts now', rebuildNames);
+    const rebuildNames = [...new Set(changed.targets.filter(item => item.rebuild).map(item => item.name))].join(' ');
+    if (rebuildNames) console.log('run npd-x rebuild %s to run their install scripts now', rebuildNames);
+    for (const item of changed.targets.filter(item => item.build && pending.includes(item))) {
+      console.log(
+        '%s is built only when it is fetched from git, remove %s and run npd again to build it',
+        item.displayName,
+        path.relative(root, item.dir)
+      );
+    }
   }
 }
 
@@ -135,7 +143,7 @@ function sameName(key, identity) {
   }
 }
 
-// 扫描 node_modules 下 _<name>@<version>@<name> 目录中带安装脚本(含 binding.gyp 隐式构建)的包; scope 包多一层目录
+// 扫描 node_modules 下 _<name>@<version>@<name> 目录中带安装脚本(含 binding.gyp 隐式构建)与 git 构建脚本的包; scope 包多一层目录
 async function listInstalledWithScripts(root) {
   const storeDir = path.join(root, 'node_modules');
   let entries;
@@ -158,13 +166,23 @@ async function listInstalledWithScripts(root) {
   for (const dir of dirs) {
     const pkg = await utils.readJSON(path.join(dir, 'package.json'));
     if (!pkg.name) continue;
-    const scripts = await allowScripts.pendingScripts(pkg, dir);
-    if (scripts.length === 0) continue;
     const identity = allowScripts.identityOfInstalled(pkg, dir);
     if (!identity) continue;
+    const installScripts = await allowScripts.pendingScripts(pkg, dir);
+    // git 依赖的构建与安装脚本按同一个键审核, 只有构建脚本的未放行 git 依赖同样出现在安装结束的提示里
+    const builds = identity.git && identity.git === pkg._resolved ? buildTriggers(pkg) : [];
+    if (installScripts.length === 0 && builds.length === 0) continue;
     const { name, version } = utils.parsePackageStorePath(dir) || pkg;
     const owner = pkg._scriptsOwner ? ` (declared by ${pkg._scriptsOwner})` : '';
-    result.push({ name, displayName: `${name}@${version}${owner}`, scripts, identity });
+    result.push({
+      name,
+      displayName: `${name}@${version}${owner}`,
+      scripts: [...new Set(installScripts.concat(builds))],
+      identity,
+      dir,
+      rebuild: installScripts.length > 0,
+      build: builds.length > 0,
+    });
   }
   return result;
 }

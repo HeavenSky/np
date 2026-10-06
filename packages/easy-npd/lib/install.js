@@ -68,8 +68,8 @@ async function _install(parentDir, pkg, ancestors, options, context) {
     options.spinner.text = `[${options.progresses.finishedInstallTasks}/${options.progresses.installTasks}] Installing ${pkg.name}@${pkg.version}`;
   }
   // 只有根项目, 受信本地包与 overrides / resolutions 声明的依赖受信; 其余依赖声明的本地路径必须按声明者目录解析并按声明者审核脚本, 否则未放行的包能借 file: 依赖执行脚本
-  const parent = ancestors[ancestors.length - 1];
-  const trusted = !parent || !!pkg.overridden || parent.trustedLocal;
+  const parent = ancestors[ancestors.length - 1] || options.rootDeclarer;
+  const trusted = !parent || (!!pkg.overridden && !options.rootDeclarer) || parent.trustedLocal;
   const where = trusted ? options.root : parent.where;
   let p = npa(pkg.name ? `${pkg.name}@${pkg.version}` : pkg.version, { where, nested: context.nested });
   const displayName = (p.displayName = utils.getDisplayName(pkg, ancestors));
@@ -176,6 +176,7 @@ async function _install(parentDir, pkg, ancestors, options, context) {
   const existingVersion = options.latestVersions.get(realPkg.name);
   if (!existingVersion || semver.gt(realPkg.version, existingVersion)) {
     options.latestVersions.set(realPkg.name, realPkg.version);
+    options.latestPackages.set(realPkg.name, realPkgDir);
   }
 
   // 已装好的包: 启用锁文件时仍遍历一次子依赖但不执行脚本, 否则这棵子树不会记进 np-lock.json, 完整安装时被当作无用条目删除

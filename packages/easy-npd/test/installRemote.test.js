@@ -32,7 +32,9 @@ describe('test/installRemote.test.js', () => {
     pkg = await helper.readJSON(path.join(root, 'node_modules', 'taffydb', 'package.json'));
     assert.equal(pkg.name, 'taffydb');
 
-    const dirs = await fs.readdir(path.join(root, 'node_modules'));
+    const dirs = (await fs.readdir(path.join(root, 'node_modules'))).map(dir =>
+      dir.replace(/\+url\.[0-9a-f]{8}@/, '+url.*@')
+    );
     assert.deepEqual(
       dirs.sort(),
       [
@@ -40,7 +42,7 @@ describe('test/installRemote.test.js', () => {
         'pedding',
         'taffydb',
         '_pedding@1.0.0@pedding',
-        '_taffydb@2.7.2@taffydb',
+        '_taffydb@2.7.2+url.*@taffydb',
         '.npd-state.json',
         '.package_versions.json',
       ].sort()
