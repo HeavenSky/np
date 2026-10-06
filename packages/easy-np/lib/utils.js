@@ -419,7 +419,9 @@ async function commandWithTimeout(script, options, timeout) {
   try {
     return await child;
   } catch (err) {
-    err.message = timedOut ? `${err.shortMessage}, timed out after ${timeout / 1000}s` : err.shortMessage || err.message;
+    err.message = timedOut
+      ? `${err.shortMessage}, timed out after ${timeout / 1000}s`
+      : err.shortMessage || err.message;
     throw err;
   } finally {
     clearTimeout(timer);

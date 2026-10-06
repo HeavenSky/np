@@ -94,7 +94,10 @@ function validate(policy, source, logger) {
     }
     const nameOnly = parsed.rawSpec === '' || parsed.rawSpec === '*';
     // 不带版本的包名被 npa 解析为 tag latest, 按名称处理
-    if (!nameOnly && (parsed.type === 'tag' || (parsed.type === 'range' && !isExactVersionDisjunction(parsed.fetchSpec)))) {
+    if (
+      !nameOnly &&
+      (parsed.type === 'tag' || (parsed.type === 'range' && !isExactVersionDisjunction(parsed.fetchSpec)))
+    ) {
       logger.warn(
         chalk.yellow('%s WARN %s: ignoring "%s", use the package name or exact versions joined by "||"'),
         BIN,
@@ -205,13 +208,7 @@ exports.report = options => {
     print(chalk.yellow('  - %s (%s)'), item.displayName, item.scripts.join(', '));
   }
   const names = [...new Set(pending.map(item => item.name))].join(' ');
-  print(
-    chalk.yellow('review them, then run: %s-x approve-scripts %s && %s-x rebuild %s'),
-    BIN,
-    names,
-    BIN,
-    names
-  );
+  print(chalk.yellow('review them, then run: %s-x approve-scripts %s && %s-x rebuild %s'), BIN, names, BIN, names);
   if (!state.strict) return null;
   const err = new Error(`install scripts of ${pending.length} package(s) are not reviewed in allowScripts`);
   err.code = 'EALLOWSCRIPTS';

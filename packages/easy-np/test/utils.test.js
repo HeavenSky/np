@@ -299,7 +299,13 @@ describe('test/utils.test.js', () => {
 
     it('should attach stderr to the error', async () => {
       await assert.rejects(
-        utils.runScript(tmp, nodeScript('console.error("prepare-detail"); process.exit(2)'), globalOptions, false, 10000),
+        utils.runScript(
+          tmp,
+          nodeScript('console.error("prepare-detail"); process.exit(2)'),
+          globalOptions,
+          false,
+          10000
+        ),
         err => err.stderr.includes('prepare-detail')
       );
     });

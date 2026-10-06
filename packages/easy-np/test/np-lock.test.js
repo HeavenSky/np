@@ -332,7 +332,10 @@ describe('test/np-lock.test.js', () => {
       await run(helper.npminstall, ['--frozen-lockfile']).expect('code', 0).end();
       assert.equal(await installedVersion('git-lock-demo'), '1.0.0');
       // 已装的就是锁定的 commit, 再次安装不重新克隆
-      await run(helper.npminstall, []).expect('code', 0).notExpect('stderr', /install git-lock-demo from git/).end();
+      await run(helper.npminstall, [])
+        .expect('code', 0)
+        .notExpect('stderr', /install git-lock-demo from git/)
+        .end();
     });
   }
 
@@ -346,7 +349,10 @@ describe('test/np-lock.test.js', () => {
     lock.packages[`pedding@${url}`].dist.integrity = 'sha512-tampered';
     await fs.writeFile(lockFile, JSON.stringify(lock));
     await fs.rm(path.join(tmp, 'node_modules'), { recursive: true, force: true });
-    await run(helper.npminstall, []).expect('code', 1).expect('stderr', /integrity mismatch/).end();
+    await run(helper.npminstall, [])
+      .expect('code', 1)
+      .expect('stderr', /integrity mismatch/)
+      .end();
   });
 
   it('should lock dependencies of every workspace', async () => {

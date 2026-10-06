@@ -13,7 +13,10 @@ describe('test/postInstallError.test.js', () => {
   afterEach(cleanup);
 
   it('should display error when post install', async () => {
-    await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ allowScripts: { 'postinstall-error': true } }));
+    await fs.writeFile(
+      path.join(root, 'package.json'),
+      JSON.stringify({ allowScripts: { 'postinstall-error': true } })
+    );
     let throwError = false;
     try {
       await npminstall({

@@ -75,7 +75,9 @@ describe('test/allow-scripts.test.js', () => {
         .expect('stderr', /np-x approve-scripts postinstall-hello && np-x rebuild postinstall-hello/)
         .end();
 
-      await run(x, ['approve-scripts', '--pending']).expect('stdout', /postinstall-hello@1.0.0 \(postinstall\)/).end();
+      await run(x, ['approve-scripts', '--pending'])
+        .expect('stdout', /postinstall-hello@1.0.0 \(postinstall\)/)
+        .end();
       await run(x, ['approve-scripts', 'postinstall-hello']).expect('code', 0).end();
       const pkg = await helper.readJSON(path.join(root, 'package.json'));
       assert.deepEqual(pkg.allowScripts, { 'postinstall-hello@1.0.0': true });
@@ -159,11 +161,17 @@ describe('test/allow-scripts.test.js', () => {
         path.join(root, 'package.json'),
         JSON.stringify({ name: 'root', version: '1.0.0', dependencies: { 'postinstall-hello': url } })
       );
-      await run(helper.npminstall, []).expect('code', 0).expect('stderr', /were skipped/).end();
+      await run(helper.npminstall, [])
+        .expect('code', 0)
+        .expect('stderr', /were skipped/)
+        .end();
       await run(x, ['approve-scripts', 'postinstall-hello']).expect('code', 0).end();
       const pkg = await helper.readJSON(path.join(root, 'package.json'));
       assert.deepEqual(pkg.allowScripts, { [url]: true });
-      await run(x, ['rebuild', 'postinstall-hello']).expect('code', 0).expect('stdout', /run on postinstall-hello/).end();
+      await run(x, ['rebuild', 'postinstall-hello'])
+        .expect('code', 0)
+        .expect('stdout', /run on postinstall-hello/)
+        .end();
     });
   });
 

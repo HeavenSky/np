@@ -96,7 +96,10 @@ function approveTargets(policy, installed, pending, names, argv) {
     for (const item of matched) {
       // 与 npm 一致: 已明确拒绝的包不会被重新放行, 要放行先手动删除 false 条目
       if (allowScripts.check(policy, item.identity) === false) {
-        console.warn(chalk.yellow('skip %s: denied by allowScripts, remove the false entry to approve it'), item.displayName);
+        console.warn(
+          chalk.yellow('skip %s: denied by allowScripts, remove the false entry to approve it'),
+          item.displayName
+        );
         continue;
       }
       targets.push(item);

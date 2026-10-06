@@ -1,6 +1,5 @@
 'use strict';
 
-const path = require('node:path');
 const assert = require('node:assert');
 const dependencies = require('./dependencies');
 

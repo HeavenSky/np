@@ -57,10 +57,16 @@ describe('test/prune.test.js', () => {
     assert(before.includes('debug@4.3.4'));
     assert(before.includes('pedding@1.1.0'));
 
-    await run(x, ['prune', '--dry-run']).expect('code', 0).expect('stdout', /would remove debug@4\.3\.4/).end();
+    await run(x, ['prune', '--dry-run'])
+      .expect('code', 0)
+      .expect('stdout', /would remove debug@4\.3\.4/)
+      .end();
     assert.deepEqual(await storeEntries(), before);
 
-    await run(x, ['prune']).expect('code', 0).expect('stdout', /removed debug@4\.3\.4/).end();
+    await run(x, ['prune'])
+      .expect('code', 0)
+      .expect('stdout', /removed debug@4\.3\.4/)
+      .end();
     const after = await storeEntries();
     assert.deepEqual(after, ['debug@3.2.7', 'ms@2.1.3']);
     const state = await helper.readJSON(path.join(store, '.np-state.json'));
