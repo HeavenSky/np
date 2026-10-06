@@ -49,11 +49,20 @@ function readPointer(pointer, pkg) {
   return fs.existsSync(bin) ? bin : null;
 }
 
-function fail(reason) {
+// 设置环境变量的写法随 shell 而不同, Windows 上按 PowerShell 与 cmd.exe 各给一行
+function setNodeGypHint(name) {
+  if (process.platform !== 'win32') return [`  export npm_config_node_gyp="$(npm root -g)/${name}/bin/node-gyp.js"`];
+  const bin = `${name.replace(/\//g, '\\')}\\bin\\node-gyp.js`;
+  return [
+    `  PowerShell: $env:npm_config_node_gyp = "$(npm root -g)\\${bin}"`,
+    `  cmd.exe:    for /f "delims=" %i in ('npm root -g') do set "npm_config_node_gyp=%i\\${bin}"`,
+  ];
+}
+
+function fail({ name, spec }, reason) {
   console.error('np ERROR %s', reason);
-  console.error(
-    'np ERROR install node-gyp manually with `npm i -g node-gyp`, then set npm_config_node_gyp to <npm root -g>/node-gyp/bin/node-gyp.js'
-  );
+  console.error('np ERROR install it manually and point npm_config_node_gyp at it, e.g.:');
+  console.error([`  npm i -g ${spec}`, ...setNodeGypHint(name)].join('\n'));
   process.exit(1);
 }
 
@@ -87,7 +96,7 @@ function install(baseDir, pointer, pkg) {
   }
   if (reason) {
     fs.rmSync(dir, { recursive: true, force: true });
-    fail(reason);
+    fail(pkg, reason);
   }
   const tmp = `${pointer}.${randomUUID()}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify({ spec: pkg.spec, dir: name }));

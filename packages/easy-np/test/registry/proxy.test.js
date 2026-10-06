@@ -88,9 +88,11 @@ describe('test/registry/proxy.test.js', () => {
 
   it('should keep strict ssl when --strict-ssl overrides the environment', () => {
     process.env.npm_config_strict_ssl = 'false';
+    process.env.GIT_SSL_NO_VERIFY = 'true';
     proxy.configure({ 'strict-ssl': true });
     assert.equal(proxy.tlsOptions(), undefined);
     assert.equal(process.env.npm_config_strict_ssl, 'true');
+    assert.equal(process.env.GIT_SSL_NO_VERIFY, undefined);
   });
 
   it('should pass an absolute --cafile to child processes', async () => {

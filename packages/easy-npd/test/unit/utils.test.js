@@ -442,6 +442,7 @@ describe('test/unit/utils.test.js', () => {
       );
       assert.equal(utils.redactUrl('https://h/a?v=1&access_token=abc'), 'https://h/a?v=1&access_token=***');
       assert.equal(utils.redactUrl('https://h/a?auth=abc&password=p'), 'https://h/a?auth=***&password=***');
+      assert.equal(utils.redactUrl('https://h/a?Token=abc&PASSWORD=p'), 'https://h/a?Token=***&PASSWORD=***');
       assert.equal(utils.redactUrl('https://h/a?mytoken=abc'), 'https://h/a?mytoken=abc');
     });
 

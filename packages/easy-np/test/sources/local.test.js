@@ -25,7 +25,7 @@ describe('test/sources/local.test.js', () => {
   });
 
   it('should install local folder with copy ok', async () => {
-    mm.error(utils, 'exec');
+    mm.error(utils, 'spawnWithTimeout');
     await npminstall({
       root,
       pkgs: [{ name: 'test', version: 'file:pkg' }],
@@ -170,10 +170,12 @@ describe('test/sources/local.test.js', () => {
     const [tmp, tmpCleanup] = helper.tmp();
     await tmpCleanup();
     const commands = [];
-    mm(utils, 'exec', async command => {
+    const unexpected = async command => {
       commands.push(command);
       throw new Error(`unexpected command: ${command}`);
-    });
+    };
+    mm(utils, 'exec', unexpected);
+    mm(utils, 'spawnWithTimeout', unexpected);
     try {
       const dep = path.join(tmp, 'dep');
       const app = path.join(tmp, 'app');
@@ -199,6 +201,37 @@ describe('test/sources/local.test.js', () => {
       assert.equal(await utils.exists(marker), false);
     } finally {
       mm.restore();
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('should pack a trusted local folder with npm pack when prepack prints more than 1 MB', async () => {
+    const npmVersion = (await utils.exec('npm --version', { timeout: 30000 })).stdout.trim();
+    if (!semver.gte(npmVersion, '7.18.0')) return;
+    const [tmp, tmpCleanup] = helper.tmp();
+    await tmpCleanup();
+    try {
+      const dep = path.join(tmp, 'dep');
+      const app = path.join(tmp, 'app');
+      await fs.mkdir(dep, { recursive: true });
+      await fs.mkdir(app, { recursive: true });
+      await fs.writeFile(
+        path.join(dep, 'package.json'),
+        JSON.stringify({
+          name: 'dep',
+          version: '1.0.0',
+          files: ['index.js', 'built.js'],
+          scripts: {
+            prepack: `node -e "process.stdout.write('x'.repeat(2 * 1024 * 1024)); require('fs').writeFileSync('built.js', '')"`,
+          },
+        })
+      );
+      await fs.writeFile(path.join(dep, 'index.js'), '');
+      await fs.writeFile(path.join(app, 'package.json'), JSON.stringify({ name: 'app', version: '1.0.0' }));
+      await npminstall({ root: app, pkgs: [{ name: null, version: `file:${dep}` }] });
+      const files = (await fs.readdir(path.join(app, 'node_modules/dep'))).sort();
+      assert.deepEqual(files, ['built.js', 'index.js', 'package.json']);
+    } finally {
       await fs.rm(tmp, { recursive: true, force: true });
     }
   });

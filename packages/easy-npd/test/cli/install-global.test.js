@@ -113,6 +113,8 @@ describe('test/cli/install-global.test.js', () => {
         coffee.fork(helper.npminstall, [`--prefix=${tmp}`, `--registry=${registry.prefix}`, '-g', ...args]).debug();
       await install(['global-host'])
         .expect('stderr', /inner@file:\.\/inner \(declared by global-host@1\.0\.0\)/)
+        .expect('stderr', /reinstall with: npd -g "--allow-scripts=global-host@1\.0\.0" global-host/)
+        .notExpect('stderr', /approve-scripts/)
         .expect('code', 0)
         .end();
       assert(await exists(path.join(libDir, 'node_modules/global-host/node_modules/inner/package.json')));

@@ -260,7 +260,12 @@ async function needInstall(parentDir, childPkg, options) {
       // 启用锁文件时已装的根依赖仍要走一遍安装, 否则子依赖不会按锁定版本校正, 也不会记进 np-lock.json; 已装的就是锁定版本时只是不删链接
       const locked =
         options.lockPackages && npLock.lookup(options.cache.dependenciesTree, `${childPkg.name}@${childPkg.version}`);
-      if (semver.validRange(childPkg.version, true) && semver.satisfies(pkg.version, childPkg.version)) {
+      // 声明从 git / url / 本地路径改回 registry 版本时, 版本满足范围的旧包也要换成 registry 包
+      if (
+        semver.validRange(childPkg.version, true) &&
+        semver.satisfies(pkg.version, childPkg.version) &&
+        !utils.isNonRegistryInstall(pkg)
+      ) {
         if (!options.lockPackages) return false;
         if (locked && locked.version === pkg.version) return true;
       }

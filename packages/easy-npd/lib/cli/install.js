@@ -563,9 +563,12 @@ async function writeLockfile(root, lockState, config, { full }) {
   }
 }
 
+const NPM_CONFIG_TIMEOUT = 30 * 1000;
 function getVersionSavePrefix() {
   try {
-    return execSync('npm config get save-prefix').toString().trim();
+    return execSync('npm config get save-prefix', { timeout: NPM_CONFIG_TIMEOUT, stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
   } catch (err) {
     debug(`exec npm config get save-prefix ERROR: ${err.message}`);
     return '^';

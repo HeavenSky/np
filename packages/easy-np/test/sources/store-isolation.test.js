@@ -34,6 +34,44 @@ describe('test/sources/store-isolation.test.js', () => {
     fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'app', version: '1.0.0', dependencies }));
   const readInstalled = (name, file) => fs.readFile(path.join(root, 'node_modules', name, file), 'utf8');
 
+  it('should reinstall a local folder whose content changed without a version bump', async () => {
+    const localDir = path.join(root, 'local-demo');
+    await fs.mkdir(localDir, { recursive: true });
+    await fs.writeFile(path.join(localDir, 'package.json'), JSON.stringify({ name: 'local-demo', version: '1.0.0' }));
+    await fs.writeFile(path.join(localDir, 'index.js'), 'one');
+    await writeRootPkg({ 'local-demo': 'file:./local-demo' });
+    await npminstall({ root });
+    assert.equal(await readInstalled('local-demo', 'index.js'), 'one');
+
+    await fs.writeFile(path.join(localDir, 'index.js'), 'two');
+    await npminstall({ root });
+    assert.equal(await readInstalled('local-demo', 'index.js'), 'two');
+    const entries = (await fs.readdir(store)).filter(entry => entry.startsWith('local-demo@'));
+    assert.equal(entries.length, 1, entries.join(', '));
+  });
+
+  it('should not reuse a store directory without source suffix that holds a git package', async () => {
+    await writeRootPkg({ pedding: '1.1.0' });
+    await npminstall({ root });
+    const dir = path.join(store, 'pedding@1.1.0/node_modules/pedding');
+    const pkg = JSON.parse(await fs.readFile(path.join(dir, 'package.json'), 'utf8'));
+    // 模拟来源后缀出现之前由 git 依赖装进同一目录的包
+    await fs.writeFile(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        ...pkg,
+        _from: 'pedding@git+https://example.com/pedding.git',
+        _resolved: 'git+https://example.com/pedding.git#0123456789abcdef0123456789abcdef01234567',
+      })
+    );
+    await fs.writeFile(path.join(dir, 'index.js'), 'module.exports = "fake";');
+
+    await npminstall({ root });
+    assert.notEqual(await readInstalled('pedding', 'index.js'), 'module.exports = "fake";');
+    const installed = JSON.parse(await readInstalled('pedding', 'package.json'));
+    assert.equal(installed._from, 'pedding@1.1.0');
+  });
+
   if (process.platform !== 'win32') {
     it('should install the new commit of a git dependency whose version is unchanged', async () => {
       await commitRepo(repo, { 'package.json': { name: 'src-demo', version: '1.0.0' }, 'index.js': 'one' });
@@ -67,8 +105,6 @@ describe('test/sources/store-isolation.test.js', () => {
         const real = await fs.realpath(path.join(root, 'node_modules/pedding'));
         assert.match(path.relative(store, real), new RegExp(`^pedding@1\\.1\\.0\\+${source}\\.[a-f0-9]{8}`));
 
-        // 已装的版本满足声明时 needInstall 保留它, 删掉链接让 registry 包重新经过 store
-        await fs.unlink(path.join(root, 'node_modules/pedding'));
         await writeRootPkg({ pedding: '1.1.0' });
         await npminstall({ root });
         assert.notEqual(await readInstalled('pedding', 'index.js'), 'module.exports = "fake";');

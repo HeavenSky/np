@@ -134,6 +134,8 @@ describe('test/cli/install-global.test.js', () => {
       await coffee
         .fork(helper.npminstall, args, { env })
         .expect('stderr', /inner@file:\.\/inner \(declared by glob-host@1\.0\.0\) \(postinstall\)/)
+        .expect('stderr', /reinstall with: np -g "--allow-scripts=glob-host@1\.0\.0" glob-host/)
+        .notExpect('stderr', /approve-scripts/)
         .expect('code', 0)
         .end();
       assert(await exists(path.join(libDir, 'node_modules/glob-host/node_modules/inner/package.json')));

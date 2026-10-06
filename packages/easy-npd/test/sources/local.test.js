@@ -30,7 +30,7 @@ describe('test/sources/local.test.js', () => {
   });
 
   it('should install local folder with copy ok', async () => {
-    mm.error(utils, 'exec');
+    mm.error(utils, 'spawnWithTimeout');
     await npminstall({
       root,
       pkgs: [{ name: null, version: 'file:pkg' }],
@@ -250,6 +250,17 @@ describe('test/sources/local.test.js', () => {
     it('should pack a trusted local folder with npm pack on npm 7+', async function () {
       const npmVersion = execSync('npm --version', { timeout: 30000 }).toString().trim();
       if (semver.major(npmVersion) < 7) this.skip();
+      await npminstall({ root: app, pkgs: [{ name: null, version: `file:${lib}` }] });
+      assert.deepEqual(await installedFiles(), ['index.js', 'package.json']);
+      assert.equal(await prepacked(), true);
+    });
+
+    it('should keep npm pack when prepack prints more than 1 MB', async function () {
+      const npmVersion = execSync('npm --version', { timeout: 30000 }).toString().trim();
+      if (semver.major(npmVersion) < 7) this.skip();
+      const pkg = await helper.readJSON(path.join(lib, 'package.json'));
+      pkg.scripts.prepack = `node -e "process.stdout.write('x'.repeat(2 * 1024 * 1024))" && ${pkg.scripts.prepack}`;
+      await fs.writeFile(path.join(lib, 'package.json'), JSON.stringify(pkg));
       await npminstall({ root: app, pkgs: [{ name: null, version: `file:${lib}` }] });
       assert.deepEqual(await installedFiles(), ['index.js', 'package.json']);
       assert.equal(await prepacked(), true);

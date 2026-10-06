@@ -190,6 +190,9 @@ exports.allow = (options, identity, { displayName, name, scripts }) => {
   return false;
 };
 
+// 双引号在 POSIX shell, PowerShell 与 cmd.exe 中都能括住空格与 ^ < > | , = 等字符
+const shellArg = arg => (/^[\w@:./~-]+$/.test(arg) ? arg : `"${arg}"`);
+
 // 打印并清空本次跳过的列表; 严格模式下有未审核的包时返回错误, 由调用方计入失败
 exports.report = options => {
   const state = options.scriptPolicy;
@@ -207,8 +210,20 @@ exports.report = options => {
   for (const item of pending) {
     print(chalk.yellow('  - %s (%s)'), item.displayName, item.scripts.join(', '));
   }
-  const names = [...new Set(pending.map(item => item.name))].join(' ');
-  print(chalk.yellow('review them, then run: %s-x approve-scripts %s && %s-x rebuild %s'), BIN, names, BIN, names);
+  if (options.globalSpec) {
+    // approve-scripts 与 rebuild 不支持 -g; 命令行的 --allow-scripts 整体覆盖 ~/.nprc, 重装时要带上已放行的条目
+    const allowed = Object.keys(state.policy || {}).filter(key => state.policy[key] === true);
+    const keys = [...new Set([...allowed, ...pending.map(item => item.key)])].join(',');
+    print(
+      chalk.yellow('review them, then reinstall with: %s -g %s %s'),
+      BIN,
+      shellArg(`--allow-scripts=${keys}`),
+      shellArg(options.globalSpec)
+    );
+  } else {
+    const names = [...new Set(pending.map(item => item.name))].join(' ');
+    print(chalk.yellow('review them, then run: %s-x approve-scripts %s && %s-x rebuild %s'), BIN, names, BIN, names);
+  }
   if (!state.strict) return null;
   const err = new Error(`install scripts of ${pending.length} package(s) are not reviewed in allowScripts`);
   err.code = 'EALLOWSCRIPTS';

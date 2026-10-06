@@ -321,7 +321,12 @@ async function needInstall(parentDir, childPkg, options) {
       const locked =
         options.lockPackages &&
         utils.lockedEntry(options.cache.dependenciesTree, `${childPkg.name}@${childPkg.version}`);
-      if (semver.validRange(childPkg.version, true) && utils.fastSemverSatisfies(pkg.version, childPkg.version)) {
+      // 声明从 git / url / 本地路径改回 registry 版本时, 版本满足范围的旧包也要换成 registry 包
+      if (
+        semver.validRange(childPkg.version, true) &&
+        utils.fastSemverSatisfies(pkg.version, childPkg.version) &&
+        !utils.isNonRegistryInstall(pkg)
+      ) {
         if (!options.lockPackages) return false;
         if (locked && locked.version === pkg.version) return true;
       }

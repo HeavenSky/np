@@ -44,6 +44,7 @@ exports.configure = (argv = {}) => {
     process.env.GIT_SSL_NO_VERIFY = 'true';
   } else if (argv['strict-ssl'] === true) {
     process.env.npm_config_strict_ssl = 'true';
+    delete process.env.GIT_SSL_NO_VERIFY;
   }
   setEnv(['npm_config_cafile', 'GIT_SSL_CAINFO'], cafile);
 

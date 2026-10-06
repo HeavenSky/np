@@ -48,7 +48,7 @@ async function localFolder(filepath, pkg, meta, source, options) {
         tarball = await npmPack(filepath, tmpDir);
       } catch (err) {
         options.console.warn(
-          `[npd:download:local] install ${pkg.displayName} from local folder ${filepath} with npm pack failed(${err.message}), use copy`
+          `[npd:download:local] install ${pkg.displayName} from local folder ${filepath} with npm pack failed(${err.message}), use copy${stderrTail(err)}`
         );
       }
       if (tarball) return await localTarball(tarball, pkg, meta, source, options);
@@ -56,7 +56,9 @@ async function localFolder(filepath, pkg, meta, source, options) {
     const packageDir = path.join(tmpDir, 'package');
     await utils.copyPackFiles(filepath, packageDir);
     const pkgFile = path.join(packageDir, 'package.json');
-    if (await utils.exists(pkgFile)) await utils.addMetaToJSONFile(pkgFile, meta);
+    if (await utils.exists(pkgFile)) {
+      await utils.addMetaToJSONFile(pkgFile, { ...meta, _contentHash: await utils.hashDir(packageDir) });
+    }
     return await utils.copyInstall(packageDir, options, source);
   } finally {
     await removeTmpDir(tmpDir, pkg, options);
@@ -75,8 +77,17 @@ function npmMajor() {
   return npmMajorVersion;
 }
 
+function stderrTail(err) {
+  return err.stderr ? `\n${String(err.stderr).trim().split('\n').slice(-5).join('\n')}` : '';
+}
+
 async function npmPack(filepath, dest) {
-  await utils.exec(`npm pack --pack-destination "${dest}"`, { cwd: filepath, timeout: NPM_PACK_TIMEOUT });
+  await utils.spawnWithTimeout(`npm pack --pack-destination "${dest}"`, [], {
+    cwd: filepath,
+    timeout: NPM_PACK_TIMEOUT,
+    name: 'npm pack',
+    shell: true,
+  });
   // prepack / prepare 的输出也写在 stdout 里, 文件名只能从空的输出目录取
   const tarballs = (await fs.readdir(dest)).filter(file => file.endsWith('.tgz'));
   if (tarballs.length !== 1) throw new Error(`npm pack created ${tarballs.length} tarballs in ${dest}`);
@@ -92,7 +103,9 @@ async function localTarball(filepath, pkg, meta, source, options) {
   try {
     await utils.unpack(readstream, ungzipDir, pkg);
     const pkgFile = path.join(ungzipDir, 'package.json');
-    if (await utils.exists(pkgFile)) await utils.addMetaToJSONFile(pkgFile, meta);
+    if (await utils.exists(pkgFile)) {
+      await utils.addMetaToJSONFile(pkgFile, { ...meta, _contentHash: await utils.hashDir(ungzipDir) });
+    }
     return await utils.copyInstall(ungzipDir, options, source);
   } finally {
     await removeTmpDir(ungzipDir, pkg, options);

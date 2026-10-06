@@ -21,6 +21,7 @@ const destroy = require('destroy');
 const normalizeData = require('normalize-package-data');
 const normalizeBin = require('npm-normalize-package-bin');
 const packlist = require('npm-packlist');
+const npa = require('npm-package-arg');
 const semver = require('semver');
 const installState = require('./install_state');
 const globalConfig = require('./config');
@@ -501,6 +502,55 @@ exports.trackChildProcess = pid => {
   };
 };
 
+// 超时或本进程退出时结束整个子进程树; 错误带上 stderr 供调用方附在报错末尾; shell 为 true 时 cmd 是完整的命令行
+exports.spawnWithTimeout = (cmd, args, { cwd, env, timeout, name, shell }) => {
+  return new Promise((resolve, reject) => {
+    const child = cp.spawn(cmd, args, {
+      cwd,
+      env,
+      shell,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+      detached: process.platform !== 'win32',
+    });
+    const untrack = exports.trackChildProcess(child.pid);
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+    let settled = false;
+    child.stdout.setEncoding('utf8').on('data', data => (stdout += data));
+    child.stderr.setEncoding('utf8').on('data', data => (stderr += data));
+    const timer = setTimeout(() => {
+      timedOut = true;
+      exports.killProcessTree(child.pid);
+    }, timeout);
+    const finish = err => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      untrack();
+      if (err) {
+        err.stderr = stderr;
+        reject(err);
+      } else {
+        resolve({ stdout, stderr });
+      }
+    };
+    child.on('error', finish);
+    child.on('close', (code, signal) => {
+      if (timedOut) {
+        finish(new Error(`${name} timed out after ${timeout / 1000}s`));
+      } else if (code !== 0) {
+        const err = new Error(`${name} exited with ${signal ? `signal ${signal}` : `code ${code}`}`);
+        err.exitCode = code;
+        finish(err);
+      } else {
+        finish();
+      }
+    });
+  });
+};
+
 exports.getMaxRange = spec => {
   // >=1.0.0 <2.0.0
   const r = /^>=.*?<(.*?)$/.exec(spec);
@@ -712,6 +762,38 @@ exports.unpack = (readstream, target, pkg) => {
   });
 };
 
+const NON_REGISTRY_SPEC_TYPES = new Set(['git', 'remote', 'file', 'directory']);
+// 按安装时写入的 _from / _resolved 判断包是否来自 git, tarball url 或本地路径; 没有这两个字段的包(npm 等工具装出)按 registry 包处理
+exports.isNonRegistryInstall = pkg => {
+  if (typeof pkg._resolved === 'string' && /^(?:git[+:]|file:)/.test(pkg._resolved)) return true;
+  if (typeof pkg._from !== 'string') return false;
+  try {
+    return NON_REGISTRY_SPEC_TYPES.has(npa(pkg._from).type);
+  } catch {
+    return false;
+  }
+};
+
+// 目录内全部文件的相对路径与内容的摘要, 与时间戳和权限无关; 符号链接不计入
+exports.hashDir = async dir => {
+  const hash = crypto.createHash('sha1');
+  const walk = async relative => {
+    const entries = await fs.readdir(path.join(dir, relative), { withFileTypes: true });
+    entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    for (const entry of entries) {
+      const file = relative ? `${relative}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        await walk(file);
+      } else if (entry.isFile()) {
+        const content = await fs.readFile(path.join(dir, file));
+        hash.update(`${file}\0${content.length}\0`).update(content);
+      }
+    }
+  };
+  await walk('');
+  return hash.digest('hex');
+};
+
 exports.copyInstall = async (src, options, suffix) => {
   // 1. make sure source folder has package.json, and package.json contains name
   // 2. get the target directory: $storeDir/${pkg.name}/${pkg.version}
@@ -750,7 +832,11 @@ exports.copyInstall = async (src, options, suffix) => {
     done: false,
   };
 
-  if (!(await exports.isInstallDone(targetdir))) {
+  // 本地包的版本号与路径不变时内容也可能变了, 已安装的目录要按内容摘要判断能否复用
+  const outdated = async () =>
+    !!realPkg._contentHash &&
+    (await exports.readJSON(path.join(targetdir, 'package.json')))._contentHash !== realPkg._contentHash;
+  if (!(await exports.isInstallDone(targetdir)) || (await outdated())) {
     await exports.mkdirp(targetdir);
     await installState.reset(targetdir);
     await fse.emptyDir(targetdir);

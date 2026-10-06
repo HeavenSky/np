@@ -43,8 +43,9 @@ exports.configure = (argv = {}) => {
     process.env.npm_config_strict_ssl = 'false';
     process.env.GIT_SSL_NO_VERIFY = 'true';
   } else if (argv['strict-ssl'] === true) {
-    // 命令行显式开启时覆盖继承来的 false, 否则子进程(node-gyp 等)仍关闭证书校验
+    // 命令行显式开启时覆盖继承来的关闭设置, 否则子进程(node-gyp, git 等)仍不校验证书
     process.env.npm_config_strict_ssl = 'true';
+    delete process.env.GIT_SSL_NO_VERIFY;
   }
   setEnv(['npm_config_cafile', 'GIT_SSL_CAINFO'], cafile);
 

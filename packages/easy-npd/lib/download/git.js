@@ -2,7 +2,6 @@
 
 const path = require('path');
 const fs = require('fs/promises');
-const { spawn } = require('child_process');
 const { randomUUID } = require('crypto');
 const chalk = require('chalk');
 const npa = require('npm-package-arg');
@@ -351,7 +350,12 @@ async function prepareRepo(dir, resolved, options) {
   for (const field of CNPM_DEP_FIELDS) delete npmPkg[field];
   await fs.writeFile(pkgFile, JSON.stringify(npmPkg, null, 2));
   try {
-    await run(process.execPath, args, { cwd: dir, env, timeout: PREPARE_TIMEOUT, name: 'git dep preparation' });
+    await utils.spawnWithTimeout(process.execPath, args, {
+      cwd: dir,
+      env,
+      timeout: PREPARE_TIMEOUT,
+      name: 'git dep preparation',
+    });
   } finally {
     await fs.writeFile(pkgFile, content);
   }
@@ -366,7 +370,12 @@ async function git(args, cwd, timeout) {
   }
   for (let attempt = 0; ; attempt++) {
     try {
-      return await run('git', [...prefix, ...args], { cwd, env, timeout, name: `git ${args[0]}` });
+      return await utils.spawnWithTimeout('git', [...prefix, ...args], {
+        cwd,
+        env,
+        timeout,
+        name: `git ${args[0]}`,
+      });
     } catch (err) {
       const stderr = err.stderr || '';
       if (PATHSPEC_ERROR_RE.test(stderr)) {
@@ -382,53 +391,4 @@ async function git(args, cwd, timeout) {
       throw err;
     }
   }
-}
-
-// 超时或本进程退出时结束整个子进程树; 错误带上 stderr 供调用方附在报错末尾
-function run(cmd, args, { cwd, env, timeout, name }) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, {
-      cwd,
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-      detached: process.platform !== 'win32',
-    });
-    const killTree = () => utils.killProcessTree(child.pid);
-    const untrack = utils.trackChildProcess(child.pid);
-    let stdout = '';
-    let stderr = '';
-    let timedOut = false;
-    let settled = false;
-    child.stdout.setEncoding('utf8').on('data', data => (stdout += data));
-    child.stderr.setEncoding('utf8').on('data', data => (stderr += data));
-    const timer = setTimeout(() => {
-      timedOut = true;
-      killTree();
-    }, timeout);
-    const finish = err => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      untrack();
-      if (err) {
-        err.stderr = stderr;
-        reject(err);
-      } else {
-        resolve({ stdout, stderr });
-      }
-    };
-    child.on('error', finish);
-    child.on('close', (code, signal) => {
-      if (timedOut) {
-        finish(new Error(`${name} timed out after ${timeout / 1000}s`));
-      } else if (code !== 0) {
-        const err = new Error(`${name} exited with ${signal ? `signal ${signal}` : `code ${code}`}`);
-        err.exitCode = code;
-        finish(err);
-      } else {
-        finish();
-      }
-    });
-  });
 }

@@ -407,7 +407,11 @@ async function download(pkg, options) {
     done: false,
   };
 
-  if (await utils.isInstallDone(ungzipDir)) {
+  const done = await utils.isInstallDone(ungzipDir);
+  // 来源后缀出现之前, git / url / 本地包装在不带后缀的同一目录里, 不能当作 registry 包复用
+  if (done && utils.isNonRegistryInstall(await utils.readJSON(path.join(ungzipDir, 'package.json')))) {
+    await utils.rimraf(ungzipDir);
+  } else if (done) {
     // 上次安装中断或失败的包带回阶段, 由本次运行第一个到达的调用方继续安装; 继续执行脚本需要解压出的 scripts
     const stage = await utils.getResumeStage(ungzipDir, options);
     if (stage) await mergePackageMeta(pkg, ungzipDir, options);

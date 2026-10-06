@@ -202,7 +202,7 @@ npm i -g easy-npd
 
 ## node_modules 布局
 
-包实体位于 `node_modules/_<name>@<version>@<name>`, 依赖链接在各自的 `node_modules` 下; 每个包的最高版本另链接到根 `node_modules/<name>`. git, tarball url 与本地依赖的版本号后带来源后缀: `+git.<commit 前 8 位>`, `+url.<integrity 的 sha1 前 8 位>`, `+file.<源路径的 sha1 前 8 位>`(例如 `_foo@1.0.0+git.1a2b3c4d@foo`), 不与同名同版本的 registry 包共用目录, 同一版本号换了 commit 或内容也装到新目录.
+包实体位于 `node_modules/_<name>@<version>@<name>`, 依赖链接在各自的 `node_modules` 下; 每个包的最高版本另链接到根 `node_modules/<name>`. git, tarball url 与本地依赖的版本号后带来源后缀: `+git.<commit 前 8 位>`, `+url.<integrity 的 sha1 前 8 位>`, `+file.<源路径的 sha1 前 8 位>`(例如 `_foo@1.0.0+git.1a2b3c4d@foo`), 不与同名同版本的 registry 包共用目录, git / url 依赖同一版本号换了 commit 或内容时装到新目录; 本地依赖按路径区分, 内容变了而版本号不变时按内容摘要发现变化, 在原目录重新安装.
 
 ## Node.js 版本与能力
 

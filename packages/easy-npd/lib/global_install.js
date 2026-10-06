@@ -69,6 +69,8 @@ module.exports = async (options, context) => {
         root: targetDir,
         // don't install devDeps
         production: true,
+        // allowScripts 汇总按它给出重装命令
+        globalSpec: pkg.arg ? pkg.arg.raw : p.raw,
       });
       // 被装的包不是用户的项目: 它声明的本地依赖与 overrides 按不受信处理, 脚本要放行它本身(registry 身份)才执行; 用户指定的本地目录除外
       const identity = allowScripts.identityOf(p.type, result.package, p.fetchSpec);

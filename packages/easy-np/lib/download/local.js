@@ -9,7 +9,6 @@ const utils = require('../utils');
 
 const NPM_VERSION_TIMEOUT = 30 * 1000;
 const NPM_PACK_TIMEOUT = 30 * 60 * 1000;
-const NPM_PACK_MAX_BUFFER = 64 * 1024 * 1024;
 
 module.exports = async (pkg, options) => {
   const { fetchSpec, displayName } = pkg;
@@ -42,15 +41,16 @@ async function localFolder(filepath, pkg, options, meta, suffix) {
   try {
     let tarball;
     try {
-      await utils.exec(`npm pack --pack-destination "${tmpDir}"`, {
+      await utils.spawnWithTimeout(`npm pack --pack-destination "${tmpDir}"`, [], {
         cwd: filepath,
         timeout: NPM_PACK_TIMEOUT,
-        maxBuffer: NPM_PACK_MAX_BUFFER,
+        name: 'npm pack',
+        shell: true,
       });
       tarball = await packedTarball(tmpDir);
     } catch (err) {
       options.console.warn(
-        `[np:download:local] install ${pkg.displayName} from local folder ${filepath} with npm pack failed(${err.message}), use copy`
+        `[np:download:local] install ${pkg.displayName} from local folder ${filepath} with npm pack failed(${err.message}), use copy${stderrTail(err)}`
       );
       return await copyFolder(filepath, options, meta, suffix);
     }
@@ -58,6 +58,10 @@ async function localFolder(filepath, pkg, options, meta, suffix) {
   } finally {
     await utils.rimraf(tmpDir);
   }
+}
+
+function stderrTail(err) {
+  return err.stderr ? `\n${String(err.stderr).trim().split('\n').slice(-5).join('\n')}` : '';
 }
 
 // 从专用的输出目录取 tarball, 不解析 stdout: prepack 等脚本的输出也在 stdout 里, --json 的结构随 npm 版本变化
@@ -86,7 +90,9 @@ async function copyFolder(filepath, options, meta, suffix) {
   try {
     await utils.copyPackFiles(filepath, tmpDir);
     const pkgFile = path.join(tmpDir, 'package.json');
-    if (await utils.exists(pkgFile)) await utils.addMetaToJSONFile(pkgFile, meta);
+    if (await utils.exists(pkgFile)) {
+      await utils.addMetaToJSONFile(pkgFile, { ...meta, _contentHash: await utils.hashDir(tmpDir) });
+    }
     return await utils.copyInstall(tmpDir, options, suffix);
   } finally {
     await utils.rimraf(tmpDir);
@@ -102,7 +108,9 @@ async function localTarball(filepath, pkg, options, meta, suffix) {
   try {
     await utils.unpack(readstream, ungzipDir, pkg);
     const pkgFile = path.join(ungzipDir, 'package.json');
-    if (await utils.exists(pkgFile)) await utils.addMetaToJSONFile(pkgFile, meta);
+    if (await utils.exists(pkgFile)) {
+      await utils.addMetaToJSONFile(pkgFile, { ...meta, _contentHash: await utils.hashDir(ungzipDir) });
+    }
     return await utils.copyInstall(ungzipDir, options, suffix);
   } finally {
     // clean up

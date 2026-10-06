@@ -217,7 +217,7 @@ npm i -g easy-np
 ## node_modules 布局
 
 - 包实体位于 `node_modules/.store/<name>@<version>/node_modules/<name>`; 每个包的最高版本另链接到 `node_modules/.store/node_modules`, 供 peerDependencies 回退解析.
-- git, tarball url 与本地目录 / tarball 文件安装的包在版本号后附加来源标识: `<name>@<version>+git.<commit 前 8 位>`, `+url.<integrity 的 sha1 前 8 位>`, `+file.<绝对路径的 sha1 前 8 位>`(版本号已带 `+build` 时以 `.` 接在其后). 它们自称与 registry 包同名同版本时不会占用 registry 包的目录; 同一 git / url 依赖版本号不变而内容更新时装到新目录. 本地依赖按路径区分, 同一路径内容更新而版本号不变时仍复用已装的目录.
+- git, tarball url 与本地目录 / tarball 文件安装的包在版本号后附加来源标识: `<name>@<version>+git.<commit 前 8 位>`, `+url.<integrity 的 sha1 前 8 位>`, `+file.<绝对路径的 sha1 前 8 位>`(版本号已带 `+build` 时以 `.` 接在其后). 它们自称与 registry 包同名同版本时不会占用 registry 包的目录; 同一 git / url 依赖版本号不变而内容更新时装到新目录. 本地依赖按路径区分, 同一路径内容更新而版本号不变时按内容摘要发现变化, 在原目录重新安装.
 - 根目录只放直接依赖与被提升的包.
 - 完整安装会用本次结果替换上次的提升链接, 可能降级; `np <pkg>`, `-w`, `--workspaces` 只升级不降级.
 

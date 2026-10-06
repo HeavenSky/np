@@ -370,12 +370,15 @@ describe('test/unit/utils.test.js', () => {
         if (process.platform === 'win32') this.skip();
         const pidFile = path.join(tmp, 'grandchild.pid');
         const childCode = `const c = require("child_process").spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" }); require("fs").writeFileSync(${JSON.stringify(pidFile)}, String(c.pid)); setInterval(() => {}, 1000);`;
+        // 孙进程可能先于 driver 执行完 trackChildProcess 写出 pid 文件, 只等 pid 文件就发信号会落到默认处理而直接结束 driver
+        const readyFile = path.join(tmp, 'driver.ready');
         const driver = path.join(tmp, 'driver.js');
         await fs.writeFile(
           driver,
           `const utils = require(${JSON.stringify(require.resolve('../../lib/utils'))});
 const child = require('child_process').spawn(process.execPath, ['-e', ${JSON.stringify(childCode)}], { detached: true, stdio: 'ignore' });
 utils.trackChildProcess(child.pid);
+require('fs').writeFileSync(${JSON.stringify(readyFile)}, '');
 setInterval(() => {}, 1000);`
         );
         const proc = spawn(process.execPath, [driver], { stdio: 'ignore' });
@@ -384,11 +387,17 @@ setInterval(() => {}, 1000);`
         );
         let pid;
         try {
-          for (let i = 0; i < 100 && !pid; i++) {
+          let ready = false;
+          for (let i = 0; i < 100 && !(pid && ready); i++) {
             await utils.sleep(100);
             pid = Number(await fs.readFile(pidFile, 'utf8').catch(() => '')) || undefined;
+            ready = await fs.access(readyFile).then(
+              () => true,
+              () => false
+            );
           }
           assert(pid, 'grandchild did not start');
+          assert(ready, 'driver did not track the child');
           proc.kill(signal);
           assert.deepEqual(await exited, { exitCode: code, exitSignal: null });
           await utils.sleep(200);

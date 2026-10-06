@@ -85,13 +85,23 @@ function removeOrphans(root) {
   }
 }
 
+// 设置环境变量的写法随 shell 而不同, Windows 上按 PowerShell 与 cmd.exe 各给一行
+function setNodeGypHint(name) {
+  if (process.platform !== 'win32') return [`  export npm_config_node_gyp="$(npm root -g)/${name}/bin/node-gyp.js"`];
+  const bin = `${name.replace(/\//g, '\\')}\\bin\\node-gyp.js`;
+  return [
+    `  PowerShell: $env:npm_config_node_gyp = "$(npm root -g)\\${bin}"`,
+    `  cmd.exe:    for /f "delims=" %i in ('npm root -g') do set "npm_config_node_gyp=%i\\${bin}"`,
+  ];
+}
+
 function fail({ name, spec }, reason) {
   process.stderr.write(
     [
       `npd ERROR install ${spec} for node-gyp failed: ${reason}`,
       `npd ERROR install it manually and point npm_config_node_gyp at it, e.g.:`,
       `  npm i -g ${spec}`,
-      `  export npm_config_node_gyp="$(npm root -g)/${name}/bin/node-gyp.js"`,
+      ...setNodeGypHint(name),
       '',
     ].join('\n')
   );
