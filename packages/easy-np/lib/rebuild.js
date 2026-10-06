@@ -28,10 +28,14 @@ module.exports = async options => {
   for (const { pkg, dir } of targets) {
     const displayName = `${pkg.name}@${pkg.version}`;
     try {
-      // git 依赖按解析出的仓库地址比对 allowScripts
-      const isGit = pkg._resolved && /^git[+:]/.test(pkg._resolved);
-      const origin = { name: pkg.name, version: isGit ? pkg._resolved : pkg.version };
+      // 与安装时一致要在 allowScripts 中放行: git 与 url 依赖按 package.json 记录的解析地址比对
+      const identity = allowScripts.identityOfInstalled(pkg);
+      const origin = { name: pkg.name, version: identity.git || identity.url || pkg.version };
+      const { skipped } = allowScripts.ensure(options);
+      const skippedBefore = skipped.length;
       await runLifecycleScripts(pkg, dir, origin, displayName, options, 'preinstall');
+      // 未放行时脚本没有执行, 阶段标记保持原样, 由结束时的跳过列表提示如何放行
+      if (skipped.length > skippedBefore) continue;
       await utils.setInstallStage(dir);
       options.console.info(chalk.green('rebuilt %s'), displayName);
     } catch (err) {

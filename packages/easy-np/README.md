@@ -26,6 +26,7 @@ npm i -g easy-np
 | `np-x fetch`          | 无                        | 只下载并解压指定的包, 不安装依赖, 不执行脚本        | 无, 新增       |
 | `np-x rebuild`        | `rb`                      | 重跑已安装依赖的 preinstall / install / postinstall | 无, 新增       |
 | `np-x approve-scripts` | 无 | 把依赖写入 `package.json` 的 `allowScripts`, 放行其安装脚本 | 无, 新增 |
+| `np-x deny-scripts` | 无 | 在 `allowScripts` 中写入拒绝条目, 并删除同一包已有的放行条目 | 无, 新增 |
 | `np-x prune` | 无 | 删除 `node_modules/.store` 中不再被任何链接引用的包版本 | 无, 新增 |
 
 - 别名用法如 `np-x i`, `np-x rb`. `np-x -h` 列出全部子命令; `np-x <command> -h` 或 `np-x help <command>` 显示子命令的参数.
@@ -76,7 +77,8 @@ npm i -g easy-np
 ```
 
 - 键写包名(放行全部版本), `<name>@<精确版本>` 或用 `||` 连接的多个精确版本, git 地址, tarball url; `^`, `~` 等范围与 dist-tag 告警后忽略. 值 `false` 表示明确拒绝, 不再出现在跳过列表里, 同时命中时拒绝优先.
-- `np-x approve-scripts <pkg>` 按已安装版本写入 `<pkg>@<version>`, `--no-pin` 只写包名, `--all` 放行全部未审核的包, `--pending` 只列出; 之后运行 `np-x rebuild <pkg>` 执行脚本. git 依赖放行后要重新安装才会执行 prepare.
+- `np-x approve-scripts <pkg>` 按已安装版本写入 `<pkg>@<version>`(git 依赖写解析出的地址与 commit, tarball url 依赖写 url), `--no-pin` 只写包名或不带 commit 的地址, `--all` 放行全部未审核的包, `--pending` 只列出; 之后运行 `np-x rebuild <pkg>` 执行脚本. git 依赖放行后要重新安装才会执行 prepare.
+- `np-x deny-scripts <pkg>` 与 npm 一致总是写不带版本的 `false` 条目并删除该包已有的放行条目, 未安装的包也可以按名称拒绝; `--all` 拒绝全部未审核的包.
 - 来源只取第一个有配置的: `--allow-scripts=<pkg>[,<pkg>]`(主要用于 `-g`) > 根 `package.json` 的 `allowScripts` > `~/.nprc` 的 `allow-scripts`.
 - `--strict-allow-scripts`: 有未审核的依赖脚本时安装以非 0 退出. `--dangerously-allow-all-scripts`: 忽略 `allowScripts`, 执行全部依赖脚本(0.0.2 及以前的行为). 两者也可写在 `~/.nprc` 或 `npm_config_*` 中. `--ignore-scripts` 优先于以上全部设置.
 

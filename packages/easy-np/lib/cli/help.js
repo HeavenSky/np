@@ -7,6 +7,7 @@ const SUMMARIES = {
   fetch: 'only download and extract packages, no dependencies or scripts',
   rebuild: 'rerun lifecycle scripts of installed dependencies',
   'approve-scripts': 'allow install scripts of dependencies in package.json allowScripts',
+  'deny-scripts': 'deny install scripts of dependencies in package.json allowScripts',
   prune: 'remove package versions in node_modules/.store that nothing links to',
 };
 
@@ -238,6 +239,24 @@ Installs never remove these folders by themselves.
 Options:
 
   --dry-run: only list what would be removed
+  --root: project root directory, default is current working directory
+  -h, --help: show help
+`;
+
+exports.denyScripts = () => `
+Usage:
+
+  np-x deny-scripts <pkg> [<pkg> ...]
+  np-x deny-scripts --all
+
+Writes name-only false entries into the allowScripts field of the root package.json, same as npm 12:
+the install scripts of these dependencies never run and they are no longer listed as unreviewed.
+Existing true entries of the same packages are removed. Packages that are not installed can be denied by name.
+Git and tarball url dependencies are denied by their repository or url.
+
+Options:
+
+  --all: deny every installed package whose install scripts are not reviewed yet
   --root: project root directory, default is current working directory
   -h, --help: show help
 `;
