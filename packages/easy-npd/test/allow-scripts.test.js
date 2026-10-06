@@ -101,5 +101,40 @@ describe('test/allow-scripts.test.js', () => {
         .expect('stdout', /run on postinstall-hello/)
         .end();
     });
+
+    it('should deny scripts by name and drop existing approvals', async () => {
+      await writePkg({ allowScripts: { 'postinstall-hello@1.0.0': true } });
+      await run(helper.npminstall, []).expect('code', 0).end();
+      await run(x, ['deny-scripts', 'postinstall-hello', 'never-installed']).expect('code', 0).end();
+      const pkg = await helper.readJSON(path.join(root, 'package.json'));
+      assert.deepEqual(pkg.allowScripts, { 'postinstall-hello': false, 'never-installed': false });
+      await run(x, ['approve-scripts', '--pending'])
+        .expect('stdout', /all installed packages with install scripts are reviewed/)
+        .end();
+    });
+
+    it('should not report rebuilt for packages whose scripts were skipped', async () => {
+      await writePkg();
+      await run(helper.npminstall, []).expect('code', 0).end();
+      await run(x, ['rebuild', 'postinstall-hello', '-d'])
+        .expect('code', 0)
+        .notExpect('stdout', /rebuilt postinstall-hello/)
+        .notExpect('stdout', /run on postinstall-hello/)
+        .expect('stderr', /were skipped/)
+        .end();
+    });
+
+    it('should approve tarball url dependencies by url', async () => {
+      const url = 'https://registry.npmmirror.com/postinstall-hello/-/postinstall-hello-1.0.0.tgz';
+      await fs.writeFile(
+        path.join(root, 'package.json'),
+        JSON.stringify({ name: 'root', version: '1.0.0', dependencies: { 'postinstall-hello': url } })
+      );
+      await run(helper.npminstall, []).expect('code', 0).expect('stderr', /were skipped/).end();
+      await run(x, ['approve-scripts', 'postinstall-hello']).expect('code', 0).end();
+      const pkg = await helper.readJSON(path.join(root, 'package.json'));
+      assert.deepEqual(pkg.allowScripts, { [url]: true });
+      await run(x, ['rebuild', 'postinstall-hello']).expect('code', 0).expect('stdout', /run on postinstall-hello/).end();
+    });
   });
 });

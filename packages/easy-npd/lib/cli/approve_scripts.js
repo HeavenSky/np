@@ -1,8 +1,8 @@
-// npd-x approve-scripts: 列出已安装但未在 allowScripts 中审核的依赖安装脚本, 并把放行条目写入根 package.json
+// npd-x approve-scripts / deny-scripts: 列出已安装但未在 allowScripts 中审核的依赖安装脚本, 把放行或拒绝条目写入根 package.json
 'use strict';
 
-const path = require('node:path');
-const fs = require('node:fs/promises');
+const path = require('path');
+const fs = require('fs/promises');
 const chalk = require('chalk');
 const npa = require('npm-package-arg');
 const parseArgs = require('minimist');
@@ -10,34 +10,37 @@ const utils = require('../utils');
 const allowScripts = require('../allow_scripts');
 const help = require('./help');
 
-const INSTALL_SCRIPTS = ['preinstall', 'install', 'postinstall'];
+module.exports = args => runCommand('approve-scripts', args);
+module.exports.deny = args => runCommand('deny-scripts', args);
 
-module.exports = async function approveScriptsCommand(args) {
+async function runCommand(command, args) {
   try {
-    await main(args);
+    await main(command, args);
   } catch (err) {
-    console.error(chalk.red(`npd-x approve-scripts: ${err.message}`));
+    console.error(chalk.red(`npd-x ${command}: ${err.message}`));
     process.exit(1);
   }
-};
+}
 
-async function main(args) {
+async function main(command, args) {
+  const deny = command === 'deny-scripts';
   const argv = parseArgs(args, {
     string: ['root'],
     boolean: ['help', 'all', 'pending', 'pin', 'global'],
     default: { pin: true },
     alias: { h: 'help', g: 'global' },
   });
+  const usage = deny ? help.denyScripts() : help.approveScripts();
   if (argv.help) {
-    console.log(help.approveScripts());
+    console.log(usage);
     return;
   }
   if (argv.global) {
     throw new Error('global installs have no project package.json, use npd -g --allow-scripts=<pkg> instead');
   }
   const names = argv._.map(String);
-  if (!argv.pending && !argv.all && names.length === 0) {
-    console.log(help.approveScripts());
+  if (!(argv.pending && !deny) && !argv.all && names.length === 0) {
+    console.log(usage);
     process.exitCode = 1;
     return;
   }
@@ -50,7 +53,7 @@ async function main(args) {
   const installed = await listInstalledWithScripts(root);
   const pending = installed.filter(item => allowScripts.check(policy, item.identity) === null);
 
-  if (argv.pending) {
+  if (argv.pending && !deny) {
     if (pending.length === 0) {
       console.log('all installed packages with install scripts are reviewed in allowScripts');
     }
@@ -58,12 +61,29 @@ async function main(args) {
     return;
   }
 
-  const targets = argv.all ? pending : [];
+  const changed = deny
+    ? denyTargets(policy, installed, pending, names, argv.all)
+    : approveTargets(policy, installed, pending, names, argv);
+  if (changed.keys.length === 0) {
+    console.log(deny ? 'nothing to deny' : 'nothing to approve');
+    return;
+  }
+  rootPkg.allowScripts = policy;
+  const indent = /^[ \t]+/m.exec(text)?.[0] || '  ';
+  await fs.writeFile(pkgFile, JSON.stringify(rootPkg, null, indent) + (text.endsWith('\n') ? '\n' : ''));
+  for (const key of changed.keys) console.log(deny ? chalk.yellow('denied %s') : chalk.green('approved %s'), key);
+  if (!deny) {
+    const rebuildNames = [...new Set(changed.targets.map(item => item.name))].join(' ');
+    console.log('run npd-x rebuild %s to run their install scripts now', rebuildNames);
+  }
+}
+
+function approveTargets(policy, installed, pending, names, argv) {
+  const targets = argv.all ? [...pending] : [];
   for (const name of names) {
-    const spec = npa(name);
-    const matched = installed.filter(item => item.name === spec.name);
+    const matched = installed.filter(item => item.name === npa(name).name);
     if (matched.length === 0) {
-      throw new Error(`${name} has no installed version with install scripts in ${path.join(root, 'node_modules')}`);
+      throw new Error(`${name} has no installed version with install scripts`);
     }
     for (const item of matched) {
       // 与 npm 一致: 已明确拒绝的包不会被重新放行, 要放行先手动删除 false 条目
@@ -74,24 +94,45 @@ async function main(args) {
       targets.push(item);
     }
   }
-
-  const added = [];
+  const keys = [];
   for (const item of targets) {
     const key = allowScripts.keyOf(item.identity, argv.pin);
     if (policy[key] === true) continue;
     policy[key] = true;
-    added.push(key);
+    keys.push(key);
   }
-  if (added.length === 0) {
-    console.log('nothing to approve');
-    return;
+  return { keys, targets };
+}
+
+// 与 npm 一致: 拒绝总是写不带版本的键(git 与 url 依赖写不带 commit 的地址), 并删除同一个包已有的放行条目
+function denyTargets(policy, installed, pending, names, all) {
+  const identities = all ? pending.map(item => item.identity) : [];
+  for (const name of names) {
+    const matched = installed.filter(item => item.name === npa(name).name);
+    // 未安装的包同样可以按名称预先拒绝
+    identities.push(...(matched.length ? matched.map(item => item.identity) : [{ name: npa(name).name }]));
   }
-  rootPkg.allowScripts = policy;
-  const indent = /^[ \t]+/m.exec(text)?.[0] || '  ';
-  await fs.writeFile(pkgFile, JSON.stringify(rootPkg, null, indent) + (text.endsWith('\n') ? '\n' : ''));
-  for (const key of added) console.log(chalk.green('approved %s'), key);
-  const rebuildNames = [...new Set(targets.map(item => item.name))].join(' ');
-  console.log('run npd-x rebuild %s to run their install scripts now', rebuildNames);
+  const keys = [];
+  for (const identity of identities) {
+    for (const key of Object.keys(policy)) {
+      if (policy[key] === true && (sameName(key, identity) || allowScripts.check({ [key]: true }, identity))) {
+        delete policy[key];
+      }
+    }
+    const key = allowScripts.keyOf(identity, false);
+    if (policy[key] === false) continue;
+    policy[key] = false;
+    keys.push(key);
+  }
+  return { keys, targets: [] };
+}
+
+function sameName(key, identity) {
+  try {
+    return !!identity.name && npa(key).name === identity.name;
+  } catch {
+    return false;
+  }
 }
 
 // 扫描 node_modules 下 _<name>@<version>@<name> 目录中带安装脚本(含 binding.gyp 隐式构建)的包; scope 包多一层目录
@@ -117,26 +158,14 @@ async function listInstalledWithScripts(root) {
   for (const dir of dirs) {
     const pkg = await utils.readJSON(path.join(dir, 'package.json'));
     if (!pkg.name) continue;
-    const scripts = INSTALL_SCRIPTS.filter(script => pkg.scripts && pkg.scripts[script]);
-    if (!scripts.includes('install') && (await utils.exists(path.join(dir, 'binding.gyp')))) {
-      scripts.push('install');
-    }
+    const scripts = await allowScripts.pendingScripts(pkg, dir);
     if (scripts.length === 0) continue;
     result.push({
       name: pkg.name,
       displayName: `${pkg.name}@${pkg.version}`,
       scripts,
-      identity: identityOfInstalled(pkg),
+      identity: allowScripts.identityOfInstalled(pkg),
     });
   }
   return result;
-}
-
-function identityOfInstalled(pkg) {
-  try {
-    if (pkg._resolved && npa(pkg._resolved).type === 'git') return { git: pkg._resolved };
-  } catch {
-    // 不是合法的 spec, 按 registry 包处理
-  }
-  return { name: pkg.name, version: pkg.version };
 }

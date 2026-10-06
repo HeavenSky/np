@@ -205,12 +205,34 @@ exports.report = options => {
 
 const INSTALL_SCRIPTS = ['preinstall', 'install', 'postinstall'];
 
-// 判断一个依赖包的 preinstall / install / postinstall(含 binding.gyp 隐式构建)能否执行; 没有脚本时返回 true
-exports.allowPackage = async (realPkg, dir, originType, originSpec, displayName, options) => {
+// 包会执行的安装脚本; 没有 install 但有 binding.gyp 时与 npm 一致隐式执行 node-gyp rebuild
+exports.pendingScripts = async (realPkg, dir) => {
   const scripts = realPkg.scripts || {};
   const pending = INSTALL_SCRIPTS.filter(script => scripts[script]);
   if (!pending.includes('install') && (await utils.exists(path.join(dir, 'binding.gyp')))) pending.push('install');
+  return pending;
+};
+
+// 已安装的包按 package.json 中安装时写入的 _from / _resolved 还原来源: _from 是 git 或 url 声明时按解析地址比对
+exports.identityOfInstalled = pkg => {
+  let type;
+  try {
+    type = pkg._from ? npa(pkg._from).type : null;
+  } catch {
+    type = null;
+  }
+  if (!type && typeof pkg._resolved === 'string' && /^git[+:]/.test(pkg._resolved)) type = 'git';
+  if (type === 'git' && pkg._resolved) return { git: pkg._resolved };
+  if (type === 'remote' && pkg._resolved) return { url: pkg._resolved };
+  return { name: pkg.name, version: pkg.version };
+};
+
+// 判断一个依赖包的安装脚本能否执行; 没有脚本时返回 true; originType 为空时按已安装包的 package.json 还原来源
+exports.allowPackage = async (realPkg, dir, originType, originSpec, displayName, options) => {
+  const pending = await exports.pendingScripts(realPkg, dir);
   if (pending.length === 0) return true;
-  const identity = exports.identityOf(originType, realPkg, originSpec);
+  const identity = originType
+    ? exports.identityOf(originType, realPkg, originSpec)
+    : exports.identityOfInstalled(realPkg);
   return exports.allow(options, identity, { displayName, name: realPkg.name, scripts: pending });
 };

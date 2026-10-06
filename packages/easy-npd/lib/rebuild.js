@@ -28,9 +28,8 @@ module.exports = async options => {
   for (const { pkg, dir } of targets) {
     const displayName = `${pkg.name}@${pkg.version}`;
     try {
-      // rebuild 按 registry 包处理已安装的版本, 同样要在 allowScripts 中放行
-      const originType = pkg._resolved && /^git[+:]/.test(pkg._resolved) ? 'git' : 'version';
-      if (!(await allowScripts.allowPackage(pkg, dir, originType, pkg._resolved, displayName, options))) continue;
+      // 与安装时一致要在 allowScripts 中放行, 按 package.json 记录的来源比对
+      if (!(await allowScripts.allowPackage(pkg, dir, null, null, displayName, options))) continue;
       await rebuildOne(pkg, dir, displayName, options);
     } catch (err) {
       options.failures.push({ displayName, error: err, name: pkg.name });
