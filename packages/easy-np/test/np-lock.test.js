@@ -1,9 +1,11 @@
 const assert = require('node:assert');
+const http = require('node:http');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const coffee = require('coffee');
 const urllib = require('urllib');
 const helper = require('./helper');
+const npLock = require('../lib/np_lock');
 
 const x = path.join(__dirname, '..', 'bin', 'x.js');
 
@@ -191,6 +193,82 @@ describe('test/np-lock.test.js', () => {
     await run(helper.npminstall, ['pedding@latest']).expect('code', 0).end();
     assert.equal(await installedVersion('pedding'), '2.0.1');
     assert.equal((await readLock()).packages['pedding@latest'].version, '2.0.1');
+  });
+
+  it('should lock an alias installed without a version under the key used by the saved spec', async () => {
+    await writePkg({});
+    await run(helper.npminstall, ['x@npm:pedding']).expect('code', 0).end();
+    const saved = (await helper.readJSON(path.join(tmp, 'package.json'))).dependencies.x;
+    const key = npLock.keyOf('x', saved);
+    assert.deepEqual(Object.keys((await readLock()).packages), [key]);
+    await run(helper.npminstall, ['--frozen-lockfile']).expect('code', 0).end();
+
+    // 命令行不带版本的 alias 不复用锁定的旧版本
+    const stale = await readLock();
+    const res = await urllib.request('https://registry.npmmirror.com/pedding/1.1.0', {
+      dataType: 'json',
+      timeout: 30000,
+    });
+    stale.packages[key] = { name: 'pedding', version: '1.1.0', dist: res.data.dist };
+    await fs.writeFile(lockFile, JSON.stringify(stale));
+    await run(helper.npminstall, ['x@npm:pedding']).expect('code', 0).end();
+    assert.equal(await installedVersion('x'), '2.0.1');
+    assert.equal((await readLock()).packages[key].version, '2.0.1');
+  });
+
+  it('should not write credentials of url dependencies into the lockfile', async () => {
+    const tarball = await helper.packTarball(tmp, { name: 'cred-demo', version: '1.0.0' });
+    const requests = [];
+    const server = http.createServer((req, res) => {
+      requests.push(req.url);
+      res.end(tarball.content);
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const host = `127.0.0.1:${server.address().port}`;
+      await writePkg({ 'cred-demo': `http://user:s3cret@${host}/cred-demo-1.0.0.tgz` });
+      await run(helper.npminstall, []).expect('code', 0).end();
+      const text = await fs.readFile(lockFile, 'utf8');
+      assert(!text.includes('s3cret'), text);
+      const entry = JSON.parse(text).packages[`cred-demo@http://${host}/cred-demo-1.0.0.tgz`];
+      assert.equal(entry._resolved, `http://${host}/cred-demo-1.0.0.tgz`);
+      assert.equal(entry.dist.integrity, tarball.integrity);
+
+      // 锁定条目不带凭据, 已装的仍按锁定的 integrity 复用; 重新下载时用声明里的地址
+      await run(helper.npminstall, ['--frozen-lockfile']).expect('code', 0).end();
+      assert.equal(requests.length, 1);
+      await fs.rm(path.join(tmp, 'node_modules'), { recursive: true, force: true });
+      await run(helper.npminstall, ['--frozen-lockfile']).expect('code', 0).end();
+      assert.equal(requests.length, 2);
+      assert(!(await fs.readFile(lockFile, 'utf8')).includes('s3cret'));
+    } finally {
+      server.close();
+    }
+  });
+
+  it('should strip credentials from keys and urls when writing the lockfile', async () => {
+    const url = 'git+https://user:tok@example.com/a/b.git';
+    await npLock.write(tmp, {
+      [`b@${url}`]: { name: 'b', version: '1.0.0', _resolved: `${url}#${'a'.repeat(40)}`, _from: `b@${url}` },
+      'c@https://tok@example.com/c.tgz': {
+        name: 'c',
+        version: '1.0.0',
+        _resolved: 'https://tok@example.com/c.tgz',
+        dist: { tarball: 'https://tok@example.com/c.tgz', integrity: 'sha512-x' },
+      },
+      'd@git+ssh://git@github.com/a/d.git': {
+        name: 'd',
+        version: '1.0.0',
+        _resolved: 'git+ssh://git@github.com/a/d.git',
+      },
+    });
+    const text = await fs.readFile(lockFile, 'utf8');
+    assert(!text.includes('tok'), text);
+    assert.deepEqual(Object.keys(JSON.parse(text).packages), [
+      'b@git+https://example.com/a/b.git',
+      'c@https://example.com/c.tgz',
+      'd@git+ssh://git@github.com/a/d.git',
+    ]);
   });
 
   it('should keep the original peerDependencies in the lockfile', async () => {

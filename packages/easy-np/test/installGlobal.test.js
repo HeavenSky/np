@@ -110,6 +110,45 @@ describe('test/installGlobal.test.js', () => {
       .end();
   });
 
+  // 被装的包是它的本地依赖的声明者: file: 依赖的脚本要放行被装的包才执行
+  it('should not run scripts of local dependencies until the global package is approved', async () => {
+    const marker = path.join(tmp, 'inner-postinstall');
+    const registryServer = helper.createRegistry('registry', []);
+    await new Promise(resolve => registryServer.server.listen(0, '127.0.0.1', resolve));
+    registryServer.prefix = `http://127.0.0.1:${registryServer.server.address().port}/`;
+    try {
+      const tarball = await helper.packTarball(
+        tmp,
+        { name: 'glob-host', version: '1.0.0', dependencies: { inner: 'file:./inner' } },
+        {
+          'inner/package.json': JSON.stringify({
+            name: 'inner',
+            version: '1.0.0',
+            scripts: { postinstall: `node -e "require('fs').writeFileSync('${marker}', '')"` },
+          }),
+        }
+      );
+      registryServer.packages = { 'glob-host': { '1.0.0': tarball } };
+      const args = [`--prefix=${tmp}`, '-g', 'glob-host', `--registry=${registryServer.prefix.slice(0, -1)}`];
+      const env = { ...process.env, np_cache: path.join(tmp, 'cache') };
+      await coffee
+        .fork(helper.npminstall, args, { env })
+        .expect('stderr', /inner@file:\.\/inner \(declared by glob-host@1\.0\.0\) \(postinstall\)/)
+        .expect('code', 0)
+        .end();
+      assert(await exists(path.join(libDir, 'node_modules/glob-host/node_modules/inner/package.json')));
+      assert.equal(await exists(marker), false);
+
+      await coffee
+        .fork(helper.npminstall, [...args, '--allow-scripts=glob-host'], { env })
+        .expect('code', 0)
+        .end();
+      assert.equal(await exists(marker), true);
+    } finally {
+      registryServer.server.close();
+    }
+  });
+
   it('should remove old bins when reinstall global package', async () => {
     await coffee
       .fork(helper.npminstall, [`--prefix=${tmp}`, '-g', 'mocha@11'])

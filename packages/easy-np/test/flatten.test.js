@@ -9,8 +9,14 @@ describe('test/flatten.test.js', () => {
   const cleanup = helper.cleanup(tmp);
   const bin = helper.npminstall;
 
+  // 本地包的 store 目录名带来源标识, 按 <name>@<version> 前缀查找
   async function getPkgVersion(subPath) {
-    return JSON.parse(await fs.readFile(path.join(tmp, subPath))).version;
+    const parts = subPath.split('/');
+    if (parts[1] === '.store') {
+      const entries = await fs.readdir(path.join(tmp, 'node_modules/.store'));
+      parts[2] = entries.find(entry => entry === parts[2] || entry.startsWith(`${parts[2]}+`)) || parts[2];
+    }
+    return JSON.parse(await fs.readFile(path.join(tmp, ...parts))).version;
   }
 
   beforeEach(cleanup);

@@ -1,6 +1,7 @@
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
+const { randomUUID } = require('node:crypto');
 const { spawn } = require('node:child_process');
 const helper = require('./helper');
 
@@ -27,11 +28,27 @@ describe('test/node-gyp.test.js', () => {
   afterEach(cleanup);
 
   it('should install node-gyp on first use and reuse it afterwards', async () => {
+    // 未被指针引用的旧目录在安装后删除; 新目录可能属于正在进行的安装, 被引用的旧目录仍在使用, 都保留
+    const staleOrphan = path.join(installDir, `v0.0.1-${randomUUID()}`);
+    const freshOrphan = path.join(installDir, `v0.0.1-${randomUUID()}`);
+    const referenced = path.join(installDir, `v0.0.2-${randomUUID()}`);
+    for (const dir of [staleOrphan, freshOrphan, referenced]) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(installDir, 'v0.0.2.json'),
+      JSON.stringify({ spec: 'x', dir: path.basename(referenced) })
+    );
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    fs.utimesSync(staleOrphan, twoHoursAgo, twoHoursAgo);
+    fs.utimesSync(referenced, twoHoursAgo, twoHoursAgo);
+
     const first = await run(['--version'], { np_cache: cacheDir });
     assert.equal(first.code, 0, first.stderr);
     assert.match(first.stdout, /^v\d+\.\d+\.\d+\S*\n$/);
     assert.match(first.stderr, /np installing /);
     assert(fs.existsSync(path.join(installDir, `${process.version}.json`)));
+    assert.equal(fs.existsSync(staleOrphan), false);
+    assert(fs.existsSync(freshOrphan));
+    assert(fs.existsSync(referenced));
 
     const second = await run(['--version'], { np_cache: cacheDir });
     assert.equal(second.code, 0, second.stderr);

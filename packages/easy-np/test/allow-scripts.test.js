@@ -167,6 +167,81 @@ describe('test/allow-scripts.test.js', () => {
     });
   });
 
+  describe('url dependencies with credentials', () => {
+    const [tmp, cleanup] = helper.tmp();
+    const root = path.join(tmp, 'app');
+    const marker = path.join(root, 'node_modules/auth-hello/postinstall.marker');
+    const run = (bin, args) => coffee.fork(bin, args, { cwd: root });
+    let registry;
+
+    before(async () => {
+      registry = helper.createRegistry('registry', []);
+      await new Promise(resolve => registry.server.listen(0, '127.0.0.1', resolve));
+      registry.prefix = `http://127.0.0.1:${registry.server.address().port}/`;
+    });
+    after(() => registry.server.close());
+
+    beforeEach(async () => {
+      await cleanup();
+      const tarball = await helper.packTarball(tmp, {
+        name: 'auth-hello',
+        version: '1.0.0',
+        scripts: { postinstall: "node -e \"require('fs').writeFileSync('postinstall.marker', '')\"" },
+      });
+      registry.packages = { 'auth-hello': { '1.0.0': tarball } };
+      await fs.mkdir(root, { recursive: true });
+    });
+    afterEach(cleanup);
+
+    it('should approve them without writing the credentials and run their scripts', async () => {
+      const port = registry.server.address().port;
+      const url = `http://user:s3cret@127.0.0.1:${port}/auth-hello/-/auth-hello-1.0.0.tgz`;
+      await fs.writeFile(
+        path.join(root, 'package.json'),
+        JSON.stringify({ name: 'app', version: '1.0.0', dependencies: { 'auth-hello': url } })
+      );
+      const { stdout, stderr } = await run(helper.npminstall, [`--registry=${registry.prefix}`])
+        .expect('code', 0)
+        .expect('stderr', /were skipped/)
+        .end();
+      assert(!`${stdout}${stderr}`.includes('s3cret'));
+      assert.equal(await exists(marker), false);
+
+      await run(x, ['approve-scripts', 'auth-hello'])
+        .expect('code', 0)
+        .notExpect('stdout', /s3cret/)
+        .end();
+      const { allowScripts: approved } = await helper.readJSON(path.join(root, 'package.json'));
+      assert.deepEqual(approved, {
+        [`http://127.0.0.1:${port}/auth-hello/-/auth-hello-1.0.0.tgz`]: true,
+      });
+
+      await fs.rm(path.join(root, 'node_modules'), { recursive: true, force: true });
+      await run(helper.npminstall, [`--registry=${registry.prefix}`])
+        .expect('code', 0)
+        .end();
+      assert.equal(await exists(marker), true);
+    });
+
+    it('should still match approvals written with the credentials', async () => {
+      const port = registry.server.address().port;
+      const url = `http://user:s3cret@127.0.0.1:${port}/auth-hello/-/auth-hello-1.0.0.tgz`;
+      await fs.writeFile(
+        path.join(root, 'package.json'),
+        JSON.stringify({
+          name: 'app',
+          version: '1.0.0',
+          dependencies: { 'auth-hello': `http://127.0.0.1:${port}/auth-hello/-/auth-hello-1.0.0.tgz` },
+          allowScripts: { [url]: true },
+        })
+      );
+      await run(helper.npminstall, [`--registry=${registry.prefix}`])
+        .expect('code', 0)
+        .end();
+      assert.equal(await exists(marker), true);
+    });
+  });
+
   // tarball 内 package.json 自称其他包时, 放行, 跳过列表, 链接名与重跑都按 registry 上的 name@version
   describe('manifest confusion', () => {
     const [tmp, cleanup] = helper.tmp();

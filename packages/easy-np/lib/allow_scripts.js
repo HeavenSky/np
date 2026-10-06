@@ -122,21 +122,22 @@ exports.check = (policy, identity) => {
   return allowed || null;
 };
 
+// git 与 url 两侧都先去掉凭据: 新写入的键不带凭据, 已写入的旧键与依赖声明可能带
 function matches(key, identity) {
   let parsed;
   try {
-    parsed = npa(key);
+    parsed = npa(utils.stripUrlAuth(key));
   } catch {
     return false;
   }
   if (identity.git) {
     if (parsed.type !== 'git') return false;
-    const target = npa(identity.git);
+    const target = npa(utils.stripUrlAuth(identity.git));
     if (repoId(parsed) !== repoId(target)) return false;
     return !parsed.gitCommittish || parsed.gitCommittish === target.gitCommittish;
   }
   if (identity.url) {
-    return parsed.type === 'remote' && parsed.fetchSpec === identity.url;
+    return parsed.type === 'remote' && parsed.fetchSpec === utils.stripUrlAuth(identity.url);
   }
   if (!['version', 'range', 'tag'].includes(parsed.type) || parsed.name !== identity.name) return false;
   if (parsed.rawSpec === '' || parsed.rawSpec === '*') return true;
@@ -159,10 +160,13 @@ exports.identityOf = (originType, realPkg, originSpec) => {
   return { name: realPkg.name, version: realPkg.version };
 };
 
-// 写入 allowScripts 时使用的键
+// 写入 allowScripts 与 _scriptsOwner 时使用的键; 不能带凭据, package.json 会被提交
 exports.keyOf = (identity, pin = true) => {
-  if (identity.git) return pin ? identity.git : identity.git.replace(/#.*$/, '');
-  if (identity.url) return identity.url;
+  if (identity.git) {
+    const git = utils.stripUrlAuth(identity.git);
+    return pin ? git : git.replace(/#.*$/, '');
+  }
+  if (identity.url) return utils.stripUrlAuth(identity.url);
   return pin ? `${identity.name}@${identity.version}` : identity.name;
 };
 
@@ -215,6 +219,15 @@ exports.report = options => {
 };
 
 const INSTALL_SCRIPTS = ['preinstall', 'install', 'postinstall'];
+// 与 pacote 一致: 声明了这些脚本或 workspaces 的 git 仓库才先安装依赖再打包
+const GIT_PREPARE_SCRIPTS = ['postinstall', 'build', 'preinstall', 'install', 'prepack', 'prepare'];
+
+exports.gitBuildScripts = pkg => {
+  const scripts = pkg.scripts || {};
+  const triggers = GIT_PREPARE_SCRIPTS.filter(script => scripts[script]);
+  if (triggers.length) return triggers;
+  return pkg.workspaces ? ['workspaces'] : [];
+};
 
 // 包会执行的安装脚本; 没有 install 但有 binding.gyp 时与 npm 一致隐式执行 node-gyp rebuild
 exports.pendingScripts = async (realPkg, dir) => {
@@ -258,7 +271,8 @@ function identityOfKey(key) {
   return null;
 }
 
-// 必须与 utils.getPackageStorePath 的目录规则一致: <.store>/<name 中 / 换成 +>@<version>/node_modules/<name>
+// 必须与 utils.getPackageStorePath 的目录规则一致: <.store>/<name 中 / 换成 +>@<version>/node_modules/<name>;
+// 带来源标识的目录装的是 git / url / 本地包, 不能当作 registry 身份
 function storeIdentity(dir) {
   if (!dir) return null;
   const parts = path.resolve(dir).split(path.sep);
@@ -266,7 +280,9 @@ function storeIdentity(dir) {
   const entry = index >= 0 ? parts[index + 1] : '';
   const at = entry.lastIndexOf('@');
   if (at <= 0) return null;
-  return { name: entry.slice(0, at).replace('+', '/'), version: entry.slice(at + 1) };
+  const { version, suffix } = utils.parseStoreVersion(entry.slice(at + 1));
+  if (suffix) return null;
+  return { name: entry.slice(0, at).replace('+', '/'), version };
 }
 
 // 判断一个依赖包的安装脚本能否执行; 没有脚本时返回 true; originType 为空时按已安装包的 package.json 还原来源

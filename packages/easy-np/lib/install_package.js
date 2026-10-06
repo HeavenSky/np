@@ -66,13 +66,19 @@ async function _install(parentDir, pkg, ancestors, options, context) {
   if (options.spinner) {
     options.spinner.text = `[${options.progresses.finishedInstallTasks}/${options.progresses.installTasks}] Installing ${pkg.name}@${pkg.version}${os.EOL}`;
   }
-  // 依赖(registry, git, url 包及其本地依赖)声明的本地路径按声明者目录解析, 不受信: 只执行依赖脚本, 按声明者的身份审核
-  const parent = ancestors[ancestors.length - 1];
-  const trusted = !parent || !!pkg.overridden || !!parent.trustedLocal;
+  // 依赖(registry, git, url 包及其本地依赖)声明的本地路径按声明者目录解析, 不受信: 只执行依赖脚本, 按声明者的身份审核;
+  // 全局安装时被装的包就是根, 它的 overrides 与本地依赖同样不受信
+  const globalRoot = options.globalRootDeclarer;
+  const parent = ancestors[ancestors.length - 1] || globalRoot;
+  const trusted = !parent || (!!pkg.overridden && !globalRoot) || !!parent.trustedLocal;
   let p = npa(pkg.name ? `${pkg.name}@${pkg.version}` : pkg.version, {
     where: trusted ? options.root : parent.where,
     nested: context.nested,
   });
+  // 命令行的 `x@npm:foo` 与 package.json 中同一声明拆出的 foo@latest 必须用同一个 np-lock.json 键
+  if (p.type === 'alias' && !p.subSpec.rawSpec) {
+    p = npa(`${p.name}@npm:${p.subSpec.name}@latest`, { nested: context.nested });
+  }
   const isLocal = LOCAL_TYPES.includes(p.type);
   const scriptOwner = isLocal && !trusted ? parent.scriptIdentity : null;
   if (scriptOwner) {
@@ -180,11 +186,13 @@ async function _install(parentDir, pkg, ancestors, options, context) {
     };
   }
 
+  // 记录带来源标识的版本, 链接时按它拼出 git / url / 本地包的 store 目录
+  const storeVersion = info.storeVersion || realPkg.version;
   const existingVersion = options.latestVersions.get(realPkg.name);
-  if (!existingVersion || semver.gt(realPkg.version, existingVersion)) {
-    options.latestVersions.set(realPkg.name, realPkg.version);
+  if (!existingVersion || semver.gt(storeVersion, existingVersion)) {
+    options.latestVersions.set(realPkg.name, storeVersion);
     if (options.publicHoistPattern?.test(realPkg.name)) {
-      options.publicHoistLatestVersions.set(realPkg.name, realPkg.version);
+      options.publicHoistLatestVersions.set(realPkg.name, storeVersion);
     }
   }
 

@@ -2,6 +2,7 @@ const debug = require('node:util').debuglog('np:utils');
 const fs = require('node:fs/promises');
 const { accessSync } = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const cp = require('node:child_process');
 const { promisify } = require('node:util');
 const { parse: urlparse } = require('node:url');
@@ -19,6 +20,7 @@ const fse = require('fs-extra');
 const destroy = require('destroy');
 const normalizeData = require('normalize-package-data');
 const normalizeBin = require('npm-normalize-package-bin');
+const packlist = require('npm-packlist');
 const semver = require('semver');
 const installState = require('./install_state');
 const globalConfig = require('./config');
@@ -619,14 +621,36 @@ exports.findMaxSatisfyingVersion = (spec, distTags, allVersions, options = {}) =
   return realPkgVersion;
 };
 
-exports.getPackageStorePath = (storeDir, pkg, globalOptions) => {
+// git / tarball url / 本地包的 store 目录名在版本号后附加来源标识, 与同名同版本的 registry 包及其他来源互不覆盖;
+// 改变计算方式会让已安装的这类依赖指向新目录, 需要重装一次
+exports.sourceSuffix = (type, value) => {
+  const id = type === 'git' ? value : crypto.createHash('sha1').update(value).digest('hex');
+  return `${type}.${id.slice(0, 8)}`;
+};
+
+// 以 semver build metadata 形式拼接, 版本号已带 build metadata 时接在其后
+exports.storeVersion = (version, suffix) => {
+  if (!suffix) return version;
+  return `${version}${version.includes('+') ? '.' : '+'}${suffix}`;
+};
+
+const SOURCE_SUFFIX_RE = /[+.](?:git|url|file)\.[0-9a-f]{8}$/;
+// store 目录名中的版本 -> { version, suffix }; registry 包的 suffix 为 null
+exports.parseStoreVersion = storeVersion => {
+  const match = SOURCE_SUFFIX_RE.exec(storeVersion);
+  if (!match) return { version: storeVersion, suffix: null };
+  return { version: storeVersion.slice(0, match.index), suffix: match[0].slice(1) };
+};
+
+exports.getPackageStorePath = (storeDir, pkg, globalOptions, suffix) => {
   // if workspace enable, install packages to `<workspaceRoot>/node_modules`
   if (globalOptions.enableWorkspace) {
     storeDir = path.join(globalOptions.workspaceRoot, 'node_modules');
   }
+  const version = exports.storeVersion(pkg.version, suffix);
   // https://github.com/npm/rfcs/blob/main/accepted/0042-isolated-mode.md
   // https://github.com/npm/cli/pull/5492
-  return path.join(storeDir, `.store/${pkg.name.replace('/', '+')}@${pkg.version}/node_modules/${pkg.name}`);
+  return path.join(storeDir, `.store/${pkg.name.replace('/', '+')}@${version}/node_modules/${pkg.name}`);
 };
 
 exports.unpack = (readstream, target, pkg) => {
@@ -686,7 +710,7 @@ exports.unpack = (readstream, target, pkg) => {
   });
 };
 
-exports.copyInstall = async (src, options) => {
+exports.copyInstall = async (src, options, suffix) => {
   // 1. make sure source folder has package.json, and package.json contains name
   // 2. get the target directory: $storeDir/${pkg.name}/${pkg.version}
   // 3. check if this package has been installed, and make sure only copy once.
@@ -701,12 +725,13 @@ exports.copyInstall = async (src, options) => {
     throw new Error(`package.json must contain name and version (${pkgpath})`);
   }
 
-  const targetdir = options.ungzipDir || exports.getPackageStorePath(options.storeDir, realPkg, options);
+  const targetdir = options.ungzipDir || exports.getPackageStorePath(options.storeDir, realPkg, options, suffix);
   const key = `copy:${targetdir}`;
   const result = {
     dir: targetdir,
     package: realPkg,
     exists: true,
+    storeVersion: exports.storeVersion(realPkg.version, suffix),
   };
 
   if (options.cache[key]) {
@@ -740,16 +765,29 @@ exports.copyInstall = async (src, options) => {
   return result;
 };
 
+// 按 npm pack 的规则(files, .npmignore/.gitignore, 必含与必排文件)把要发布的文件复制到 dest, 不执行任何脚本
+exports.copyPackFiles = async (src, dest) => {
+  const files = await packlist({ path: src });
+  for (const file of files) {
+    const target = path.join(dest, file);
+    await exports.mkdirp(path.dirname(target));
+    await fs.copyFile(path.join(src, file), target);
+  }
+};
+
 // np-lock.json 锁定的 git / tarball url 包已在 store 中完整安装时返回 copyInstall 同形的结果, 调用方据此不再联网
-exports.getLockedInstall = async (locked, options) => {
-  if (!locked || !locked.name || !locked.version || !locked._resolved || options.rebuild) return null;
-  const dir = options.ungzipDir || exports.getPackageStorePath(options.storeDir, locked, options);
+exports.getLockedInstall = async (locked, options, suffix) => {
+  if (!locked || !locked.name || !locked.version || !locked._resolved || !suffix || options.rebuild) return null;
+  const dir = options.ungzipDir || exports.getPackageStorePath(options.storeDir, locked, options, suffix);
   if (!(await exports.isInstallDone(dir)) || (await installState.get(dir))?.stage) return null;
   const pkg = await exports.readPackageJSON(dir);
-  // 同名同版本的 store 目录可能装的是另一个 commit 或 url 的内容
-  if (pkg._resolved !== locked._resolved) return null;
-  return { dir, package: pkg, exists: true };
+  // np-lock.json 中的地址不带凭据, store 中记录的是声明里带凭据的地址
+  if (exports.stripUrlAuth(pkg._resolved) !== exports.stripUrlAuth(locked._resolved)) return null;
+  return { dir, package: pkg, exists: true, storeVersion: exports.storeVersion(locked.version, suffix) };
 };
+
+// 按声明查锁定条目; np-lock.json 的键不带凭据, 声明里的 git / tarball url 可能带
+exports.lockedEntry = (tree, raw) => tree[raw] || tree[exports.stripUrlAuth(raw)];
 
 exports.getPkgFromPaths = async (name, paths) => {
   for (const p of paths) {
@@ -1145,7 +1183,20 @@ exports.omitPackage = pkg => {
 // 遮住 URL 中的用户名密码与 npmrc 风格的凭据值, 用于打印到终端与写入日志的文本; 传给子进程的配置不能经过它
 const URL_USERINFO_RE = /([a-z][a-z0-9+.-]*:\/\/)[^\s/'"]+@/gi;
 const AUTH_VALUE_RE = /(_authToken|_auth|_password)(["']?\s*[=:]\s*["']?)[^\s'",;}&]+/g;
-exports.redactUrl = str => String(str).replace(URL_USERINFO_RE, '$1***@').replace(AUTH_VALUE_RE, '$1$2***');
+const QUERY_SECRET_RE = /([?&](?:token|access_token|auth|_authToken|password)=)[^&#\s]+/gi;
+exports.redactUrl = str =>
+  String(str).replace(URL_USERINFO_RE, '$1***@').replace(AUTH_VALUE_RE, '$1$2***').replace(QUERY_SECRET_RE, '$1***');
+
+// 写入 np-lock.json 的地址去掉凭据: http(s) 去掉整段 userinfo(token 常作为用户名), 其他协议只去掉密码, 保留 git@ 这类用户名; 两个包必须逐字相同, 否则共用的 np-lock.json 键对不上
+const URL_AUTH_RE = /([a-z][a-z0-9+.-]*:\/\/)([^\s/'"]+)@/gi;
+exports.stripUrlAuth = str => {
+  if (typeof str !== 'string') return str;
+  return str.replace(URL_AUTH_RE, (match, scheme, userinfo) => {
+    if (/https?:\/\/$/i.test(scheme)) return scheme;
+    const colon = userinfo.indexOf(':');
+    return colon >= 0 ? `${scheme}${userinfo.slice(0, colon)}@` : match;
+  });
+};
 
 const SECRET_KEYS = new Set([
   'authorization',

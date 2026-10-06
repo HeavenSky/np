@@ -445,6 +445,19 @@ setInterval(() => {}, 1000);`
       );
     });
 
+    it('should hide tokens in query strings', () => {
+      assert.equal(
+        utils.redactUrl('GET https://h/a.tgz?token=abc&x=1#frag failed'),
+        'GET https://h/a.tgz?token=***&x=1#frag failed'
+      );
+      assert.equal(
+        utils.redactUrl('https://h/a?x=1&access_token=abc&auth=def&Password=ghi'),
+        'https://h/a?x=1&access_token=***&auth=***&Password=***'
+      );
+      assert.equal(utils.redactUrl('https://h/a?_authToken=abc'), 'https://h/a?_authToken=***');
+      assert.equal(utils.redactUrl('https://h/a?tokens=abc&mytoken=def'), 'https://h/a?tokens=abc&mytoken=def');
+    });
+
     it('should return a redacted copy and keep the original', () => {
       const original = {
         proxy: 'http://user:s3cret@127.0.0.1:1',
@@ -461,6 +474,43 @@ setInterval(() => {}, 1000);`
       assert.equal(copy.self, copy);
       assert.equal(original.proxy, 'http://user:s3cret@127.0.0.1:1');
       assert.equal(original.headers.Authorization, 'Bearer t');
+    });
+  });
+
+  describe('stripUrlAuth()', () => {
+    it('should drop credentials but keep ssh user names', () => {
+      assert.equal(
+        utils.stripUrlAuth('git+https://user:tok@github.com/a/b.git#' + 'a'.repeat(40)),
+        'git+https://github.com/a/b.git#' + 'a'.repeat(40)
+      );
+      assert.equal(utils.stripUrlAuth('foo@https://tok@h.com/foo.tgz'), 'foo@https://h.com/foo.tgz');
+      assert.equal(utils.stripUrlAuth('git+ssh://git@github.com/a/b.git'), 'git+ssh://git@github.com/a/b.git');
+      assert.equal(utils.stripUrlAuth('git+ssh://user:pass@h.com/a/b.git'), 'git+ssh://user@h.com/a/b.git');
+      assert.equal(utils.stripUrlAuth('pedding@^1.0.0'), 'pedding@^1.0.0');
+      assert.equal(utils.stripUrlAuth(undefined), undefined);
+    });
+  });
+
+  describe('store source suffix', () => {
+    it('should build and parse versions with a source suffix', () => {
+      const sha = '1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f1a2b';
+      assert.equal(utils.sourceSuffix('git', sha), 'git.1a2b3c4d');
+      assert.match(utils.sourceSuffix('url', 'sha512-abc'), /^url\.[a-f0-9]{8}$/);
+      assert.match(utils.sourceSuffix('file', '/a/b'), /^file\.[a-f0-9]{8}$/);
+      assert.notEqual(utils.sourceSuffix('file', '/a/b'), utils.sourceSuffix('file', '/a/c'));
+      assert.equal(utils.storeVersion('1.0.0', 'git.1a2b3c4d'), '1.0.0+git.1a2b3c4d');
+      assert.equal(utils.storeVersion('1.0.0+build.5', 'git.1a2b3c4d'), '1.0.0+build.5.git.1a2b3c4d');
+      assert.equal(utils.storeVersion('1.0.0', null), '1.0.0');
+      assert.deepEqual(utils.parseStoreVersion('1.0.0+git.1a2b3c4d'), { version: '1.0.0', suffix: 'git.1a2b3c4d' });
+      assert.deepEqual(utils.parseStoreVersion('1.0.0+build.5.url.1a2b3c4d'), {
+        version: '1.0.0+build.5',
+        suffix: 'url.1a2b3c4d',
+      });
+      assert.deepEqual(utils.parseStoreVersion('1.0.0+build.5'), { version: '1.0.0+build.5', suffix: null });
+      assert.equal(
+        utils.getPackageStorePath('/r/node_modules', { name: '@a/b', version: '1.0.0' }, {}, 'file.1a2b3c4d'),
+        require('node:path').join('/r/node_modules/.store/@a+b@1.0.0+file.1a2b3c4d/node_modules/@a/b')
+      );
     });
   });
 });

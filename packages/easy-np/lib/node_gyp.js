@@ -7,6 +7,9 @@ const { spawnSync } = require('node:child_process');
 const runtime = require('./runtime');
 
 const INSTALL_TIMEOUT = 10 * 60 * 1000;
+// 必须大于 INSTALL_TIMEOUT, 否则会删掉其他进程正在安装的目录
+const ORPHAN_AGE = 60 * 60 * 1000;
+const INSTALL_DIR_RE = /^v\d+\.\d+\.\d+\S*-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SHIM_DIR = path.join(__dirname, '../node-gyp-bin');
 const CLI = path.join(__dirname, '../bin/i.js');
 
@@ -89,7 +92,37 @@ function install(baseDir, pointer, pkg) {
   const tmp = `${pointer}.${randomUUID()}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify({ spec: pkg.spec, dir: name }));
   fs.renameSync(tmp, pointer);
+  removeOrphans(baseDir);
   return bin;
+}
+
+// 删除不被任何指针引用且超过 ORPHAN_AGE 的安装目录; 更新的目录可能属于尚未写指针的并发安装
+function removeOrphans(baseDir) {
+  try {
+    const entries = fs.readdirSync(baseDir);
+    const referenced = new Set();
+    for (const entry of entries) {
+      if (!entry.endsWith('.json')) continue;
+      try {
+        const { dir } = JSON.parse(fs.readFileSync(path.join(baseDir, entry), 'utf8'));
+        if (typeof dir === 'string') referenced.add(dir);
+      } catch {
+        // 读不了的指针不影响清理其他目录
+      }
+    }
+    const now = Date.now();
+    for (const entry of entries) {
+      if (!INSTALL_DIR_RE.test(entry) || referenced.has(entry)) continue;
+      const dir = path.join(baseDir, entry);
+      try {
+        if (now - fs.statSync(dir).mtimeMs > ORPHAN_AGE) fs.rmSync(dir, { recursive: true, force: true });
+      } catch {
+        // 其他进程同时清理时目录可能已不存在
+      }
+    }
+  } catch {
+    // 清理失败不影响本次构建
+  }
 }
 
 exports.resolveBin = () => {

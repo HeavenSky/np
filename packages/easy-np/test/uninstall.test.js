@@ -29,6 +29,14 @@ describe('test/uninstall.test.js', () => {
   });
   afterEach(cleanup);
 
+  // 本地包的 store 目录名带来源标识: pkg@1.0.0+file.<hash>
+  async function assertStoreDir() {
+    const entries = await fs.readdir(path.join(root, 'node_modules/.store'));
+    const entry = entries.find(name => /^pkg@1\.0\.0\+file\.[a-f0-9]{8}$/.test(name));
+    assert(entry, entries.join(', '));
+    assertFile(path.join(root, 'node_modules/.store', entry, 'node_modules/pkg'));
+  }
+
   it('should uninstall ok', async () => {
     await coffee
       .fork(npmuninstall, ['uninstall', 'koa', 'pkg@1.0.0'], {
@@ -39,7 +47,7 @@ describe('test/uninstall.test.js', () => {
     assertFile.fail(path.join(root, 'node_modules/koa'));
     assertFile.fail(path.join(root, 'node_modules/pkg'));
     // dont remove real dir
-    assertFile(path.join(root, 'node_modules/.store/pkg@1.0.0/node_modules/pkg'));
+    await assertStoreDir();
   });
 
   it('should uninstall --save', async () => {
@@ -54,7 +62,7 @@ describe('test/uninstall.test.js', () => {
 
     assertFile.fail(path.join(root, 'node_modules/pkg'));
     // dont remove real dir
-    assertFile(path.join(root, 'node_modules/.store/pkg@1.0.0/node_modules/pkg'));
+    await assertStoreDir();
     const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json')));
     assert(!pkg.dependencies.pkg);
   });

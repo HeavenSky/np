@@ -70,8 +70,19 @@ async function main(command, args) {
   await fs.writeFile(pkgFile, JSON.stringify(rootPkg, null, indent) + (text.endsWith('\n') ? '\n' : ''));
   for (const key of changed.keys) console.log(deny ? chalk.yellow('denied %s') : chalk.green('approved %s'), key);
   if (!deny) {
-    const rebuildNames = [...new Set(changed.targets.map(item => item.name))].join(' ');
-    console.log('run np-x rebuild %s to run their install scripts now', rebuildNames);
+    // git 依赖的构建发生在获取时, rebuild 只重跑安装脚本; 删除 store 目录后重新安装才会克隆并构建
+    const builds = changed.targets.filter(item => item.identity.git && item.build);
+    for (const item of builds) {
+      console.log(
+        'git dependency %s is built when fetched, remove %s and run np again to build it',
+        item.name,
+        path.relative(process.cwd(), item.storeDir) || '.'
+      );
+    }
+    const rebuildNames = [
+      ...new Set(changed.targets.filter(item => !builds.includes(item) || item.install).map(item => item.name)),
+    ].join(' ');
+    if (rebuildNames) console.log('run np-x rebuild %s to run their install scripts now', rebuildNames);
   }
 }
 
@@ -132,7 +143,7 @@ function sameName(key, identity) {
   }
 }
 
-// 扫描 .store 中带安装脚本(含 binding.gyp 隐式构建)的包; workspace 项目的 .store 位于根目录
+// 扫描 .store 中带安装脚本(含 binding.gyp 隐式构建)的包与需要构建的 git 依赖; workspace 项目的 .store 位于根目录
 async function listInstalledWithScripts(root) {
   const storeRoot = path.join(root, 'node_modules/.store');
   let entries;
@@ -149,16 +160,21 @@ async function listInstalledWithScripts(root) {
     const dir = path.join(storeRoot, entry, 'node_modules', name);
     const pkg = await utils.readJSON(path.join(dir, 'package.json'));
     if (!pkg.name) continue;
-    const scripts = await allowScripts.pendingScripts(pkg, dir);
-    if (scripts.length === 0) continue;
+    const install = await allowScripts.pendingScripts(pkg, dir);
     const identity = allowScripts.identityOfInstalled(pkg, dir);
     if (!identity) continue;
+    const build = identity.git ? allowScripts.gitBuildScripts(pkg) : [];
+    const scripts = [...new Set([...install, ...build])];
+    if (scripts.length === 0) continue;
     const owner = allowScripts.ownerOfInstalled(pkg);
     result.push({
       name,
       displayName: `${name}@${entry.slice(at + 1)}${owner ? ` (declared by ${owner})` : ''}`,
       scripts,
       identity,
+      install: install.length > 0,
+      build: build.length > 0,
+      storeDir: path.join(storeRoot, entry),
     });
   }
   return result;

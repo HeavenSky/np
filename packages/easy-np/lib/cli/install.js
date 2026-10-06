@@ -24,6 +24,8 @@ const help = require('./help');
 
 // 命令行未出现时删掉 minimist 补的默认 false, 否则会盖过环境变量与 ~/.nprc, 例如未传 --strict-ssl 也关闭证书校验
 const TRI_STATE_FLAGS = ['strict-ssl', 'strict-allow-scripts', 'dangerously-allow-all-scripts'];
+// 可以重复传入的参数, 其余参数重复时与 npm 一致取最后一个
+const MULTI_VALUE_ARGS = new Set(['_', 'allow-scripts', 'workspace', 'w']);
 
 module.exports = async function install(args, { ignorePkgNames = false, ignoreLockfile = false } = {}) {
   try {
@@ -136,6 +138,9 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
       delete argv[name];
     }
   }
+  for (const [name, value] of Object.entries(argv)) {
+    if (Array.isArray(value) && !MULTI_VALUE_ARGS.has(name)) argv[name] = value[value.length - 1];
+  }
 
   if (argv.version) {
     console.log(`np v${require('../../package.json').version}`);
@@ -159,6 +164,8 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
 
   // 首个网络请求与子进程启动之前写入, 安装脚本, node-gyp 与 git 通过环境变量继承
   proxy.configure(argv);
+  // 下面按 argv 生成的 npm_config_* 会覆盖给安装脚本, 必须用 proxy 转换后的绝对路径
+  if (argv.cafile) argv.cafile = process.env.npm_config_cafile;
   runtime.warnIfDegraded();
 
   const pkgs = [];
@@ -184,11 +191,7 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
     });
   }
 
-  let root = argv.root || process.cwd();
-  if (Array.isArray(root)) {
-    // use last one, e.g.: $ np --root=abc --root=def
-    root = root[root.length - 1];
-  }
+  const root = argv.root || process.cwd();
   let installOnAllWorkspaces = argv.workspaces;
   let installWorkspaceNames = utils.formatWorkspaceNames(argv);
   const production = argv.production || process.env.NODE_ENV === 'production';
@@ -210,8 +213,7 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
 
   const flatten = argv.flatten;
 
-  // example: np --registry xx --registry xxxx
-  let registry = (Array.isArray(argv.registry) ? argv.registry[0] : argv.registry) || process.env.npm_registry;
+  let registry = argv.registry || process.env.npm_registry;
   const offline = !!argv.offline;
   // rebuild 优先用磁盘缓存中的 manifest 与 tgz, 缓存缺失时才联网
   const preferOffline = !!argv.rebuild && !offline;

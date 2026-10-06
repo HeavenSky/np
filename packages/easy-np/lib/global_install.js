@@ -12,6 +12,7 @@ const utils = require('./utils');
 const download = require('./download');
 const bin = require('./bin');
 const formatInstallOptions = require('./format_install_options');
+const allowScripts = require('./allow_scripts');
 
 module.exports = async (options, context) => {
   const pkgs = options.pkgs || [];
@@ -68,6 +69,11 @@ module.exports = async (options, context) => {
         production: true,
         global: true,
       });
+      // 被装的包作为它的本地依赖的声明者: 身份取 registry 解析结果(包内 package.json 可以冒充其他包), 本地路径安装的包由用户指定, 保持受信
+      const identity = allowScripts.identityOf(p.type, result.package, p.fetchSpec);
+      if (identity) {
+        pkgOptions.globalRootDeclarer = { where: targetDir, trustedLocal: false, scriptIdentity: identity };
+      }
 
       await installLocal(pkgOptions, context);
 

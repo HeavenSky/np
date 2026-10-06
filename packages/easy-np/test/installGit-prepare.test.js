@@ -4,6 +4,7 @@ const util = require('node:util');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
+const coffee = require('coffee');
 const npminstall = require('./npminstall');
 const helper = require('./helper');
 const { exists } = require('../lib/utils');
@@ -124,6 +125,55 @@ describe('test/installGit-prepare.test.js', () => {
       await npminstall({ root });
       assert(await exists(path.join(root, 'node_modules/build-demo/package.json')));
       assert.equal(await exists(marker), false);
+
+      // 只因构建被跳过的 git 依赖也能按结束提示放行
+      await coffee
+        .fork(helper.x, ['approve-scripts', '--pending'], { cwd: root })
+        .expect('stdout', /^build-demo@1\.0\.0\+git\.[a-f0-9]{8} \(build\)$/m)
+        .end();
+      await coffee
+        .fork(helper.x, ['approve-scripts', 'build-demo'], { cwd: root })
+        .expect('code', 0)
+        .expect('stdout', /git dependency build-demo is built when fetched, remove .+ and run np again to build it/)
+        .notExpect('stdout', /np-x rebuild/)
+        .end();
+      const { allowScripts } = await helper.readJSON(path.join(root, 'package.json'));
+      const escaped = buildRepo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      assert.deepEqual(Object.values(allowScripts), [true]);
+      assert.match(Object.keys(allowScripts)[0], new RegExp(`^git\\+file://${escaped}#[a-f0-9]{40}$`));
+    });
+
+    it('should not pack the lockfile of the build install', async () => {
+      const buildRepo = path.join(tmp, 'nolock-repo');
+      await commitRepo(buildRepo, {
+        'package.json': {
+          name: 'nolock-demo',
+          version: '1.0.0',
+          scripts: { prepare: "node -e \"require('fs').writeFileSync('built.js', '')\"" },
+          devDependencies: { tool: 'file:./tool' },
+        },
+        'tool/package.json': { name: 'tool', version: '1.0.0' },
+      });
+      await fs.writeFile(
+        path.join(root, 'package.json'),
+        JSON.stringify({
+          name: 'app',
+          version: '1.0.0',
+          dependencies: { 'nolock-demo': `git+file://${buildRepo}` },
+          allowScripts: { [`git+file://${buildRepo}`]: true },
+        })
+      );
+      // .mocha-global.js 全局关闭了锁文件, 构建的子安装要按默认行为运行
+      const { np_lockfile: lockfileEnv } = process.env;
+      delete process.env.np_lockfile;
+      try {
+        await npminstall({ root });
+      } finally {
+        if (lockfileEnv !== undefined) process.env.np_lockfile = lockfileEnv;
+      }
+      const pkgDir = path.join(root, 'node_modules/nolock-demo');
+      assert(await exists(path.join(pkgDir, 'built.js')));
+      assert.equal(await exists(path.join(pkgDir, 'np-lock.json')), false);
     });
 
     it('should not build nested git dependencies or run local prepack in the build', async () => {
@@ -172,7 +222,9 @@ describe('test/installGit-prepare.test.js local dependencies of a git dependency
   const postinstallMarker = path.join(tmp, 'inner-postinstall');
   const prepackMarker = path.join(tmp, 'inner-prepack');
   const decoyMarker = path.join(tmp, 'decoy-postinstall');
-  const innerDir = path.join(root, 'node_modules/.store/host@1.0.0/node_modules/inner');
+  // host 的 store 目录名带 commit 标识, inner 与它同在 <store 目录>/node_modules 下
+  const innerPkgFile = async () =>
+    path.join(path.dirname(await fs.realpath(path.join(root, 'node_modules/host'))), 'inner/package.json');
 
   beforeEach(async () => {
     await cleanup();
@@ -206,7 +258,7 @@ describe('test/installGit-prepare.test.js local dependencies of a git dependency
         root,
         console: { info() {}, log() {}, warn: (...args) => warnings.push(util.format(...args)), error() {} },
       });
-      assert.equal((await helper.readJSON(path.join(innerDir, 'package.json'))).version, '1.0.0');
+      assert.equal((await helper.readJSON(await innerPkgFile())).version, '1.0.0');
       assert.equal(await exists(postinstallMarker), false);
       assert.equal(await exists(prepackMarker), false);
       assert.equal(await exists(decoyMarker), false);
@@ -220,7 +272,7 @@ describe('test/installGit-prepare.test.js local dependencies of a git dependency
     it('should run only its dependency scripts after the git dependency is approved', async () => {
       await writeRootPkg({ allowScripts: { [`git+file://${repo}`]: true } });
       await npminstall({ root });
-      assert.equal((await helper.readJSON(path.join(innerDir, 'package.json'))).version, '1.0.0');
+      assert.equal((await helper.readJSON(await innerPkgFile())).version, '1.0.0');
       assert.equal(await exists(postinstallMarker), true);
       assert.equal(await exists(prepackMarker), false);
       assert.equal(await exists(decoyMarker), false);

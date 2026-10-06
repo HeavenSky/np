@@ -1,6 +1,8 @@
 const mm = require('mm');
 const assert = require('node:assert');
 const path = require('node:path');
+const fs = require('node:fs/promises');
+const coffee = require('coffee');
 const semver = require('semver');
 const npminstall = require('./npminstall');
 const helper = require('./helper');
@@ -162,6 +164,63 @@ describe('test/installLocal.test.js', () => {
     assert.strictEqual(semver.parse(pkg1.version).major, 4);
     assert.strictEqual(pkg2.name, 'lodash.has');
     assert.strictEqual(semver.parse(pkg2.version).major, 3);
+  });
+
+  it('should copy a local folder by npm pack rules without npm pack when scripts are ignored', async () => {
+    const [tmp, tmpCleanup] = helper.tmp();
+    await tmpCleanup();
+    const commands = [];
+    mm(utils, 'exec', async command => {
+      commands.push(command);
+      throw new Error(`unexpected command: ${command}`);
+    });
+    try {
+      const dep = path.join(tmp, 'dep');
+      const app = path.join(tmp, 'app');
+      const marker = path.join(tmp, 'prepack.marker');
+      await fs.mkdir(path.join(dep, 'lib'), { recursive: true });
+      await fs.mkdir(app, { recursive: true });
+      await fs.writeFile(
+        path.join(dep, 'package.json'),
+        JSON.stringify({
+          name: 'dep',
+          version: '1.0.0',
+          files: ['lib'],
+          scripts: { prepack: `node -e "require('fs').writeFileSync('${marker}', '')"` },
+        })
+      );
+      await fs.writeFile(path.join(dep, 'lib/index.js'), '');
+      await fs.writeFile(path.join(dep, 'secret.txt'), '');
+      await fs.writeFile(path.join(app, 'package.json'), JSON.stringify({ name: 'app', version: '1.0.0' }));
+      await npminstall({ root: app, ignoreScripts: true, pkgs: [{ name: null, version: `file:${dep}` }] });
+      const files = (await fs.readdir(path.join(app, 'node_modules/dep'))).sort();
+      assert.deepEqual(files, ['lib', 'package.json']);
+      assert.deepEqual(commands, []);
+      assert.equal(await utils.exists(marker), false);
+    } finally {
+      mm.restore();
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('should use the last value of a repeated --root', async () => {
+    const [tmp, tmpCleanup] = helper.tmp();
+    await tmpCleanup();
+    try {
+      await fs.writeFile(path.join(tmp, 'package.json'), JSON.stringify({ name: 'app', version: '1.0.0' }));
+      await coffee
+        .fork(
+          helper.npminstall,
+          ['--root=not-exists', `--root=${tmp}`, '--registry=http://127.0.0.1:1', '--no-lockfile', 'file:../local/pkg'],
+          { cwd: path.dirname(tmp) }
+        )
+        .expect('code', 0)
+        .end();
+      const pkg = await helper.readJSON(path.join(tmp, 'node_modules/pkg/package.json'));
+      assert.equal(pkg.name, 'pkg');
+    } finally {
+      await fs.rm(tmp, { recursive: true, force: true });
+    }
   });
 
   if (process.platform !== 'win32') {

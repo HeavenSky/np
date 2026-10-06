@@ -7,8 +7,10 @@ const utils = require('../utils');
 module.exports = async (pkg, options) => {
   const { name, raw, fetchSpec, displayName } = pkg;
   // np-lock.json 记录 tarball 的 integrity; 冻结时缺少条目直接报错
-  const locked = options.cache.dependenciesTree[raw];
-  const installed = await utils.getLockedInstall(locked, options);
+  const locked = utils.lockedEntry(options.cache.dependenciesTree, raw);
+  const lockedIntegrity = locked && locked.dist && locked.dist.integrity;
+  const installed =
+    lockedIntegrity && (await utils.getLockedInstall(locked, options, utils.sourceSuffix('url', lockedIntegrity)));
   if (installed) {
     options.remoteNames[raw] = installed.package.name;
     if (options.lockPackages) options.lockPackages[raw] = locked;
@@ -47,7 +49,6 @@ module.exports = async (pkg, options) => {
     await utils.unpack(readstream, ungzipDir, pkg);
     // 同一个 url 的内容被替换时报错, 不静默装上与锁定时不同的代码
     const integrity = `sha512-${hash.digest('base64')}`;
-    const lockedIntegrity = locked && locked.dist && locked.dist.integrity;
     if (lockedIntegrity && lockedIntegrity !== integrity) {
       throw new Error(
         `integrity mismatch for ${remoteUrl}: np-lock.json has ${lockedIntegrity} but got ${integrity}, ` +
@@ -58,7 +59,7 @@ module.exports = async (pkg, options) => {
       _from: name ? `${name}@${remoteUrl}` : remoteUrl,
       _resolved: remoteUrl,
     });
-    const res = await utils.copyInstall(ungzipDir, options);
+    const res = await utils.copyInstall(ungzipDir, options, utils.sourceSuffix('url', integrity));
     if (name && name !== res.package.name) {
       throw new Error(`Invalid Package, expected ${name} but found ${res.package.name}`);
     }

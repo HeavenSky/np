@@ -66,12 +66,13 @@ async function findInstalled(spec, options) {
   const matched = [];
   for (const entry of entries.sort()) {
     if (!entry.startsWith(prefix)) continue;
-    const version = entry.slice(prefix.length);
+    const { version, suffix } = utils.parseStoreVersion(entry.slice(prefix.length));
     if (spec.range && !utils.fastSemverSatisfies(version, spec.range)) continue;
     const dir = utils.getPackageStorePath(
       path.join(options.root, 'node_modules'),
       { name: spec.name, version },
-      options
+      options,
+      suffix
     );
     const pkg = await utils.readJSON(path.join(dir, 'package.json'));
     if (pkg.name) matched.push({ pkg, dir, name: spec.name, version });

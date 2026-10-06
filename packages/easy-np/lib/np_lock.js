@@ -58,7 +58,7 @@ exports.read = async root => {
 exports.write = async (root, packages) => {
   const sorted = {};
   for (const key of Object.keys(packages).sort()) {
-    sorted[key] = utils.omitPackage(packages[key]);
+    sorted[utils.stripUrlAuth(key)] = withoutCredentials(utils.omitPackage(packages[key]));
   }
   const content = `${JSON.stringify({ lockfileVersion: LOCKFILE_VERSION, packages: sorted }, null, 2)}\n`;
   const file = path.join(root, LOCKFILE_NAME);
@@ -67,3 +67,10 @@ exports.write = async (root, packages) => {
   await fs.writeFile(file, content);
   return true;
 };
+
+// np-lock.json 会被提交, 声明里带凭据的 git / tarball url 写入时去掉凭据, 安装时用声明里的凭据加锁定的 commit / integrity
+function withoutCredentials(entry) {
+  if (entry._resolved) entry._resolved = utils.stripUrlAuth(entry._resolved);
+  if (entry.dist && entry.dist.tarball) entry.dist = { ...entry.dist, tarball: utils.stripUrlAuth(entry.dist.tarball) };
+  return entry;
+}

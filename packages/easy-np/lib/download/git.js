@@ -5,14 +5,11 @@ const { randomUUID } = require('node:crypto');
 const chalk = require('chalk');
 const npa = require('npm-package-arg');
 const semver = require('semver');
-const packlist = require('npm-packlist');
 const utils = require('../utils');
 const allowScripts = require('../allow_scripts');
 
 // 只对这些主机浅克隆: 其他主机(例如 GHE)不一定支持, 浅拉取失败比完整拉取更慢
 const SHALLOW_HOSTS = new Set(['github.com', 'gist.github.com', 'gitlab.com', 'bitbucket.com', 'bitbucket.org']);
-// 与 pacote 一致: 声明了这些脚本或 workspaces 的仓库才先安装依赖再打包
-const PREPARE_SCRIPTS = ['postinstall', 'build', 'preinstall', 'install', 'prepack', 'prepare'];
 const CNPM_DEP_FIELDS = ['clientDependencies', 'buildDependencies', 'isomorphicDependencies'];
 const GIT_SHORT_TIMEOUT = 2 * 60 * 1000;
 const GIT_FETCH_TIMEOUT = 10 * 60 * 1000;
@@ -38,8 +35,10 @@ const PATHSPEC_ERROR_RE = /pathspec .* did not match any file\(s\) known to git/
 
 module.exports = async (pkg, options) => {
   const { name, raw, displayName } = pkg;
-  const locked = options.cache.dependenciesTree[raw];
-  const installed = await utils.getLockedInstall(locked, options);
+  const locked = utils.lockedEntry(options.cache.dependenciesTree, raw);
+  // np-lock.json 锁定了解析出的 commit 时直接检出它, 不再按分支, tag 或 semver 重新解析
+  const lockedSha = locked && /#([a-f0-9]{40})$/.exec(locked._resolved || '')?.[1];
+  const installed = lockedSha && (await utils.getLockedInstall(locked, options, utils.sourceSuffix('git', lockedSha)));
   if (installed) {
     options.remoteNames[raw] = installed.package.name;
     if (options.lockPackages) options.lockPackages[raw] = locked;
@@ -61,9 +60,8 @@ module.exports = async (pkg, options) => {
   const repoDir = path.join(tmpDir, 'repo');
   const packageDir = path.join(tmpDir, 'package');
   try {
+    // 锁定地址不带凭据, 克隆用声明里的地址(含凭据)加锁定的 commit
     const spec = npa(raw);
-    // np-lock.json 锁定了解析出的 commit 时直接检出它, 不再按分支, tag 或 semver 重新解析
-    const lockedSha = locked && /#([a-f0-9]{40})$/.exec(locked._resolved || '')?.[1];
     if (lockedSha) {
       spec.gitCommittish = lockedSha;
       spec.gitRange = undefined;
@@ -73,12 +71,12 @@ module.exports = async (pkg, options) => {
     const sha = await cloneSpec(spec, repoDir);
     const resolved = resolvedUrl(spec, sha);
     await prepareRepo(repoDir, resolved, options);
-    await packRepo(repoDir, packageDir);
+    await utils.copyPackFiles(repoDir, packageDir);
     await utils.addMetaToJSONFile(path.join(packageDir, 'package.json'), {
       _from: raw,
       _resolved: resolved,
     });
-    const res = await utils.copyInstall(packageDir, options);
+    const res = await utils.copyInstall(packageDir, options, utils.sourceSuffix('git', sha));
     if (name && name !== res.package.name) {
       options.console.warn(
         chalk.yellow(`[${displayName}] Package name unmatched: expected ${name} but found ${res.package.name}`)
@@ -303,8 +301,8 @@ async function prepareRepo(dir, resolved, options) {
   const content = await fs.readFile(pkgFile, 'utf8');
   const pkg = JSON.parse(content);
   const scripts = pkg.scripts || {};
-  const triggers = PREPARE_SCRIPTS.filter(script => scripts[script]);
-  if (!pkg.workspaces && triggers.length === 0) {
+  const triggers = allowScripts.gitBuildScripts(pkg);
+  if (triggers.length === 0) {
     return;
   }
   if (options.ignoreScripts) {
@@ -314,7 +312,7 @@ async function prepareRepo(dir, resolved, options) {
   const info = {
     displayName: pkg.name || resolved,
     name: pkg.name,
-    scripts: triggers.length ? triggers : ['workspaces'],
+    scripts: triggers,
   };
   if (!allowScripts.allow(options, { git: resolved }, info)) {
     return;
@@ -330,7 +328,7 @@ async function prepareRepo(dir, resolved, options) {
   // 依赖的安装脚本不执行(与 npm 12 默认不执行未授权的依赖脚本一致), 否则只用于测试的 devDependencies(例如 phantomjs-prebuilt)下载失败也会让整个 git 依赖装不上
   const env = { ...process.env, [NO_PREPARE_ENV]: noPrepare.join('\n'), [allowScripts.GIT_PREPARE_CHILD_ENV]: '1' };
   delete env.NODE_ENV;
-  const args = [NP_BIN, `--root=${dir}`, '--ignore-scripts'];
+  const args = [NP_BIN, `--root=${dir}`, '--ignore-scripts', '--no-lockfile'];
   if (options.registry) {
     args.push(`--registry=${options.registry}`);
   }
@@ -347,16 +345,6 @@ async function prepareRepo(dir, resolved, options) {
   // 与 pacote 一致: 根包只执行 prepare
   if (scripts.prepare) {
     await utils.runScript(dir, scripts.prepare, options, !!options.foregroundScripts, PREPARE_TIMEOUT);
-  }
-}
-
-// 按 npm pack 的规则(files, .npmignore/.gitignore, 必含与必排文件)把要发布的文件复制到 dest
-async function packRepo(dir, dest) {
-  const files = await packlist({ path: dir });
-  for (const file of files) {
-    const target = path.join(dest, file);
-    await utils.mkdirp(path.dirname(target));
-    await fs.copyFile(path.join(dir, file), target);
   }
 }
 

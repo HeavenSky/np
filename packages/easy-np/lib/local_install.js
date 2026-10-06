@@ -318,13 +318,17 @@ async function needInstall(parentDir, childPkg, options) {
   try {
     if (pkg.name && pkg.version && childPkg.version && !(await utils.isInstallUnfinished(pkgDir))) {
       // 启用锁文件时已装的依赖也要安装一遍, 遍历子树才能把它们记进 np-lock.json; 已装的等于锁定版本时只是不删除
-      const locked = options.lockPackages && options.cache.dependenciesTree[`${childPkg.name}@${childPkg.version}`];
+      const locked =
+        options.lockPackages &&
+        utils.lockedEntry(options.cache.dependenciesTree, `${childPkg.name}@${childPkg.version}`);
       if (semver.validRange(childPkg.version, true) && utils.fastSemverSatisfies(pkg.version, childPkg.version)) {
         if (!options.lockPackages) return false;
         if (locked && locked.version === pkg.version) return true;
       }
       // git 与 tarball url 依赖: 已装的就是锁定的 commit 或 url 时不删除, 下载时直接复用 store 中已完成的包
-      if (locked && locked._resolved && pkg._resolved === locked._resolved) return true;
+      if (locked && locked._resolved && utils.stripUrlAuth(pkg._resolved) === utils.stripUrlAuth(locked._resolved)) {
+        return true;
+      }
     }
   } catch (err) {
     // ignore, maybe pkg.version invalid
