@@ -10,6 +10,8 @@ const querystring = require('node:querystring');
 const zlib = require('node:zlib');
 const chalk = require('chalk');
 const globby = require('globby');
+// 不能删: 加载时为 tar 补齐 Node < 16.6 缺少的内置方法
+require('./runtime');
 const tar = require('tar');
 const { command } = require('execa');
 const homedir = require('node-homedir');
@@ -406,12 +408,11 @@ async function commandWithTimeout(script, options, timeout) {
     stdio: options.stdio === 'inherit' ? 'inherit' : ['ignore', 'ignore', 'pipe'],
     detached: process.platform !== 'win32',
   });
-  const killTree = () => exports.killProcessTree(child.pid);
-  process.once('exit', killTree);
+  const untrack = exports.trackChildProcess(child.pid);
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
-    killTree();
+    exports.killProcessTree(child.pid);
   }, timeout);
   try {
     return await child;
@@ -420,21 +421,80 @@ async function commandWithTimeout(script, options, timeout) {
     throw err;
   } finally {
     clearTimeout(timer);
-    process.removeListener('exit', killTree);
+    untrack();
   }
 }
 
-exports.killProcessTree = pid => {
+exports.killProcessTree = (pid, signal = 'SIGKILL') => {
   if (!pid) return;
   try {
     if (process.platform === 'win32') {
       cp.spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
     } else {
-      process.kill(-pid, 'SIGKILL');
+      process.kill(-pid, signal);
     }
   } catch {
     // 进程已退出
   }
+};
+
+const SIGNAL_EXIT_CODES = { SIGINT: 130, SIGTERM: 143 };
+const SIGNAL_KILL_GRACE = 1000;
+const trackedPids = new Set();
+let signalExitCode = null;
+
+function killTrackedOnExit() {
+  for (const pid of trackedPids) exports.killProcessTree(pid);
+}
+
+function groupAlive(pid) {
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function exitOnSignal(signal) {
+  if (signalExitCode !== null) return;
+  signalExitCode = SIGNAL_EXIT_CODES[signal];
+  // 等待期间被结束的子进程会让安装流程以其他退出码先行 process.exit, 退出时改回信号对应的退出码
+  process.on('exit', () => {
+    process.exitCode = signalExitCode;
+  });
+  const pids = [...trackedPids];
+  if (process.platform === 'win32') {
+    for (const pid of pids) exports.killProcessTree(pid);
+  } else {
+    for (const pid of pids) exports.killProcessTree(pid, 'SIGTERM');
+    const deadline = Date.now() + SIGNAL_KILL_GRACE;
+    while (pids.some(groupAlive) && Date.now() < deadline) await exports.sleep(50);
+    for (const pid of pids.filter(groupAlive)) exports.killProcessTree(pid);
+  }
+  process.exit(signalExitCode);
+}
+
+// 登记以 detached 启动的子进程: 本进程退出时结束其进程树, 收到 SIGINT / SIGTERM 时先终止它们再退出; 返回注销函数
+exports.trackChildProcess = pid => {
+  if (!pid) return () => {};
+  trackedPids.add(pid);
+  if (trackedPids.size === 1) {
+    process.on('exit', killTrackedOnExit);
+    process.on('SIGINT', exitOnSignal);
+    process.on('SIGTERM', exitOnSignal);
+  }
+  let tracked = true;
+  return () => {
+    if (!tracked) return;
+    tracked = false;
+    trackedPids.delete(pid);
+    if (trackedPids.size === 0) {
+      process.removeListener('exit', killTrackedOnExit);
+      process.removeListener('SIGINT', exitOnSignal);
+      process.removeListener('SIGTERM', exitOnSignal);
+    }
+  };
 };
 
 exports.getMaxRange = spec => {
@@ -664,6 +724,8 @@ exports.copyInstall = async (src, options) => {
   };
 
   if (!(await exports.isInstallDone(targetdir))) {
+    await exports.mkdirp(targetdir);
+    await installState.reset(targetdir);
     await fse.emptyDir(targetdir);
     await fse.copy(src, targetdir);
     await exports.setInstallDone(targetdir, exports.FIRST_INSTALL_STAGE);
@@ -676,6 +738,17 @@ exports.copyInstall = async (src, options) => {
   options.cache[key].done = true;
   options.events.emit(key);
   return result;
+};
+
+// np-lock.json 锁定的 git / tarball url 包已在 store 中完整安装时返回 copyInstall 同形的结果, 调用方据此不再联网
+exports.getLockedInstall = async (locked, options) => {
+  if (!locked || !locked.name || !locked.version || !locked._resolved || options.rebuild) return null;
+  const dir = options.ungzipDir || exports.getPackageStorePath(options.storeDir, locked, options);
+  if (!(await exports.isInstallDone(dir)) || (await installState.get(dir))?.stage) return null;
+  const pkg = await exports.readPackageJSON(dir);
+  // 同名同版本的 store 目录可能装的是另一个 commit 或 url 的内容
+  if (pkg._resolved !== locked._resolved) return null;
+  return { dir, package: pkg, exists: true };
 };
 
 exports.getPkgFromPaths = async (name, paths) => {
@@ -1000,7 +1073,9 @@ exports.getWorkspaceInfos = async (root, workspaceNameOrPaths, workspacesMap = n
 
 // 安装结束时汇总本次失败的包; 失败的包与它们的上层包都保留阶段标记, 再次运行从停下的地方继续
 exports.installFailuresError = (failures, hint = 'run np again to continue from where they stopped') => {
-  const lines = failures.map(({ displayName, error }) => `  - ${displayName}: ${String(error.message).split('\n')[0]}`);
+  const lines = failures.map(
+    ({ displayName, error }) => `  - ${exports.redactUrl(`${displayName}: ${String(error.message).split('\n')[0]}`)}`
+  );
   const err = new Error(`${failures.length} package(s) failed, ${hint}:\n${lines.join('\n')}`);
   err.code = INSTALL_FAILURES_CODE;
   err.failures = failures;
@@ -1019,9 +1094,9 @@ exports.clearInstallStages = async options => {
 
 exports.exitWithError = (cmd, err, code = 1) => {
   // 失败汇总已列出每个包的错误, 不再打印调用栈
-  console.error(chalk.red(err.code === INSTALL_FAILURES_CODE ? err.message : err.stack));
+  console.error(chalk.red(exports.redactUrl(err.code === INSTALL_FAILURES_CODE ? err.message : err.stack)));
   console.error(chalk.yellow(`${cmd} version: %s`), require('../package.json').version);
-  console.error(chalk.yellow(`${cmd} argv: %s`), process.argv.join(' '));
+  console.error(chalk.yellow(`${cmd} argv: %s`), exports.redactUrl(process.argv.join(' ')));
   console.log('');
   process.exit(code);
 };
@@ -1065,4 +1140,55 @@ exports.omitPackage = pkg => {
     if (pkg[key]) res[key] = pkg[key];
   }
   return res;
+};
+
+// 遮住 URL 中的用户名密码与 npmrc 风格的凭据值, 用于打印到终端与写入日志的文本; 传给子进程的配置不能经过它
+const URL_USERINFO_RE = /([a-z][a-z0-9+.-]*:\/\/)[^\s/'"]+@/gi;
+const AUTH_VALUE_RE = /(_authToken|_auth|_password)(["']?\s*[=:]\s*["']?)[^\s'",;}&]+/g;
+exports.redactUrl = str => String(str).replace(URL_USERINFO_RE, '$1***@').replace(AUTH_VALUE_RE, '$1$2***');
+
+const SECRET_KEYS = new Set([
+  'authorization',
+  'proxy-authorization',
+  'registryauthorization',
+  '_authtoken',
+  '_auth',
+  // npm-package-arg 解析出的 hosted git 凭据
+  'auth',
+  '_password',
+  'password',
+]);
+const isSecretKey = key => {
+  const lower = String(key).toLowerCase();
+  return SECRET_KEYS.has(lower) || lower.endsWith(':_authtoken');
+};
+
+// 带内部槽的内置对象复制自有属性后无法正常打印, 原样返回
+const OPAQUE_TYPES = [Date, RegExp, Error, Promise, WeakMap, WeakSet, ArrayBuffer];
+
+// 返回脱敏后的深拷贝, 不修改原对象
+exports.redact = (value, seen = new WeakMap()) => {
+  if (typeof value === 'string') return exports.redactUrl(value);
+  if (!value || typeof value !== 'object') return value;
+  if (seen.has(value)) return seen.get(value);
+  if (value instanceof URL) return exports.redactUrl(value.href);
+  if (value instanceof Map) {
+    const copy = new Map();
+    seen.set(value, copy);
+    for (const [key, item] of value) copy.set(key, isSecretKey(key) ? '***' : exports.redact(item, seen));
+    return copy;
+  }
+  if (value instanceof Set) {
+    const copy = new Set();
+    seen.set(value, copy);
+    for (const item of value) copy.add(exports.redact(item, seen));
+    return copy;
+  }
+  if (ArrayBuffer.isView(value) || OPAQUE_TYPES.some(type => value instanceof type)) return value;
+  const copy = Array.isArray(value) ? [] : Object.create(Object.getPrototypeOf(value));
+  seen.set(value, copy);
+  for (const key of Object.keys(value)) {
+    copy[key] = isSecretKey(key) ? '***' : exports.redact(value[key], seen);
+  }
+  return copy;
 };

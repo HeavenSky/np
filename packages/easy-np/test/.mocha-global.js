@@ -20,8 +20,8 @@ const testHome = path.join(fixtures, '.home');
 mkdirSync(testHome, { recursive: true });
 process.env.HOME = testHome;
 process.env.USERPROFILE = testHome;
-// 测速缓存跨次保留在测试 HOME 中, 会让依赖测速结果的用例互相影响; 需要缓存的用例显式传入分钟数
-process.env.np_probe_cache = '0';
+// 同一次运行内的 CLI 复用测速结果; 缓存文件由 mochaGlobalSetup 在每次运行开始时删除, 跨次保留会让结果随上次的网络状况变化
+process.env.np_probe_cache = '30';
 // 很多用例直接在已提交的 fixture 目录里运行 CLI, 生成的 np-lock.json 会跨次锁定版本; 锁文件用例显式打开
 process.env.np_lockfile = 'false';
 
@@ -33,7 +33,8 @@ if (!(process.env.NODE_OPTIONS || '').includes(preload)) {
   process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS || ''} ${preload}`.trim();
 }
 
-exports.mochaGlobalSetup = () => {
+exports.mochaGlobalSetup = async () => {
+  await fs.rm(path.join(testHome, '.np_tarball/np-probe.json'), { force: true });
   registrySnapshot.prepareCache(path.join(testHome, '.np_tarball/np-manifests'));
 };
 

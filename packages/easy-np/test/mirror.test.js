@@ -1,93 +1,12 @@
 // 公共源自动切换: 用两个本地 registry 模拟 npmmirror 与 npmjs, 覆盖测速, 交替换源, 镜像滞后, 缓存共用与损坏缓存
 const assert = require('node:assert');
 const path = require('node:path');
-const http = require('node:http');
-const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
-const tar = require('tar');
 const coffee = require('coffee');
 const helper = require('./helper');
 const mirror = require('../lib/mirror');
 const allowScripts = require('../lib/allow_scripts');
 const { installLocal } = require('..');
-
-async function packTarball(dir, pkg, files = {}) {
-  const pkgDir = path.join(dir, 'package');
-  await fs.mkdir(pkgDir, { recursive: true });
-  await fs.writeFile(path.join(pkgDir, 'package.json'), JSON.stringify(pkg));
-  for (const file in files) {
-    await fs.mkdir(path.dirname(path.join(pkgDir, file)), { recursive: true });
-    await fs.writeFile(path.join(pkgDir, file), files[file]);
-  }
-  const tgz = path.join(dir, `${pkg.name.replace('/', '-')}-${pkg.version}.tgz`);
-  await tar.c({ gzip: true, file: tgz, cwd: dir }, ['package']);
-  await fs.rm(pkgDir, { recursive: true });
-  const content = await fs.readFile(tgz);
-  return {
-    content,
-    shasum: crypto.createHash('sha1').update(content).digest('hex'),
-    integrity: `sha512-${crypto.createHash('sha512').update(content).digest('base64')}`,
-  };
-}
-
-// 一个本地 registry: packages 为 { name: { version: tarball } }, behavior 控制失败, 延迟与缺失版本
-function createRegistry(name, log) {
-  const registry = { name, packages: {}, behavior: {} };
-  registry.server = http.createServer((req, res) => {
-    const url = decodeURIComponent(req.url);
-    if (url === '/node/index.json') {
-      log.push(`${name}:probe:${url}`);
-      return setTimeout(() => res.end('[]'), registry.behavior.delay || 0);
-    }
-    const isTarball = url.includes('/-/');
-    log.push(`${name}:${isTarball ? 'tgz' : 'meta'}:${url}`);
-    const behavior = registry.behavior;
-    const reply = () => {
-      if ((isTarball ? behavior.tarballStatus : behavior.metaStatus) || 0) {
-        res.statusCode = isTarball ? behavior.tarballStatus : behavior.metaStatus;
-        return res.end('error');
-      }
-      if (isTarball) {
-        const [pkgName, file] = url.slice(1).split('/-/');
-        const version = Object.keys(registry.packages[pkgName] || {}).find(v => file.endsWith(`-${v}.tgz`));
-        if (!version) {
-          res.statusCode = 404;
-          return res.end('not found');
-        }
-        return res.end(registry.packages[pkgName][version].content);
-      }
-      const latestOnly = url.endsWith('/latest');
-      const pkgName = latestOnly ? url.slice(1, -'/latest'.length) : url.slice(1);
-      const versions = registry.packages[pkgName];
-      if (!versions) {
-        res.statusCode = 404;
-        return res.end('{}');
-      }
-      const visible = Object.keys(versions).filter(v => !(behavior.hiddenVersions || []).includes(v));
-      const manifests = {};
-      for (const v of visible) {
-        manifests[v] = {
-          name: pkgName,
-          version: v,
-          dist: {
-            tarball: `${registry.prefix}${pkgName}/-/${pkgName.split('/').pop()}-${v}.tgz`,
-            shasum: versions[v].shasum,
-            integrity: versions[v].integrity,
-          },
-          ...versions[v].manifest,
-        };
-      }
-      res.setHeader('content-type', 'application/json');
-      if (latestOnly) return res.end(JSON.stringify(manifests[visible[visible.length - 1]]));
-      res.end(
-        JSON.stringify({ name: pkgName, 'dist-tags': { latest: visible[visible.length - 1] }, versions: manifests })
-      );
-    };
-    if (behavior.delay) setTimeout(reply, behavior.delay);
-    else reply();
-  });
-  return registry;
-}
 
 describe('test/mirror.test.js', () => {
   const [tmp, cleanup] = helper.tmp();
@@ -97,7 +16,7 @@ describe('test/mirror.test.js', () => {
 
   before(async () => {
     log = [];
-    registries = { mirror: createRegistry('mirror', log), official: createRegistry('official', log) };
+    registries = { mirror: helper.createRegistry('mirror', log), official: helper.createRegistry('official', log) };
     sources = {};
     for (const name in registries) {
       const registry = registries[name];
@@ -128,7 +47,7 @@ describe('test/mirror.test.js', () => {
   afterEach(cleanup);
 
   async function publish(pkg, files, { manifest, only } = {}) {
-    const tarball = await packTarball(tmp, pkg, files);
+    const tarball = await helper.packTarball(tmp, pkg, files);
     tarball.manifest = manifest;
     for (const name of only || Object.keys(registries)) {
       const packages = registries[name].packages;

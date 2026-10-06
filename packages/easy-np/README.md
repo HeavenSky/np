@@ -6,7 +6,7 @@
 
 ## 安装
 
-需要 Node.js >= 16.14.0; 编译原生模块时需要 Python 3.
+需要 Node.js >= 14.18.0; 编译原生模块时需要 Python 3 与 C/C++ 编译工具链. 本包不再依赖 node-gyp: 首次编译时联网安装兼容当前 Node.js 的 node-gyp, 安装到 `<缓存目录>/np-node-gyp`(默认 `~/.np_tarball/np-node-gyp`, 按 Node.js 版本分别安装, 与 easy-npd 各自独立); 环境变量 `npm_config_node_gyp` 指向已有的 `node-gyp.js` 时直接使用它. 无法联网时先 `npm i -g node-gyp`, 再把 `npm_config_node_gyp` 设为 `<npm root -g>/node-gyp/bin/node-gyp.js`.
 
 ```bash
 npm i -g easy-np
@@ -64,7 +64,11 @@ npm i -g easy-np
 
 ### 依赖安装脚本默认不执行: `allowScripts`
 
-与 npm 12 一致, 依赖的 preinstall / install / postinstall, 有 `binding.gyp` 时的隐式 `node-gyp rebuild`, 以及 git 依赖的 prepare, 只有在根 `package.json` 的 `allowScripts` 中放行后才执行; 根项目, workspace 与本地目录依赖的脚本照常执行. 未放行的包被跳过, 安装结束时列出它们和放行后重跑的命令; 被跳过的原生模块要到运行时才报错.
+与 npm 12 一致, 依赖的 preinstall / install / postinstall, 有 `binding.gyp` 时的隐式 `node-gyp rebuild`, 以及 git 依赖的构建(仓库声明了 prepare, build, prepack, preinstall / install / postinstall 或 workspaces 时安装其依赖并执行 prepare), 只有在根 `package.json` 的 `allowScripts` 中放行后才执行; 根项目, workspace 以及它们声明的本地目录依赖(含这些本地依赖再声明的本地依赖)的脚本照常执行. 未放行的包被跳过, 安装结束时列出它们和放行后重跑的命令; 被跳过的原生模块要到运行时才报错.
+
+- registry 包按 registry 上的 `name@version` 审核, 也按依赖名链接; tarball 内 `package.json` 自称其他包时告警 `manifest mismatch`, 不会借用被冒充包的放行.
+- registry, git 与 tarball url 包声明的 `file:` 本地依赖按声明者所在目录解析, 只执行 preinstall / install / postinstall(不执行 prepare / prepack, 打包时 `npm pack --ignore-scripts`), 是否放行跟随声明者: 放行声明者即放行它们, 跳过列表中显示为 `<name>@<spec> (declared by <声明者的键>)`.
+- git 依赖构建时的子安装不执行任何依赖脚本, 不读取克隆仓库自带的 `allowScripts`, 其中的嵌套 git 依赖不构建, 本地目录依赖打包时不执行脚本.
 
 ```json
 {
@@ -77,10 +81,10 @@ npm i -g easy-np
 ```
 
 - 键写包名(放行全部版本), `<name>@<精确版本>` 或用 `||` 连接的多个精确版本, git 地址, tarball url; `^`, `~` 等范围与 dist-tag 告警后忽略. 值 `false` 表示明确拒绝, 不再出现在跳过列表里, 同时命中时拒绝优先.
-- `np-x approve-scripts <pkg>` 按已安装版本写入 `<pkg>@<version>`(git 依赖写解析出的地址与 commit, tarball url 依赖写 url), `--no-pin` 只写包名或不带 commit 的地址, `--all` 放行全部未审核的包, `--pending` 只列出; 之后运行 `np-x rebuild <pkg>` 执行脚本. git 依赖放行后要重新安装才会执行 prepare.
+- `np-x approve-scripts <pkg>` 按已安装版本写入 `<pkg>@<version>`(git 依赖写解析出的地址与 commit, tarball url 依赖写 url, 依赖声明的本地目录依赖写声明者的键), `--no-pin` 只写包名或不带 commit 的地址, `--all` 放行全部未审核的包, `--pending` 只列出; 之后运行 `np-x rebuild <pkg>` 执行脚本. git 依赖放行后要重新安装才会构建.
 - `np-x deny-scripts <pkg>` 与 npm 一致总是写不带版本的 `false` 条目并删除该包已有的放行条目, 未安装的包也可以按名称拒绝; `--all` 拒绝全部未审核的包.
 - 来源只取第一个有配置的: `--allow-scripts=<pkg>[,<pkg>]`(主要用于 `-g`) > 根 `package.json` 的 `allowScripts` > `~/.nprc` 的 `allow-scripts`.
-- `--strict-allow-scripts`: 有未审核的依赖脚本时安装以非 0 退出. `--dangerously-allow-all-scripts`: 忽略 `allowScripts`, 执行全部依赖脚本(0.0.2 及以前的行为). 两者也可写在 `~/.nprc` 或 `npm_config_*` 中. `--ignore-scripts` 优先于以上全部设置.
+- `--strict-allow-scripts`: 有未审核的依赖脚本时安装以非 0 退出. `--dangerously-allow-all-scripts`: 忽略 `allowScripts`, 执行全部依赖脚本(0.0.2 及以前的行为). 两者也可写在 `~/.nprc` 或 `npm_config_*` 中. `--ignore-scripts` 优先于以上全部设置, 同时跳过 git 依赖的构建.
 
 ### `np-x rebuild`: 重跑安装脚本
 
@@ -117,10 +121,11 @@ npm i -g easy-np
 
 - 安装成功后在项目根目录(workspace 为 workspace 根)写入 `np-lock.json`, 记录每个依赖声明(`name@spec`)解析出的版本; 再次安装时直接复用, 不再联网解析. 与 easy-npd 读写同一份文件.
 - 完整安装(`np` 不带包名)只保留本次用到的条目; `np <pkg>`, `-w`, `--workspaces`, `--production`, `--no-optional` 只追加, 不删除其他条目.
-- 已安装的版本与锁定版本不同时重装为锁定版本; `np-x update` 忽略锁定版本, 按范围重新解析并写回.
-- `--frozen-lockfile`: 只按 `np-lock.json` 安装, 有依赖不在锁文件中时报错, 不写回; 用于 CI.
+- 已安装的版本与锁定版本不同时重装为锁定版本, 不必删除 `node_modules`; 每次安装都会遍历已装好的依赖, 使锁文件记全整棵依赖树. `np-x update` 忽略锁定版本, 按范围重新解析并写回.
+- `np <pkg>` 保存到 `package.json` 后按保存的声明记录锁定版本, 例如 `np foo` 保存 `"foo": "^1.2.3"` 并记为 `foo@^1.2.3`; 命令行显式写的 tag(如 `foo@latest`)与 `*`(含不写版本)每次重新解析, 不复用锁定版本; `--no-save` 时不记录这两种写法.
+- `--frozen-lockfile`: 只按 `np-lock.json` 安装, 有依赖不在锁文件中时报错, 不写回; 用于 CI. 不能与包名同时使用.
 - 项目已有 `package-lock.json`, `npm-shrinkwrap.json`, `pnpm-lock.yaml`, `yarn.lock`, `bun.lock` 或 `bun.lockb` 且没有 `np-lock.json` 时不生成; `--no-lockfile`, 环境变量 `np_lockfile=false` 或 `package.json` 的 `config.np.lockfile: false` 关闭; 使用 `--lockfile-path`, `--dependencies-tree` 或 `-g` 时不读写.
-- 只锁定 registry 上的包; git, 本地路径与 tarball url 依赖每次重新获取.
+- registry 包锁定解析出的版本; git 依赖锁定解析出的 commit, 再次安装直接检出该 commit(不再 `git ls-remote`, 已安装时不再克隆); tarball url 依赖锁定 sha512 integrity, 已安装时不再下载, 重新下载后内容与锁定值不同则报错, 删除该条目才接受新内容; 本地目录依赖不锁定, 每次按目录当前内容安装.
 
 ### npm `overrides`
 
@@ -169,7 +174,7 @@ npm i -g easy-np
 | `np-x uninstall` 的返回时机                         | 可能在 `package.json` 写回前返回                                                               | 写回完成后返回                                                                                                                                                               |
 | `--lockfile-path` 加载失败                          | 告警后改为联网解析                                                                             | 报错退出; workspace 下各 workspace 按 lockfile 还原版本, 同一声明在不同位置锁定了不同版本时告警并统一用靠近根目录的版本                                                                                                                                     |
 | 在 `npm run` / `npx` 下安装需要 prepare 的 git 依赖 | 继承 `npm_config_allow_scripts`, 被 npm 12 以 `EALLOWSCRIPTS` 拒绝                             | 正常安装: 不再调用 `npm install`; 失败时错误信息附带子进程 stderr                                                                                                            |
-| git 依赖                                            | 经 pacote 获取: 托管仓库优先下载 codeload tarball, 需要构建时调用 `npm install` 后执行 prepare | 直接调用 git CLI 克隆(本机需要 git); 有 prepare 等脚本且在 `allowScripts` 中放行时用 np 自身安装依赖(含 devDependencies, 不执行依赖的安装脚本)再执行 prepare; 按 npm 的 `files`, `.npmignore` 规则打包 |
+| git 依赖                                            | 经 pacote 获取: 托管仓库优先下载 codeload tarball, 需要构建时调用 `npm install` 后执行 prepare | 直接调用 git CLI 克隆(本机需要 git); 有 prepare 等脚本且在 `allowScripts` 中放行时用 np 自身安装依赖(含 devDependencies, 不执行任何依赖脚本, 嵌套 git 依赖不构建)再执行 prepare, `--ignore-scripts` 时不构建; 按 npm 的 `files`, `.npmignore` 规则打包 |
 | `--tarball-url-mapping`                             | 声称也改写重定向地址, 但 urllib 3/4 不支持 `formatRedirectUrl`                                 | 只改写首个请求地址                                                                                                                                                           |
 | npm `strict-ssl`                                    | 读取后传给 urllib, 但 urllib 3/4 不认, 不生效                                                  | 读取 `--strict-ssl`, `npm_config_strict_ssl` 与 `~/.nprc`, 为 false 时关闭证书校验; 另支持 `--cafile` 指定 CA 证书; 两者都传给安装脚本与 git |
 | `--proxy`, `npm_proxy`, `npm_config_proxy` | 声明支持, 但 urllib 3/4 不认 `proxy` 参数, 实际直连 | 支持 `--proxy`, `--https-proxy`, `--noproxy`; 未传时依次读取 `npm_config_*`, `~/.nprc`, `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`; 同时传给安装脚本, node-gyp 与 git; 只支持 http(s) 代理 |
@@ -212,12 +217,15 @@ npm i -g easy-np
 
 ## Node.js 版本与能力
 
-不提高 `engines` 下限: 低版本 Node.js 上按能力改用兼容的旧实现, 每次运行打印一条 `np WARN Node vX: <降级项>, upgrade to Node >= <版本> to restore`; 环境变量 `np_node_warning=false` 关闭. 版本划分见 `lib/runtime.js` 的 `CAPABILITIES`.
+低版本 Node.js 上按能力改用兼容的旧实现, 每次运行打印一条 `np WARN Node vX: <降级项>, upgrade to Node >= <版本> to restore`; 环境变量 `np_node_warning=false` 关闭. 版本划分见 `lib/runtime.js` 的 `CAPABILITIES`.
 
-| Node.js | node-gyp(依赖的安装脚本与 `binding.gyp` 构建使用) | 已知风险 |
+| Node.js | node-gyp(依赖的安装脚本与 `binding.gyp` 构建时按需安装) | 已知风险 |
 | --- | --- | --- |
-| 20.17 ~ 20.x, >= 22.9 | 12 | 无 |
-| 16.14 ~ 20.16, 21.x, 22.0 ~ 22.8 | 10: 较新的 Python 与 Visual Studio 可能不受支持 | node-gyp 10 经 make-fetch-happen / cacache 引入的 tar 6 与 http-cache-semantics 有未修复公告, 只在 node-gyp 下载 Node.js 头文件时使用; 顶层 tar 7 声明需要 Node >= 18, Node 16 上实测可用 |
+| 20.17 ~ 20.x, >= 22.9 | `node-gyp` 中 `engines.node` 兼容当前 Node.js 的最新版本(>= 12) | 无 |
+| 16.14 ~ 16.x, 18.x ~ 20.16, 21.x, 22.0 ~ 22.8 | 同上, 实际为 10 或 11: 不识别 Visual Studio 2026 | 装到 10 时(16.14 ~ 16.x, 18.0 ~ 18.16)同样经 make-fetch-happen / cacache 引入 tar 6, 见下一行 |
+| 14.18 ~ 16.13, 17.x | `@electron/node-gyp` 10.2(Electron 维护的 node-gyp 10 分支): 不识别 Visual Studio 2026 | 它经 make-fetch-happen / cacache 引入的 tar 6 有未修复公告, 只在 node-gyp 下载 Node.js 头文件时使用 |
+
+本包顶层的 tar 7 声明需要 Node >= 18, Node 14.18 / 16 上实测可用(低于 16.6 时由 `lib/runtime.js` 补齐缺少的内置方法).
 
 全部版本共有的依赖公告:
 

@@ -236,5 +236,30 @@ if (process.platform !== 'win32') {
           done();
         });
     });
+
+    // tarball 内 package.json 自称其他包时, 按依赖名与 registry 解析出的版本保存
+    describe('manifest confusion', () => {
+      let localRegistry;
+
+      before(async () => {
+        localRegistry = helper.createRegistry('registry', []);
+        await new Promise(resolve => localRegistry.server.listen(0, '127.0.0.1', resolve));
+        localRegistry.prefix = `http://127.0.0.1:${localRegistry.server.address().port}/`;
+      });
+      after(() => localRegistry.server.close());
+
+      it('should save the dependency name instead of the name in the tarball', async () => {
+        const tarball = await helper.packTarball(tmp, { name: 'trusted', version: '9.9.9' });
+        localRegistry.packages = { evil: { '1.0.0': tarball } };
+        fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({ name: 'app', version: '1.0.0' }));
+        await coffee
+          .fork(helper.npminstall, ['evil', `--registry=${localRegistry.prefix.slice(0, -1)}`], { cwd: tmp })
+          .expect('code', 0)
+          .end();
+        const deps = JSON.parse(fs.readFileSync(path.join(tmp, 'package.json'))).dependencies;
+        assert.deepEqual(Object.keys(deps), ['evil']);
+        assert.match(deps.evil, /^[\^~]?1\.0\.0$/);
+      });
+    });
   });
 }

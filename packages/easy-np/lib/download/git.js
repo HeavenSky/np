@@ -37,14 +37,25 @@ const CONNECTION_ERROR_RE = new RegExp(
 const PATHSPEC_ERROR_RE = /pathspec .* did not match any file\(s\) known to git/;
 
 module.exports = async (pkg, options) => {
-  if (options.offline) {
-    throw new Error(`Can't install ${pkg.raw} in offline mode: git packages are always fetched from the network`);
-  }
   const { name, raw, displayName } = pkg;
+  const locked = options.cache.dependenciesTree[raw];
+  const installed = await utils.getLockedInstall(locked, options);
+  if (installed) {
+    options.remoteNames[raw] = installed.package.name;
+    if (options.lockPackages) options.lockPackages[raw] = locked;
+    return installed;
+  }
+  if (options.offline) {
+    throw new Error(
+      `Can't install ${utils.redactUrl(pkg.raw)} in offline mode: git packages are always fetched from the network`
+    );
+  }
 
   options.gitPackages++;
   options.console.warn(
-    chalk.yellow(`[${displayName}] install ${name || ''} from git ${raw}, may be very slow, please be patient`)
+    chalk.yellow(
+      utils.redactUrl(`[${displayName}] install ${name || ''} from git ${raw}, may be very slow, please be patient`)
+    )
   );
   const tmpDir = path.join(options.storeDir, '.tmp', randomUUID());
   const repoDir = path.join(tmpDir, 'repo');
@@ -52,13 +63,12 @@ module.exports = async (pkg, options) => {
   try {
     const spec = npa(raw);
     // np-lock.json 锁定了解析出的 commit 时直接检出它, 不再按分支, tag 或 semver 重新解析
-    const locked = options.cache.dependenciesTree[raw];
     const lockedSha = locked && /#([a-f0-9]{40})$/.exec(locked._resolved || '')?.[1];
     if (lockedSha) {
       spec.gitCommittish = lockedSha;
       spec.gitRange = undefined;
     } else if (options.frozenLockfile) {
-      throw new Error(`${raw} is not in np-lock.json, run np without --frozen-lockfile to update it`);
+      throw new Error(`${utils.redactUrl(raw)} is not in np-lock.json, run np without --frozen-lockfile to update it`);
     }
     const sha = await cloneSpec(spec, repoDir);
     const resolved = resolvedUrl(spec, sha);
@@ -82,7 +92,7 @@ module.exports = async (pkg, options) => {
   } catch (err) {
     // git 与子进程的错误只在 stderr 里带真实原因, 附上末尾便于定位
     const stderr = err.stderr ? `\n${String(err.stderr).trim().split('\n').slice(-5).join('\n')}` : '';
-    throw new Error(`[${displayName}] ${err.message}${stderr}`, { cause: err });
+    throw new Error(utils.redactUrl(`[${displayName}] ${err.message}${stderr}`), { cause: err });
   } finally {
     // clean up
     try {
@@ -293,12 +303,20 @@ async function prepareRepo(dir, resolved, options) {
   const content = await fs.readFile(pkgFile, 'utf8');
   const pkg = JSON.parse(content);
   const scripts = pkg.scripts || {};
-  if (!pkg.workspaces && !PREPARE_SCRIPTS.some(script => scripts[script])) {
+  const triggers = PREPARE_SCRIPTS.filter(script => scripts[script]);
+  if (!pkg.workspaces && triggers.length === 0) {
     return;
   }
-  // 与 npm 12 一致: 非 registry 依赖的 prepare 同样受 allowScripts 约束, 未放行时不构建, 直接按仓库内容打包
-  const info = { displayName: pkg.name || resolved, name: pkg.name, scripts: ['prepare'] };
-  if (scripts.prepare && !allowScripts.allow(options, { git: resolved }, info)) {
+  if (options.ignoreScripts) {
+    return;
+  }
+  // 构建会安装仓库声明的依赖(含 file: 目录的 npm pack)并执行 prepare, 未在 allowScripts 中放行时不构建, 直接按仓库内容打包
+  const info = {
+    displayName: pkg.name || resolved,
+    name: pkg.name,
+    scripts: triggers.length ? triggers : ['workspaces'],
+  };
+  if (!allowScripts.allow(options, { git: resolved }, info)) {
     return;
   }
   const noPrepare = process.env[NO_PREPARE_ENV] ? process.env[NO_PREPARE_ENV].split('\n') : [];
@@ -310,7 +328,7 @@ async function prepareRepo(dir, resolved, options) {
 
   // NODE_ENV=production 会让子进程按 --production 跳过 devDependencies, 构建脚本通常依赖它们;
   // 依赖的安装脚本不执行(与 npm 12 默认不执行未授权的依赖脚本一致), 否则只用于测试的 devDependencies(例如 phantomjs-prebuilt)下载失败也会让整个 git 依赖装不上
-  const env = { ...process.env, [NO_PREPARE_ENV]: noPrepare.join('\n') };
+  const env = { ...process.env, [NO_PREPARE_ENV]: noPrepare.join('\n'), [allowScripts.GIT_PREPARE_CHILD_ENV]: '1' };
   delete env.NODE_ENV;
   const args = [NP_BIN, `--root=${dir}`, '--ignore-scripts'];
   if (options.registry) {
@@ -326,7 +344,7 @@ async function prepareRepo(dir, resolved, options) {
   } finally {
     await fs.writeFile(pkgFile, content);
   }
-  // 与 pacote 一致: 根包只执行 prepare, 且不受 ignore-scripts 影响
+  // 与 pacote 一致: 根包只执行 prepare
   if (scripts.prepare) {
     await utils.runScript(dir, scripts.prepare, options, !!options.foregroundScripts, PREPARE_TIMEOUT);
   }
@@ -379,8 +397,7 @@ function run(cmd, args, { cwd, env, timeout, name }) {
       windowsHide: true,
       detached: process.platform !== 'win32',
     });
-    const killTree = () => utils.killProcessTree(child.pid);
-    process.once('exit', killTree);
+    const untrack = utils.trackChildProcess(child.pid);
     let stdout = '';
     let stderr = '';
     let timedOut = false;
@@ -389,13 +406,13 @@ function run(cmd, args, { cwd, env, timeout, name }) {
     child.stderr.setEncoding('utf8').on('data', data => (stderr += data));
     const timer = setTimeout(() => {
       timedOut = true;
-      killTree();
+      utils.killProcessTree(child.pid);
     }, timeout);
     const finish = err => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      process.removeListener('exit', killTree);
+      untrack();
       if (err) {
         err.stderr = stderr;
         reject(err);

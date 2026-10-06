@@ -2,13 +2,16 @@
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const utils = require('./utils');
+const installState = require('./install_state');
 
 // 不属于任何包版本的条目: 最高版本回退链接目录, 状态文件, git / tarball 依赖的临时目录
 const RESERVED_ENTRIES = new Set(['node_modules', '.np-state.json', '.tmp']);
 
 module.exports = async ({ root, dryRun = false }) => {
   const { workspaceRoots } = await utils.readWorkspaces(root);
-  const storeRoot = path.join(root, 'node_modules/.store');
+  // 链接的 realpath 都是真实路径, root 或 node_modules 经符号链接访问时 storeRoot 不取真实路径会把全部条目判为不可达
+  const storePath = path.join(root, 'node_modules/.store');
+  const storeRoot = await fs.realpath(storePath).catch(() => storePath);
   let entries;
   try {
     entries = (await fs.readdir(storeRoot)).filter(entry => !RESERVED_ENTRIES.has(entry));
@@ -69,6 +72,7 @@ module.exports = async ({ root, dryRun = false }) => {
 
   const removed = entries.filter(entry => !reachable.has(entry)).sort();
   if (!dryRun) {
+    await installState.removeEntries(storeRoot, entry => removed.includes(entry) || !entries.includes(entry));
     for (const entry of removed) await utils.rimraf(path.join(storeRoot, entry));
     await removeDanglingLinks(path.join(storeRoot, 'node_modules'));
   }

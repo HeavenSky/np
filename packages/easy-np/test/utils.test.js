@@ -314,4 +314,153 @@ describe('test/utils.test.js', () => {
       assert.throws(() => process.kill(pid, 0), /ESRCH/);
     });
   });
+
+  describe('trackChildProcess()', () => {
+    const fs = require('node:fs/promises');
+    const path = require('node:path');
+    const { spawn } = require('node:child_process');
+    const helper = require('./helper');
+    const [tmp, cleanup] = helper.tmp();
+    const EVENTS = ['exit', 'SIGINT', 'SIGTERM'];
+    const counts = () => EVENTS.map(name => process.listenerCount(name));
+
+    beforeEach(cleanup);
+    after(cleanup);
+
+    it('should add one listener per event no matter how many processes are tracked', async () => {
+      const baseline = counts();
+      const warnings = [];
+      const onWarning = warning => warnings.push(warning);
+      process.on('warning', onWarning);
+      // 同一 worker 先运行的文件会留下监听(coffee 每次 fork 注册一个 exit 监听), 基线恰好等于上限时多 1 个也会告警
+      const maxListeners = process.getMaxListeners();
+      process.setMaxListeners(Math.max(maxListeners, ...baseline) + 10);
+      try {
+        const untracks = [];
+        try {
+          // 超出各平台 pid 上限, 不会误杀真实进程
+          for (let i = 0; i < 20; i++) untracks.push(utils.trackChildProcess(4194304 + i));
+          assert.deepEqual(
+            counts(),
+            baseline.map(count => count + 1)
+          );
+        } finally {
+          for (const untrack of untracks) untrack();
+        }
+        assert.deepEqual(counts(), baseline);
+        await new Promise(resolve => setImmediate(resolve));
+      } finally {
+        process.setMaxListeners(maxListeners);
+        process.removeListener('warning', onWarning);
+      }
+      assert.deepEqual(warnings, []);
+    });
+
+    for (const [signal, code] of [
+      ['SIGTERM', 143],
+      ['SIGINT', 130],
+    ]) {
+      it(`should kill tracked process trees and exit with ${code} on ${signal}`, async function () {
+        if (process.platform === 'win32') this.skip();
+        const pidFile = path.join(tmp, 'grandchild.pid');
+        const childCode = `const c = require("child_process").spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" }); require("fs").writeFileSync(${JSON.stringify(pidFile)}, String(c.pid)); setInterval(() => {}, 1000);`;
+        const driver = path.join(tmp, 'driver.js');
+        await fs.writeFile(
+          driver,
+          `const utils = require(${JSON.stringify(require.resolve('../lib/utils'))});
+const child = require('child_process').spawn(process.execPath, ['-e', ${JSON.stringify(childCode)}], { detached: true, stdio: 'ignore' });
+utils.trackChildProcess(child.pid);
+setInterval(() => {}, 1000);`
+        );
+        const proc = spawn(process.execPath, [driver], { stdio: 'ignore' });
+        const exited = new Promise(resolve =>
+          proc.on('exit', (exitCode, exitSignal) => resolve({ exitCode, exitSignal }))
+        );
+        let pid;
+        try {
+          for (let i = 0; i < 100 && !pid; i++) {
+            await utils.sleep(100);
+            pid = Number(await fs.readFile(pidFile, 'utf8').catch(() => '')) || undefined;
+          }
+          assert(pid, 'grandchild did not start');
+          proc.kill(signal);
+          assert.deepEqual(await exited, { exitCode: code, exitSignal: null });
+          await utils.sleep(200);
+          assert.throws(() => process.kill(pid, 0), /ESRCH/);
+        } finally {
+          proc.kill('SIGKILL');
+          if (pid) utils.killProcessTree(pid);
+        }
+      });
+    }
+  });
+
+  describe('install state', () => {
+    const fs = require('node:fs/promises');
+    const path = require('node:path');
+    const helper = require('./helper');
+    const installState = require('../lib/install_state');
+    const [tmp, cleanup] = helper.tmp();
+    const store = path.join(tmp, 'node_modules/.store');
+    const createPackage = async name => {
+      const dir = path.join(store, `${name}@1.0.0/node_modules/${name}`);
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(path.join(dir, 'package.json'), JSON.stringify({ name, version: '1.0.0' }));
+      await utils.setInstallDone(dir, utils.FIRST_INSTALL_STAGE);
+      return dir;
+    };
+    const stateKeys = async () =>
+      Object.keys((await helper.readJSON(path.join(store, '.np-state.json'))).packages).sort();
+
+    beforeEach(cleanup);
+    after(cleanup);
+
+    it('should mark the package unfinished on reset', async () => {
+      const dir = await createPackage('a');
+      assert.equal(await utils.isInstallDone(dir), true);
+      await installState.reset(dir);
+      assert.equal(await utils.isInstallDone(dir), false);
+      assert.deepEqual(await installState.get(dir), { done: false });
+    });
+
+    it('should remove only the matching entries', async () => {
+      await createPackage('a');
+      await createPackage('b');
+      await installState.removeEntries(store, entry => entry === 'a@1.0.0');
+      assert.deepEqual(await stateKeys(), ['b@1.0.0/node_modules/b']);
+    });
+  });
+
+  describe('redact()', () => {
+    it('should hide credentials in urls', () => {
+      assert.equal(utils.redactUrl('proxy http://u:p@h:8080 failed'), 'proxy http://***@h:8080 failed');
+      assert.equal(
+        utils.redactUrl('git+https://tok@github.com/a/b.git#main'),
+        'git+https://***@github.com/a/b.git#main'
+      );
+      assert.equal(utils.redactUrl('git@github.com:a/b'), 'git@github.com:a/b');
+      assert.equal(
+        utils.redactUrl('//r.com/:_authToken=abc _password: "xyz"'),
+        '//r.com/:_authToken=*** _password: "***"'
+      );
+    });
+
+    it('should return a redacted copy and keep the original', () => {
+      const original = {
+        proxy: 'http://user:s3cret@127.0.0.1:1',
+        headers: { Authorization: 'Bearer t', accept: 'json' },
+        '//r.com/:_authToken': 'abc',
+        list: ['https://a:b@c.com/x'],
+      };
+      original.self = original;
+      const copy = utils.redact(original);
+      assert.equal(copy.proxy, 'http://***@127.0.0.1:1');
+      assert.deepEqual(copy.headers, { Authorization: '***', accept: 'json' });
+      assert.equal(copy['//r.com/:_authToken'], '***');
+      assert.deepEqual(copy.list, ['https://***@c.com/x']);
+      assert.equal(copy.self, copy);
+      assert.equal(original.proxy, 'http://user:s3cret@127.0.0.1:1');
+      assert.equal(original.headers.Authorization, 'Bearer t');
+    });
+  });
 });

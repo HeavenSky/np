@@ -25,21 +25,21 @@ module.exports = async options => {
   }
 
   // 一个包失败不影响其余包, 结束时汇总; 失败的包阶段停在失败的脚本
-  for (const { pkg, dir } of targets) {
-    const displayName = `${pkg.name}@${pkg.version}`;
+  for (const { pkg, dir, name, version } of targets) {
+    const owner = allowScripts.ownerOfInstalled(pkg);
+    const displayName = owner ? `${name}@${version} (declared by ${owner})` : `${name}@${version}`;
     try {
       // 与安装时一致要在 allowScripts 中放行: git 与 url 依赖按 package.json 记录的解析地址比对
-      const identity = allowScripts.identityOfInstalled(pkg);
-      const origin = { name: pkg.name, version: identity.git || identity.url || pkg.version };
+      const identity = allowScripts.identityOfInstalled(pkg, dir);
       const { skipped } = allowScripts.ensure(options);
       const skippedBefore = skipped.length;
-      await runLifecycleScripts(pkg, dir, origin, displayName, options, 'preinstall');
+      await runLifecycleScripts({ ...pkg, name, version }, dir, {}, displayName, options, 'preinstall', { identity });
       // 未放行时脚本没有执行, 阶段标记保持原样, 由结束时的跳过列表提示如何放行
       if (skipped.length > skippedBefore) continue;
       await utils.setInstallStage(dir);
       options.console.info(chalk.green('rebuilt %s'), displayName);
     } catch (err) {
-      options.failures.push({ displayName, error: err, name: pkg.name });
+      options.failures.push({ displayName, error: err, name });
     }
   }
   const scriptPolicyError = allowScripts.report(options);
@@ -74,7 +74,7 @@ async function findInstalled(spec, options) {
       options
     );
     const pkg = await utils.readJSON(path.join(dir, 'package.json'));
-    if (pkg.name === spec.name) matched.push({ pkg, dir });
+    if (pkg.name) matched.push({ pkg, dir, name: spec.name, version });
   }
   return matched;
 }

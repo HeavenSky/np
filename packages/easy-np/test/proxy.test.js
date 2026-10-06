@@ -1,6 +1,10 @@
 const assert = require('node:assert');
 const http = require('node:http');
 const net = require('node:net');
+const path = require('node:path');
+const fs = require('node:fs/promises');
+const coffee = require('coffee');
+const helper = require('./helper');
 const proxy = require('../lib/proxy');
 const get = require('../lib/get');
 
@@ -80,6 +84,42 @@ describe('test/proxy.test.js', () => {
     assert.equal(process.env.npm_config_strict_ssl, 'false');
     assert.equal(process.env.GIT_SSL_NO_VERIFY, 'true');
     assert.deepEqual(proxy.tlsOptions(), { rejectUnauthorized: false });
+  });
+
+  it('should keep strict ssl when --strict-ssl overrides the environment', () => {
+    process.env.npm_config_strict_ssl = 'false';
+    proxy.configure({ 'strict-ssl': true });
+    assert.equal(proxy.tlsOptions(), undefined);
+  });
+
+  it('should hide proxy credentials in errors and np-debug.log', async () => {
+    const [root, cleanup] = helper.tmp();
+    await cleanup();
+    const closed = http.createServer();
+    await listen(closed);
+    const port = closed.address().port;
+    await new Promise(resolve => closed.close(resolve));
+    try {
+      await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'root', version: '1.0.0' }));
+      const { stdout, stderr } = await coffee
+        .fork(
+          helper.npminstall,
+          [
+            `--proxy=http://user:s3cret@127.0.0.1:${port}`,
+            `--registry=http://127.0.0.1:${port}`,
+            'np-proxy-redact-not-exists',
+          ],
+          { cwd: root, env: { ...process.env, np_lockfile: 'false' } }
+        )
+        .expect('code', 1)
+        .end();
+      assert(!`${stdout}${stderr}`.includes('s3cret'));
+      const log = await fs.readFile(path.join(root, 'np-debug.log'), 'utf8');
+      assert(log.includes('***@127.0.0.1'));
+      assert(!log.includes('s3cret'));
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 
   it('should match NO_PROXY entries like curl', () => {

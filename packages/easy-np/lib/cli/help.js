@@ -80,7 +80,7 @@ Options:
   -h, --help: show help
   --refresh-cache: ignore cached manifests and tarballs, download again and overwrite the cache
   --no-lockfile: don't read or write np-lock.json, same as env np_lockfile=false, or set config.np.lockfile=false in package.json
-  --frozen-lockfile: install exactly the versions in np-lock.json, fail if a dependency is not locked, never update it
+  --frozen-lockfile: install exactly the versions in np-lock.json, fail if a dependency is not locked, never update it, can't be used with package names
   --probe-cache: minutes to reuse the last registry speed test result, 0 to test on every run, default 5, also read from env np_probe_cache
   -d, --detail: show detail log of installation
   -w, --workspace: install on one workspace only, e.g.: np koa -w a

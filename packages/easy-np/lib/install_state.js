@@ -70,6 +70,17 @@ class StateFile {
     await this.flush();
   }
 
+  async removeWhere(predicate) {
+    await this.sync();
+    const keys = Object.keys(this.entries).filter(key => this.entries[key] && predicate(key));
+    if (!keys.length) return;
+    for (const key of keys) {
+      this.entries[key] = undefined;
+      this.touched.add(key);
+    }
+    await this.flush();
+  }
+
   // 合并并发的写入: 已排队但未开始的写入会带上之后的修改, 调用方都等到包含自己修改的那次写盘完成
   flush() {
     if (!this.queued) {
@@ -111,12 +122,16 @@ async function open(pkgRoot) {
   const realRoot = await fs.realpath(pkgRoot).catch(() => path.resolve(pkgRoot));
   const location = locate(realRoot);
   if (!location) return null;
-  let stateFile = stateFiles.get(location.file);
+  return { stateFile: stateFileOf(location.file), key: location.key, realRoot };
+}
+
+function stateFileOf(file) {
+  let stateFile = stateFiles.get(file);
   if (!stateFile) {
-    stateFile = new StateFile(location.file);
-    stateFiles.set(location.file, stateFile);
+    stateFile = new StateFile(file);
+    stateFiles.set(file, stateFile);
   }
-  return { stateFile, key: location.key, realRoot };
+  return stateFile;
 }
 
 async function readLegacy(pkgRoot) {
@@ -152,4 +167,21 @@ exports.update = async (pkgRoot, patch) => {
   }
   await opened.stateFile.set(opened.key, entry);
   return null;
+};
+
+// 重新解压前调用: 写入 done: false 而不是删除记录, 没有记录的包会被当作其他工具装好的而跳过安装
+exports.reset = async pkgRoot => {
+  const opened = await open(pkgRoot);
+  if (opened) await opened.stateFile.set(opened.key, { done: false });
+};
+
+exports.remove = async pkgRoot => {
+  const opened = await open(pkgRoot);
+  if (opened) await opened.stateFile.set(opened.key, undefined);
+};
+
+// shouldDrop 收到的是 store 目录名(<name>@<version>), 即记录键的第一段
+exports.removeEntries = async (stateDir, shouldDrop) => {
+  const realDir = await fs.realpath(stateDir).catch(() => path.resolve(stateDir));
+  await stateFileOf(path.join(realDir, STATE_FILE)).removeWhere(key => shouldDrop(key.split('/')[0]));
 };

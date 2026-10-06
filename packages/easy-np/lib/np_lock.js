@@ -1,6 +1,7 @@
 // np-lock.json 的读写: 记录每个依赖声明(name@spec)解析出的 manifest, 下次安装原样复用
 const path = require('node:path');
 const fs = require('node:fs/promises');
+const npa = require('npm-package-arg');
 const utils = require('./utils');
 
 // 文件名与 JSON 结构与 easy-npd 共用, 改动时 MUST 同步修改另一个包, 否则切换工具时会读到不兼容的锁文件
@@ -17,6 +18,17 @@ const FOREIGN_LOCKFILES = [
 ];
 
 exports.LOCKFILE_NAME = LOCKFILE_NAME;
+
+// 两个包的 keyOf 必须逐字相同, 否则共用的 np-lock.json 键对不上
+function keyOf(name, spec) {
+  if (spec.startsWith('workspace:')) return null;
+  const arg = npa(`${name}@${spec}`);
+  if (arg.type === 'alias') return npa(`${arg.subSpec.name}@${arg.subSpec.fetchSpec}`).raw;
+  if (arg.type === 'file' || arg.type === 'directory') return null;
+  return arg.raw;
+}
+
+exports.keyOf = keyOf;
 
 exports.exists = root => utils.exists(path.join(root, LOCKFILE_NAME));
 

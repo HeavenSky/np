@@ -151,11 +151,14 @@ async function listInstalledWithScripts(root) {
     if (!pkg.name) continue;
     const scripts = await allowScripts.pendingScripts(pkg, dir);
     if (scripts.length === 0) continue;
+    const identity = allowScripts.identityOfInstalled(pkg, dir);
+    if (!identity) continue;
+    const owner = allowScripts.ownerOfInstalled(pkg);
     result.push({
-      name: pkg.name,
-      displayName: `${pkg.name}@${pkg.version}`,
+      name,
+      displayName: `${name}@${entry.slice(at + 1)}${owner ? ` (declared by ${owner})` : ''}`,
       scripts,
-      identity: allowScripts.identityOfInstalled(pkg),
+      identity,
     });
   }
   return result;

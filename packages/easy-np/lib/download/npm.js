@@ -17,6 +17,7 @@ const get = require('../get');
 
 const { MIRROR_ATTEMPTS } = get;
 const utils = require('../utils');
+const installState = require('../install_state');
 const config = require('../np_config');
 
 module.exports = async (pkg, options) => {
@@ -283,7 +284,7 @@ async function _fetchFullPackageMetaWithCache(pkgUrl, globalOptions, cacheFile, 
     result = await _fetchFullPackageMeta(pkgUrl, globalOptions, etag, !!cache, mirrorUrls);
   } catch (err) {
     if (cache) {
-      globalOptions.console.warn('[np:download:npm] Request %s error, use cache instead', pkgUrl);
+      globalOptions.console.warn('[np:download:npm] Request %s error, use cache instead', utils.redactUrl(pkgUrl));
       return cache.manifests;
     }
     throw err;
@@ -305,7 +306,7 @@ async function _fetchFullPackageMetaWithCache(pkgUrl, globalOptions, cacheFile, 
       }
     }
   }
-  debug('GET %s with etag: %j, status: %s, maxAge: %s', pkgUrl, etag, result.status, maxAge);
+  debug('GET %s with etag: %j, status: %s, maxAge: %s', utils.redactUrl(pkgUrl), etag, result.status, maxAge);
   const expired = Date.now() + maxAge * 1000;
   // etag match
   if (result.status === 304) {
@@ -409,7 +410,7 @@ async function download(pkg, options) {
   if (await utils.isInstallDone(ungzipDir)) {
     // 上次安装中断或失败的包带回阶段, 由本次运行第一个到达的调用方继续安装; 继续执行脚本需要解压出的 scripts
     const stage = await utils.getResumeStage(ungzipDir, options);
-    if (stage) await mergePackageMeta(pkg, ungzipDir);
+    if (stage) await mergePackageMeta(pkg, ungzipDir, options);
     options.cache[key].done = true;
     options.events.emit(key);
     // debug('[%s@%s] Exists', pkg.name, pkg.version);
@@ -421,6 +422,7 @@ async function download(pkg, options) {
   }
 
   await utils.mkdirp(ungzipDir);
+  await installState.reset(ungzipDir);
 
   // download tar and unzip
   let lastErr;
@@ -455,9 +457,9 @@ async function download(pkg, options) {
       count++;
       options.console.warn(
         `[${pkg.name}@${pkg.version}] download %s %s: %s, fail count: %s`,
-        tarballUrl,
+        utils.redactUrl(tarballUrl),
         err.name,
-        err.message,
+        utils.redactUrl(err.message),
         count
       );
       // 缓存中的 tgz 校验或解压失败时删除, 否则之后每次重试都读到同一个损坏文件
@@ -478,7 +480,7 @@ async function download(pkg, options) {
     throw lastErr;
   }
 
-  await mergePackageMeta(pkg, ungzipDir);
+  await mergePackageMeta(pkg, ungzipDir, options);
 
   await utils.setInstallDone(ungzipDir, utils.FIRST_INSTALL_STAGE);
 
@@ -537,7 +539,7 @@ async function getTarballStream(tarballUrl, pkg, options, mirrored = false) {
   if (!options.cacheDir || utils.isSudo()) {
     // sudo don't touch the cacheDir
     // production mode
-    debug('[%s@%s] GET streaming %j', pkg.name, pkg.version, tarballUrl);
+    debug('[%s@%s] GET streaming %j', pkg.name, pkg.version, utils.redactUrl(tarballUrl));
     const result = await get(
       tarballUrl,
       {
@@ -555,7 +557,7 @@ async function getTarballStream(tarballUrl, pkg, options, mirrored = false) {
       } catch (err) {
         options.console.warn('[np:download:npm] ignore destroy response stream error: %s', err);
       }
-      throw new Error(`Download ${tarballUrl} status: ${result.status} error, should be 200`);
+      throw new Error(`Download ${utils.redactUrl(tarballUrl)} status: ${result.status} error, should be 200`);
     }
 
     // record size
@@ -595,7 +597,7 @@ async function getTarballStream(tarballUrl, pkg, options, mirrored = false) {
     );
 
     if (result.status !== 200) {
-      throw new Error(`Download ${tarballUrl} status: ${result.status} error, should be 200`);
+      throw new Error(`Download ${utils.redactUrl(tarballUrl)} status: ${result.status} error, should be 200`);
     }
     // make sure tarball file is not exists again
     exists = (options.offline || !options.refreshCache) && (await utils.exists(tarballFile));
@@ -624,7 +626,14 @@ async function getTarballStream(tarballUrl, pkg, options, mirrored = false) {
       await fs.rm(tmpFile, { force: true });
     }
     const stat = await fs.stat(tarballFile);
-    debug('[%s@%s] saved %s %s => %s', pkg.name, pkg.version, bytes(stat.size), tarballUrl, tarballFile);
+    debug(
+      '[%s@%s] saved %s %s => %s',
+      pkg.name,
+      pkg.version,
+      bytes(stat.size),
+      utils.redactUrl(tarballUrl),
+      tarballFile
+    );
     options.totalTarballSize += stat.size;
   }
 
@@ -702,7 +711,7 @@ function checkShasumAndUngzip(ungzipDir, readstream, pkg, useTarFormat) {
       const hashResult = hash.digest(expected.encoding);
       if (hashResult !== expected.digest) {
         const err = new Error(
-          `real ${expected.algorithm}:${hashResult} not equal to remote:${expected.digest}, download url ${readstream.tarballUrl || ''}, download size ${tarballSize}`
+          `real ${expected.algorithm}:${hashResult} not equal to remote:${expected.digest}, download url ${utils.redactUrl(readstream.tarballUrl || '')}, download size ${tarballSize}`
         );
         err.name = 'ShasumNotMatchError';
         handleCallback(err);
@@ -820,9 +829,20 @@ function binaryMirrorFiles(pkg, binaryMirror) {
 }
 
 // read package.json to merge into realPkg
-async function mergePackageMeta(pkg, ungzipDir) {
+// name, version 与 dist 保留 registry 的值: tarball 可以自称其他包, 冒用其 allowScripts 放行与链接名
+async function mergePackageMeta(pkg, ungzipDir, options) {
+  const trusted = { name: pkg.name, version: pkg.version, dist: pkg.dist };
   const fullMeta = await utils.readPackageJSON(ungzipDir);
-  Object.assign(pkg, fullMeta);
+  if (fullMeta.name !== pkg.name || fullMeta.version !== pkg.version) {
+    options.pendingMessages.push([
+      'warn',
+      '%s %s: package.json in the tarball declares %s, using the registry name and version',
+      chalk.magenta('manifest mismatch'),
+      chalk.gray(`${pkg.name}@${pkg.version}`),
+      chalk.yellow(`${fullMeta.name}@${fullMeta.version}`),
+    ]);
+  }
+  Object.assign(pkg, fullMeta, trusted);
   if (pkg.__fixDependencies) {
     pkg.dependencies = Object.assign({}, pkg.dependencies, pkg.__fixDependencies);
   }

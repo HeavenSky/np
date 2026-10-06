@@ -12,6 +12,7 @@ function pick(argv, key, envKeys) {
   for (const name of envKeys) candidates.push(process.env[name]);
   for (const value of candidates) {
     if (value === false || value === 'false') return false;
+    if (value === true) return true;
     if (typeof value === 'string' && value) return value;
   }
   return undefined;

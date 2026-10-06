@@ -44,6 +44,11 @@ exports.load = ({ root, global = false, argv = {}, logger = console }) => {
   };
 };
 
+// git 依赖构建时的子安装: 不读克隆仓库的 allowScripts 与 ~/.nprc, 不放行任何依赖脚本
+exports.GIT_PREPARE_CHILD_ENV = '_NP_GIT_PREPARE_CHILD_';
+
+exports.empty = () => ({ policy: null, source: null, allowAll: false, strict: false, skipped: [] });
+
 // 未经 CLI 入口(API 调用, 测试)时按 options.root 懒加载
 exports.ensure = options => {
   if (!options.scriptPolicy) {
@@ -60,10 +65,16 @@ function readPackage(root) {
   }
 }
 
+// 命令行重复传入时 minimist 给出数组
 function parseList(value) {
-  if (typeof value !== 'string' || !value.trim()) return null;
+  const names = []
+    .concat(value)
+    .filter(item => typeof item === 'string')
+    .flatMap(item => item.split(/[,\s]+/))
+    .filter(Boolean);
+  if (!names.length) return null;
   const policy = {};
-  for (const name of value.split(/[,\s]+/).filter(Boolean)) policy[name] = true;
+  for (const name of names) policy[name] = true;
   return policy;
 }
 
@@ -213,19 +224,50 @@ exports.pendingScripts = async (realPkg, dir) => {
   return pending;
 };
 
-// 已安装的包按 package.json 中安装时写入的 _from / _resolved 还原来源: _from 是 git 或 url 声明时按解析地址比对
-exports.identityOfInstalled = pkg => {
-  let type;
-  try {
-    type = pkg._from ? npa(pkg._from).type : null;
-  } catch {
-    type = null;
-  }
+// 已安装的包按安装时写入的 _from / _resolved / _scriptsOwner 还原来源; registry 包必须以 .store 目录名为准,
+// 包内 package.json 的 name/version 可以冒充其他包; 没有 _scriptsOwner 的本地包由根项目声明, 返回 null 不受策略限制
+exports.identityOfInstalled = (pkg, dir) => {
+  let type = specType(pkg._from);
   if (!type && typeof pkg._resolved === 'string' && /^git[+:]/.test(pkg._resolved)) type = 'git';
   if (type === 'git' && pkg._resolved) return { git: pkg._resolved };
   if (type === 'remote' && pkg._resolved) return { url: pkg._resolved };
-  return { name: pkg.name, version: pkg.version };
+  if (['file', 'directory'].includes(type)) return pkg._scriptsOwner ? identityOfKey(pkg._scriptsOwner) : null;
+  return storeIdentity(dir) || identityOfKey(pkg._from) || { name: pkg.name, version: pkg.version };
 };
+
+// 不受信本地包的声明者键, 用于显示; 其他来源的包自带的 _scriptsOwner 不可信
+exports.ownerOfInstalled = pkg =>
+  ['file', 'directory'].includes(specType(pkg._from)) ? pkg._scriptsOwner || null : null;
+
+function specType(spec) {
+  try {
+    return spec ? npa(spec).type : null;
+  } catch {
+    return null;
+  }
+}
+
+function identityOfKey(key) {
+  const type = specType(key);
+  if (type === 'git') return { git: key };
+  if (type === 'remote') return { url: key };
+  if (type === 'version') {
+    const parsed = npa(key);
+    return { name: parsed.name, version: parsed.fetchSpec };
+  }
+  return null;
+}
+
+// 必须与 utils.getPackageStorePath 的目录规则一致: <.store>/<name 中 / 换成 +>@<version>/node_modules/<name>
+function storeIdentity(dir) {
+  if (!dir) return null;
+  const parts = path.resolve(dir).split(path.sep);
+  const index = parts.lastIndexOf('.store');
+  const entry = index >= 0 ? parts[index + 1] : '';
+  const at = entry.lastIndexOf('@');
+  if (at <= 0) return null;
+  return { name: entry.slice(0, at).replace('+', '/'), version: entry.slice(at + 1) };
+}
 
 // 判断一个依赖包的安装脚本能否执行; 没有脚本时返回 true; originType 为空时按已安装包的 package.json 还原来源
 exports.allowPackage = async (realPkg, dir, originType, originSpec, displayName, options) => {
@@ -233,6 +275,6 @@ exports.allowPackage = async (realPkg, dir, originType, originSpec, displayName,
   if (pending.length === 0) return true;
   const identity = originType
     ? exports.identityOf(originType, realPkg, originSpec)
-    : exports.identityOfInstalled(realPkg);
+    : exports.identityOfInstalled(realPkg, dir);
   return exports.allow(options, identity, { displayName, name: realPkg.name, scripts: pending });
 };

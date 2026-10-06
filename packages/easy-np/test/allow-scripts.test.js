@@ -1,9 +1,12 @@
 const assert = require('node:assert');
+const util = require('node:util');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const coffee = require('coffee');
 const helper = require('./helper');
 const allowScripts = require('../lib/allow_scripts');
+const npminstall = require('./npminstall');
+const { exists } = require('../lib/utils');
 
 const x = path.join(__dirname, '..', 'bin', 'x.js');
 
@@ -42,6 +45,11 @@ describe('test/allow-scripts.test.js', () => {
       });
       assert.deepEqual(state.policy, { c: true });
       assert.equal(warnings.length, 2);
+    });
+
+    it('should merge repeated --allow-scripts', () => {
+      const state = allowScripts.load({ argv: { 'allow-scripts': ['a', 'b,c'] } });
+      assert.deepEqual(state.policy, { a: true, b: true, c: true });
     });
   });
 
@@ -102,6 +110,27 @@ describe('test/allow-scripts.test.js', () => {
         .end();
     });
 
+    it('should not take the package after a switch as its value', async () => {
+      await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'root', version: '1.0.0' }));
+      await run(helper.npminstall, [
+        '--foreground-scripts',
+        '--dangerously-allow-all-scripts',
+        'postinstall-hello@1.0.0',
+      ])
+        .expect('code', 0)
+        .expect('stdout', /run on postinstall-hello/)
+        .end();
+      const pkg = await helper.readJSON(path.join(root, 'package.json'));
+      assert(pkg.dependencies['postinstall-hello']);
+
+      await cleanup();
+      await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'root', version: '1.0.0' }));
+      await run(helper.npminstall, ['--strict-allow-scripts', 'postinstall-hello@1.0.0'])
+        .expect('code', 1)
+        .expect('stderr', /were blocked/)
+        .end();
+    });
+
     it('should deny scripts by name and drop existing approvals', async () => {
       await writePkg({ allowScripts: { 'postinstall-hello@1.0.0': true } });
       await run(helper.npminstall, []).expect('code', 0).end();
@@ -135,6 +164,78 @@ describe('test/allow-scripts.test.js', () => {
       const pkg = await helper.readJSON(path.join(root, 'package.json'));
       assert.deepEqual(pkg.allowScripts, { [url]: true });
       await run(x, ['rebuild', 'postinstall-hello']).expect('code', 0).expect('stdout', /run on postinstall-hello/).end();
+    });
+  });
+
+  // tarball 内 package.json 自称其他包时, 放行, 跳过列表, 链接名与重跑都按 registry 上的 name@version
+  describe('manifest confusion', () => {
+    const [tmp, cleanup] = helper.tmp();
+    const root = path.join(tmp, 'app');
+    const marker = path.join(root, 'node_modules/evil/postinstall.marker');
+    const run = (bin, args) => coffee.fork(bin, args, { cwd: root });
+    let registry;
+
+    before(async () => {
+      registry = helper.createRegistry('registry', []);
+      await new Promise(resolve => registry.server.listen(0, '127.0.0.1', resolve));
+      registry.prefix = `http://127.0.0.1:${registry.server.address().port}/`;
+    });
+    after(() => registry.server.close());
+
+    beforeEach(async () => {
+      await cleanup();
+      const tarball = await helper.packTarball(tmp, {
+        name: 'trusted',
+        version: '9.9.9',
+        scripts: { postinstall: "node -e \"require('fs').writeFileSync('postinstall.marker', '')\"" },
+      });
+      registry.packages = { evil: { '1.0.0': tarball } };
+      await fs.mkdir(root, { recursive: true });
+      await fs.writeFile(
+        path.join(root, 'package.json'),
+        JSON.stringify({
+          name: 'app',
+          version: '1.0.0',
+          dependencies: { evil: '1.0.0' },
+          allowScripts: { trusted: true },
+        })
+      );
+    });
+    afterEach(cleanup);
+
+    it('should not let the tarball borrow the approval of the name it claims', async () => {
+      const warnings = [];
+      await npminstall({
+        root,
+        registry: registry.prefix.slice(0, -1),
+        cacheDir: path.join(tmp, 'cache'),
+        console: { info() {}, log() {}, warn: (...args) => warnings.push(util.format(...args)), error() {} },
+      });
+      const output = warnings.join('\n');
+      assert.match(output, /manifest mismatch/);
+      assert.match(output, /evil@1\.0\.0 \(postinstall\)/);
+      assert.equal(await exists(marker), false);
+      assert.equal(await exists(path.join(root, 'node_modules/trusted')), false);
+      assert.equal((await helper.readJSON(path.join(root, 'node_modules/evil/package.json'))).name, 'trusted');
+
+      await run(x, ['approve-scripts', '--pending'])
+        .expect('stdout', /^evil@1\.0\.0 \(postinstall\)/m)
+        .end();
+      await run(x, ['rebuild', 'evil'])
+        .expect('code', 0)
+        .expect('stderr', /evil@1\.0\.0 \(postinstall\)/)
+        .notExpect('stdout', /postinstall/)
+        .end();
+      assert.equal(await exists(marker), false);
+
+      await run(x, ['approve-scripts', 'evil']).expect('code', 0).end();
+      const pkg = await helper.readJSON(path.join(root, 'package.json'));
+      assert.deepEqual(pkg.allowScripts, { trusted: true, 'evil@1.0.0': true });
+      await run(x, ['rebuild', 'evil'])
+        .expect('code', 0)
+        .expect('stdout', /> evil@1\.0\.0 postinstall/)
+        .end();
+      assert.equal(await exists(marker), true);
     });
   });
 });

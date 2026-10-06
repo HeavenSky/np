@@ -5,6 +5,5 @@
   },
   "scripts": {
     "postinstall": "node index.js"
-  },
-  "__np_done": false
+  }
 }
