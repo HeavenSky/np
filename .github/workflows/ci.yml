@@ -42,7 +42,7 @@ jobs:
         with:
           node-version: 16.x
       - run: npm i
-      - run: npx -y mocha@10 test/runtime.test.js test/proxy.test.js test/get.test.js test/np-lock.test.js test/installLocal.test.js test/postinstall.test.js
+      - run: npx -y mocha@10 test/runtime.test.js test/proxy.test.js test/get.test.js test/np-lock.test.js test/installLocal.test.js test/postinstall.test.js test/allow-scripts.test.js test/prune.test.js
 
   test:
     strategy:
