@@ -6,15 +6,22 @@ const destroy = require('destroy');
 const CacheableLookup = require('cacheable-lookup');
 const utils = require('./utils');
 const npConfig = require('./np_config');
+const proxy = require('./proxy');
 
 module.exports = get;
 
 const USER_AGENT = 'easy-np/' + require('../package.json').version + ' ' + urllib.USER_AGENT;
 const MAX_RETRY = 5;
 const cacheable = new CacheableLookup();
-const httpclient = new urllib.HttpClient({
-  lookup: cacheable.lookup,
-});
+// strict-ssl / cafile 由 CLI 在首个请求前写入 proxy 配置, 客户端要在那之后创建
+let httpclient;
+function getHttpClient() {
+  if (!httpclient) {
+    const tls = proxy.tlsOptions();
+    httpclient = new urllib.HttpClient({ lookup: cacheable.lookup, ...(tls && { connect: tls }) });
+  }
+  return httpclient;
+}
 
 // 公共源交替尝试的总次数: 两个源各 2 次
 const MIRROR_ATTEMPTS = 4;
@@ -26,7 +33,6 @@ async function get(url, options, globalOptions, hasCache = false) {
   }
   options.headers = options.headers || {};
   options.headers['User-Agent'] = USER_AGENT;
-  // 不传 rejectUnauthorized / proxy / enableProxy: urllib 3 均不支持, 传入不生效
   if (globalOptions?.referer) {
     options.headers.Referer = globalOptions.referer;
   }
@@ -115,7 +121,8 @@ async function _get(url, options, retry, globalOptions, hasCache) {
     if (process.env.MOCK_AGENT) {
       return await urllib.request(url, options);
     }
-    return await httpclient.request(url, options);
+    const dispatcher = proxy.dispatcherFor(url);
+    return await getHttpClient().request(url, dispatcher ? { ...options, dispatcher } : options);
   } catch (err) {
     retry--;
     const logger = (globalOptions && globalOptions.console) || console;

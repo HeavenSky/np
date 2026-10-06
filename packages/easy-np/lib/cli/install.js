@@ -17,6 +17,7 @@ const Context = require('../context');
 const mirror = require('../mirror');
 const { lockfileConverter } = require('../lockfile_resolver');
 const npLock = require('../np_lock');
+const proxy = require('../proxy');
 const help = require('./help');
 
 module.exports = async function install(args, { ignorePkgNames = false, ignoreLockfile = false } = {}) {
@@ -42,7 +43,12 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
         'forbidden-licenses',
         // {"http://a.com":"http://b.com"}
         'tarball-url-mapping',
-        // --proxy 已移除: urllib 3 不支持 proxy / enableProxy 参数, 传入后请求仍直连
+        'proxy',
+        'https-proxy',
+        'noproxy',
+        'cafile',
+        // 声明为字符串: 布尔类型在未传时默认为 false, 会被当作关闭证书校验
+        'strict-ssl',
         'dependencies-tree',
         // np foo --workspace=aa
         // np foo -w aa
@@ -138,6 +144,9 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
     console.log(help.install());
     process.exit(0);
   }
+
+  // 首个网络请求与子进程启动之前写入, 安装脚本, node-gyp 与 git 通过环境变量继承
+  proxy.configure(argv);
 
   const pkgs = [];
 
@@ -318,7 +327,6 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
     // 本次只安装部分依赖树, 已提升的链接只允许升级不允许降级
     partialInstall: pkgs.length > 0 || installWorkspaceNames.length > 0 || !!installOnAllWorkspaces,
   };
-  // 不再读取 npm 的 strict-ssl: urllib 3 不支持 rejectUnauthorized, HTTPS 证书始终校验
   // when ignore-scripts is set to `false` by user, np will still
   // get config from npm settings instead of following user's specification,
   // should migrate to ?? or typeof.

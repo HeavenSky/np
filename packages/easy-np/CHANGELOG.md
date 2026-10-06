@@ -12,6 +12,8 @@ easy-np 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1, 上�
 - 支持 npm `overrides`: 包名, `name@<range>`, 嵌套对象, `.` 与 `$name` 引用; 同时存在 `resolutions` 时 `overrides` 优先.
 - 缺失的 peerDependencies 与 npm 7+ 一样自动安装, 失败时按可选依赖跳过并告警; `--legacy-peer-deps` 恢复只告警.
 - 公共源测速结果缓存在 `~/.np_tarball/np-probe.json`, 默认 5 分钟内复用; `--probe-cache=<分钟>` 或 `np_probe_cache` 修改, `0` 表示每次都测速.
+- 代理: `--proxy`, `--https-proxy`, `--noproxy`, 未传时依次读取 `npm_config_*`, `~/.nprc`, `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`; 同一份配置传给安装脚本, node-gyp 与 git.
+- `--cafile` 指定 CA 证书, `--no-strict-ssl` 关闭证书校验, 同样传给安装脚本与 git.
 
 ### 行为变更
 
