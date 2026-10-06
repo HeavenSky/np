@@ -4,6 +4,7 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { spawn } = require('node:child_process');
 const helper = require('../support/helper');
+const runtime = require('../../lib/runtime');
 
 const shim = path.join(__dirname, '../../node-gyp-bin/node-gyp.js');
 
@@ -74,7 +75,9 @@ describe('test/scripts/node-gyp.test.js', () => {
     });
     assert.equal(result.code, 1, result.stderr);
     assert.equal(result.stdout, '');
-    assert.match(result.stderr, /npm i -g node-gyp/);
+    // 提示的包名随 Node.js 版本变化, 例如 Node 14 上是 @electron/node-gyp
+    const { name } = runtime.nodeGypPackage();
+    assert(result.stderr.includes(`npm i -g ${name}`), result.stderr);
     assert.deepEqual(fs.readdirSync(installDir), []);
   });
 });
