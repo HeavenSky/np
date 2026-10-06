@@ -1,6 +1,6 @@
 {
   "name": "easy-npd",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Fast npm installer forked from npminstall 6.8.0, with flat _name@version@name layout, latest-version hoisting and node 16 support",
   "keywords": [
     "dedup",

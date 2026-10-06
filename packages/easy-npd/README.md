@@ -26,6 +26,7 @@ npm i -g easy-npd
 | `npd-x fetch`           | 无                        | 只下载并解压指定的包, 不安装依赖, 不执行脚本        | 无, 新增       |
 | `npd-x rebuild`         | `rb`                      | 重跑已安装依赖的 preinstall / install / postinstall | 无, 新增       |
 | `npd-x approve-scripts` | 无 | 把依赖写入 `package.json` 的 `allowScripts`, 放行其安装脚本 | 无, 新增 |
+| `npd-x prune` | 无 | 删除 `node_modules` 中不再被任何链接引用的 `_<name>@<version>@<name>` 目录 | 无, 新增 |
 
 - 别名用法如 `npd-x i`, `npd-x rb`. `npd-x -h` 列出全部子命令; `npd-x <command> -h` 或 `npd-x help <command>` 显示子命令的参数.
 - `npd --help` 显示安装的全部参数.
@@ -92,6 +93,10 @@ npm i -g easy-npd
 - 修复由 easy-npd 0.0.1 及更早版本装出的 `node_modules`: 这些版本会把脚本没跑完的包也标记为完成.
 
 普通的失败或中断不需要 rebuild, 直接再次运行 `npd` 即可.
+
+### `npd-x prune`: 回收不再使用的包版本
+
+升级依赖后旧版本仍留在 `node_modules/_<name>@<version>@<name>`; 安装本身不删除它们(`npd-x uninstall` 会删除被卸载的版本). `npd-x prune` 从 `node_modules` 顶层链接出发沿依赖链接遍历, 删除遍历不到的版本目录; `--dry-run` 只列出不删除.
 
 ### `npd-x fetch`: 只下载解压
 

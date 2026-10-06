@@ -9,6 +9,7 @@ const SUMMARIES = {
   fetch: 'only download and extract packages, no dependencies or scripts',
   rebuild: 'rerun lifecycle scripts of installed dependencies',
   'approve-scripts': 'allow install scripts of dependencies in package.json allowScripts',
+  prune: 'remove _<name>@<version>@<name> folders in node_modules that nothing links to',
 };
 
 // commands: [{ name, aliases }], 顺序即展示顺序
@@ -209,6 +210,23 @@ Options:
   --all: approve every installed package whose install scripts are not reviewed yet
   --pending: only list installed packages whose install scripts are not reviewed yet
   --no-pin: write name-only entries that allow any version, default writes <pkg>@<installed version>
+  --root: project root directory, default is current working directory
+  -h, --help: show help
+`;
+
+exports.prune = () => `
+Usage:
+
+  npd-x prune
+  npd-x prune --dry-run
+
+Uninstalling or upgrading packages leaves their old versions as _<name>@<version>@<name> folders in node_modules.
+This command walks the links from the top level of node_modules, removes the version folders that are not reachable.
+Installs never remove these folders by themselves.
+
+Options:
+
+  --dry-run: only list what would be removed
   --root: project root directory, default is current working directory
   -h, --help: show help
 `;

@@ -4,7 +4,7 @@ easy-npd 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 6.8.0, 上
 
 0.0.0 列出相对 npminstall 6.8.0 的全部变更, 分为「新增功能」与「与 npminstall 6.8.0 的差异」; 之后的版本只列相对上一个版本的变更.
 
-## 未发布
+## 0.0.3 (2026-10-06)
 
 ### 新增功能
 
@@ -15,6 +15,7 @@ easy-npd 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 6.8.0, 上
 - 代理: `--proxy`, `--https-proxy`, `--noproxy`, 未传时依次读取 `npm_config_*`, `~/.nprc`, `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`; 同一份配置传给安装脚本, node-gyp 与 git.
 - `--cafile` 指定 CA 证书, `--no-strict-ssl` 关闭证书校验, 同样传给安装脚本与 git.
 - `np-lock.json` 锁定 git 依赖解析出的 commit 与 tarball url 依赖的 sha512 integrity: 再次安装直接检出锁定的 commit(不再 `git ls-remote`, 已装时不再克隆), tarball 内容变化时报错; `--frozen-lockfile` 下缺少条目同样报错. 本地目录依赖不锁定.
+- `npd-x prune`: 删除不再被任何链接引用的包版本目录, `--dry-run` 只列出; 安装不会自动删除.
 
 ### 行为变更
 
