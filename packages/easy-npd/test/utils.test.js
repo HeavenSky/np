@@ -380,6 +380,37 @@ describe('test/utils.test.js', () => {
       await installState.removeEntries(store, entry => dropped.includes(entry));
       assert.deepEqual(await stateKeys(), ['_b@1.0.0@b']);
     });
+
+    it('should keep an entry set while another call is reloading the state file', async () => {
+      const mm = require('mm');
+      const a = await createPackage('_a@1.0.0@a');
+      const b = await createPackage('_b@1.0.0@b');
+      await installState.reset(a);
+      // 其他进程改写了状态文件, 下一次读取会重新加载
+      const file = path.join(store, '.npd-state.json');
+      const data = JSON.parse(await fs.readFile(file, 'utf8'));
+      data.packages['_c@1.0.0@c'] = { done: true };
+      await fs.writeFile(file, JSON.stringify(data));
+      // 第 1 次读取(get(b) 的重新加载)慢于 setInstallDone(a), 第 3 次读取(写盘前的合并)再晚于第 1 次返回
+      const readFile = fs.readFile;
+      const delays = [200, 0, 400];
+      let calls = 0;
+      mm(fs, 'readFile', async (...args) => {
+        const delay = delays[calls++] || 0;
+        if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+        return readFile.apply(fs, args);
+      });
+      try {
+        const reloading = installState.get(b);
+        await new Promise(resolve => setTimeout(resolve, 50));
+        await utils.setInstallDone(a);
+        await reloading;
+      } finally {
+        mm.restore();
+      }
+      assert.deepEqual(await installState.get(a), { done: true });
+      assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')).packages['_a@1.0.0@a'], { done: true });
+    });
   });
 
   describe('stripUrlAuth()', () => {
