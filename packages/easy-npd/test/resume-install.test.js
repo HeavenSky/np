@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs/promises');
 const npminstall = require('./npminstall');
 const helper = require('./helper');
+const { getInstallState } = require('../lib/utils');
 const { rebuild: rebuildPackages } = require('..');
 
 describe('test/resume-install.test.js', () => {
@@ -29,15 +30,17 @@ describe('test/resume-install.test.js', () => {
       install(),
       /run npd again to continue from where they stopped:\n {2}- .*resume-scripts.*: run postinstall error/
     );
-    let pkg = await helper.readJSON(path.join(pkgDir, 'package.json'));
-    assert.equal(pkg.__npd_done, true);
-    assert.equal(pkg.__npd_stage, 'postinstall');
+    let pkg = (await getInstallState(pkgDir)) || {};
+    // 进度标记写在 store 的状态文件里, 不修改依赖包自己的 package.json
+    assert.equal((await helper.readJSON(path.join(pkgDir, 'package.json'))).__npd_stage, undefined);
+    assert.equal(pkg.done, true);
+    assert.equal(pkg.stage, 'postinstall');
     assert.deepEqual(await readLog(), ['preinstall', 'postinstall']);
 
     await fs.writeFile(flagFile, '');
     await install();
-    pkg = await helper.readJSON(path.join(pkgDir, 'package.json'));
-    assert.equal(pkg.__npd_stage, undefined);
+    pkg = (await getInstallState(pkgDir)) || {};
+    assert.equal(pkg.stage, undefined);
     // preinstall 已成功, 不再重复执行
     assert.deepEqual(await readLog(), ['preinstall', 'postinstall', 'postinstall']);
 
@@ -60,8 +63,8 @@ describe('test/resume-install.test.js', () => {
       [pkgDir]
     );
     assert.deepEqual(await readLog(), ['preinstall', 'postinstall', 'preinstall', 'postinstall']);
-    const pkg = await helper.readJSON(path.join(pkgDir, 'package.json'));
-    assert.equal(pkg.__npd_stage, undefined);
+    const pkg = (await getInstallState(pkgDir)) || {};
+    assert.equal(pkg.stage, undefined);
 
     await assert.rejects(
       rebuild([{ raw: 'resume-scripts@^2', name: 'resume-scripts', range: '^2' }]),
@@ -99,8 +102,8 @@ describe('test/resume-install.test.js', () => {
       'preinstall',
       'root-postinstall',
     ]);
-    const okPkg = await helper.readJSON(path.join(root, 'node_modules/keep-going-ok/package.json'));
-    assert.equal(okPkg.__npd_stage, undefined);
+    const okPkg = (await getInstallState(path.join(root, 'node_modules/keep-going-ok'))) || {};
+    assert.equal(okPkg.stage, undefined);
   });
 
   it('should reach the failed dependency through its parent on next install', async () => {

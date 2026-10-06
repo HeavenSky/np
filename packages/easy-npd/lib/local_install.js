@@ -127,6 +127,8 @@ async function _install(options, context) {
   const rootPkgDependencies = dependencies(rootPkg, options, context.nested);
   options.rootPkgDependencies = rootPkgDependencies;
   options.resolution = createResolution(rootPkg, options);
+  // 补记锁文件子树时套用同样的改写规则, 但不重复打印 overrides 告警
+  options.lockResolution = createResolution(rootPkg, { pendingMessages: [] });
   if (pkgs.length === 0) {
     if (options.client) {
       pkgs = rootPkgDependencies.client;
@@ -245,6 +247,29 @@ async function installOne(parentDir, childPkg, options, context) {
   }
 }
 
+// 已装且等于锁定版本而被跳过的根依赖不会经过解析; 沿锁文件补记它的整棵子树, 否则完整安装会把这些条目当作无用删除
+function recordLockedSubtree(rootDep, options) {
+  const tree = options.cache.dependenciesTree;
+  const stack = [[rootDep, []]];
+  const seen = new Set();
+  while (stack.length > 0) {
+    const [dep, ancestors] = stack.pop();
+    // 与安装时一致地套用 overrides / resolutions, 否则被改写的条目键对不上
+    const resolved = ancestors.length > 0 ? options.lockResolution(dep, ancestors) : dep;
+    const key = `${resolved.name}@${resolved.version}`;
+    const manifest = tree[key];
+    if (!manifest || seen.has(key)) continue;
+    seen.add(key);
+    options.lockPackages[key] = manifest;
+    const childAncestors = ancestors.concat({ name: manifest.name, version: manifest.version });
+    for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
+      for (const name in manifest[field]) {
+        stack.push([{ name, version: manifest[field][name] }, childAncestors]);
+      }
+    }
+  }
+}
+
 async function needInstall(parentDir, childPkg, options) {
   // always install if not install from package.json
   if (!options.installRoot || options.rebuild) return true;
@@ -254,7 +279,13 @@ async function needInstall(parentDir, childPkg, options) {
   try {
     if (pkg.name && pkg.version && childPkg.version && !(await utils.isInstallUnfinished(pkgDir))) {
       if (semver.validRange(childPkg.version, true) && semver.satisfies(pkg.version, childPkg.version)) {
-        return false;
+        if (!options.lockPackages) return false;
+        // 启用锁文件时只有已装版本等于锁定版本才跳过, 否则重装使 node_modules 与 np-lock.json 一致
+        const locked = options.cache.dependenciesTree[`${childPkg.name}@${childPkg.version}`];
+        if (locked && locked.version === pkg.version) {
+          recordLockedSubtree(childPkg, options);
+          return false;
+        }
       }
     }
   } catch (err) {
@@ -631,7 +662,7 @@ function recordDependenciesTree(options) {
 
   const tree = {};
   for (const key in options.cache.dependenciesTree) {
-    tree[key] = omitPackage(options.cache.dependenciesTree[key]);
+    tree[key] = utils.omitPackage(options.cache.dependenciesTree[key]);
   }
   const installCacheFile = path.join(options.storeDir, '.dependencies_tree.json');
   writeFileSync(installCacheFile, JSON.stringify(tree, null, 2));
@@ -665,32 +696,4 @@ function finishInstall(options) {
   } else {
     options.console.info(...logArguments);
   }
-}
-
-function omitPackage(pkg) {
-  const keys = [
-    'name',
-    'version',
-    'dependencies',
-    'devDependencies',
-    'optionalDependencies',
-    'clientDependencies',
-    'buildDependencies',
-    'isomorphicDependencies',
-    'peerDependencies',
-    'publish_time',
-    'deprecate',
-    'license',
-    'os',
-    'engines',
-    'dist',
-    'scripts',
-    '_id',
-    '__fixDependencies',
-  ];
-  const res = {};
-  for (const key of keys) {
-    if (pkg[key]) res[key] = pkg[key];
-  }
-  return res;
 }

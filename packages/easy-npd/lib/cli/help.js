@@ -70,6 +70,9 @@ Options:
   -v, --version: show version
   -h, --help: show help
   --refresh-cache: ignore cached manifests and tarballs, download again and overwrite the cache
+  --no-lockfile: don't read or write np-lock.json, same as env np_lockfile=false
+  --frozen-lockfile: install exactly the versions in np-lock.json, fail if a dependency is not locked, never update it
+  --probe-cache: minutes to reuse the last registry speed test result, 0 to test on every run, default 5, also read from env np_probe_cache
   --offline: only use the disk cache and never request the network, fail when a manifest or tarball is not cached. git and remote url packages are not supported.
   -d, --detail: show detail log of installation
   --trace: show memory and CPU usage traces of the installation
@@ -78,6 +81,7 @@ Options:
   --no-optional: ignore all optionalDependencies during the installation
   --forbidden-licenses: forbid installing packages that use these licenses
   --engine-strict: refuse to install (or even consider installing) any package that claims to not be compatible with the current Node.js version.
+  --legacy-peer-deps: don't install missing peerDependencies automatically, only warn like npm 6
   --flatten: flatten dependencies by matching ancestors' dependencies
   --registry-only: make sure all packages are installed from the registry, installing any package from a remote source (e.g.: git, remote url) fails the install.
   --cache-strict: use disk cache even on production env.

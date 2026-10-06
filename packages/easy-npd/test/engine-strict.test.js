@@ -12,7 +12,7 @@ describe('test/engine-strict.test.js', () => {
   it('should show engine strict warn message', () => {
     return (
       coffee
-        .fork(helper.npminstall, ['express@1'], {
+        .fork(helper.npminstall, ['express@1.0.8'], {
           cwd: tmp,
         })
         // .debug()
@@ -26,7 +26,7 @@ describe('test/engine-strict.test.js', () => {
   it('should install fail when --engine-strict enable', () => {
     return (
       coffee
-        .fork(helper.npminstall, ['express@1', '--engine-strict'], {
+        .fork(helper.npminstall, ['express@1.0.8', '--engine-strict'], {
           cwd: tmp,
         })
         // .debug()

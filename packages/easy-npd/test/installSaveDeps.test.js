@@ -71,7 +71,7 @@ if (process.platform !== 'win32') {
         .fork(helper.npminstall, ['--save', '-d', 'pedding'], {
           cwd: tmp,
         })
-        .expect('stdout', /pedding@latest installed/)
+        .expect('stdout', /pedding@\* installed/)
         .expect('code', 0)
         .end(err => {
           assert(!err, err && err.message);
@@ -93,7 +93,7 @@ if (process.platform !== 'win32') {
           cwd: tmp,
         })
         .debug()
-        .expect('stdout', /pedding@latest installed/)
+        .expect('stdout', /pedding@\* installed/)
         .expect('code', 0)
         .end(err => {
           assert(!err, err && err.message);

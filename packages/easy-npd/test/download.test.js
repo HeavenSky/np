@@ -96,12 +96,13 @@ describe('test/download.test.js', () => {
   });
 
   describe('mock tarball error', () => {
-    it('should throw sha1 error', async () => {
+    it('should fallback to sha1 when integrity is missing', async () => {
       this.timeout = 15000;
       const registry = process.env.npm_registry || 'https://registry.npmmirror.com';
       const res = await urllib.request(`${registry}/pedding`, { dataType: 'json', timeout: 10000 });
       const pkg = res.data;
       pkg.versions['1.0.0'].dist.shasum = '00098d60307b4ef7240c3d693cb20a9473c111';
+      delete pkg.versions['1.0.0'].dist.integrity;
 
       const mockAgent = new MockAgent();
       setGlobalDispatcher(mockAgent);
@@ -141,6 +142,58 @@ describe('test/download.test.js', () => {
         assert.equal(error.name, 'ShasumNotMatchError');
         assert(
           /real sha1:7f5098d60307b4ef7240c3d693cb20a9473c6074 not equal to remote:00098d60307b4ef7240c3d693cb20a9473c111, download url https:\/\/registry.npmmirror.com\/pedding\/-\/pedding-1.0.0.tgz, download size 2107 \(pedding@1.0.0\)/.test(
+            error.message
+          ),
+          error.message
+        );
+      }
+    });
+
+    it('should throw sha512 error', async () => {
+      this.timeout = 15000;
+      const registry = process.env.npm_registry || 'https://registry.npmmirror.com';
+      const res = await urllib.request(`${registry}/pedding`, { dataType: 'json', timeout: 10000 });
+      const pkg = res.data;
+      pkg.versions['1.0.0'].dist.integrity = 'sha512-AAAA';
+
+      const mockAgent = new MockAgent();
+      setGlobalDispatcher(mockAgent);
+      const mockPool = mockAgent.get(/^https:\/\/registry\./);
+      // will auto retry 3 times
+      mockPool
+        .intercept({
+          path: /^\/pedding$/,
+          method: 'GET',
+        })
+        .reply(200, pkg);
+      mockPool
+        .intercept({
+          path: /^\/pedding$/,
+          method: 'GET',
+        })
+        .reply(200, pkg);
+      mockPool
+        .intercept({
+          path: /^\/pedding$/,
+          method: 'GET',
+        })
+        .reply(200, pkg);
+
+      try {
+        await install({
+          root: tmp,
+          pkgs: [{ name: 'pedding', version: '1.0.0' }],
+          production: true,
+        });
+        throw new Error('should not run this');
+      } catch (err) {
+        // 失败的包不中止安装, 结束时汇总抛出; 原始错误在 err.failures 中
+        assert.equal(err.code, utils.INSTALL_FAILURES_CODE, err.message);
+        assert.equal(err.failures.length, 1);
+        const { error } = err.failures[0];
+        assert.equal(error.name, 'ShasumNotMatchError');
+        assert(
+          /real sha512:\S+ not equal to remote:AAAA, download url https:\/\/registry.npmmirror.com\/pedding\/-\/pedding-1.0.0.tgz, download size 2107 \(pedding@1.0.0\)/.test(
             error.message
           ),
           error.message

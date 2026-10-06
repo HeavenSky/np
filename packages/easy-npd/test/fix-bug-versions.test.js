@@ -92,7 +92,7 @@ describe('test/fix-bug-versions.test.js', () => {
       .fork(bin, ['mm', '-d', '--fix-bug-versions', '--no-cache'], { cwd: tmp })
       .debug()
       .expect('code', 0)
-      .expect('stdout', /mm@latest installed/)
+      .expect('stdout', /mm@\* installed/)
       .end(done);
   });
 });

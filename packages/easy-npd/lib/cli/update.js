@@ -35,5 +35,5 @@ async function main(args) {
   console.log('[npd-x update] removing %s', nodeModules);
   await rimraf(nodeModules);
   console.log('[npd-x update] reinstall on %s', root);
-  await install(args, { ignorePkgNames: true });
+  await install(args, { ignorePkgNames: true, ignoreLockfile: true });
 }

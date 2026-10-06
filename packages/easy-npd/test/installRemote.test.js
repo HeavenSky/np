@@ -41,6 +41,7 @@ describe('test/installRemote.test.js', () => {
         'taffydb',
         '_pedding@1.0.0@pedding',
         '_taffydb@2.7.2@taffydb',
+        '.npd-state.json',
         '.package_versions.json',
       ].sort()
     );

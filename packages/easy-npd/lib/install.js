@@ -120,6 +120,7 @@ async function _install(parentDir, pkg, ancestors, options, context) {
         if (semver.satisfies(realPkg.version, p.fetchSpec)) {
           // add to cache.dependenciesTree, keep resolve version data complete
           options.cache.dependenciesTree[p.raw] = realPkg;
+          if (options.lockPackages) options.lockPackages[p.raw] = realPkg;
           const realPkgDir = c.dir;
           await linkModule(pkg, parentDir, realPkg, realPkgDir, options);
           return {
@@ -245,6 +246,7 @@ async function _install(parentDir, pkg, ancestors, options, context) {
   const nodeModulesDir = path.join(realPkgDir, 'node_modules');
 
   const peerDependencies = realPkg.peerDependencies || {};
+  const peerDependenciesMeta = realPkg.peerDependenciesMeta || {};
   if (Object.keys(peerDependencies).length) {
     const unmatched = {};
     const reverseAncestors = ancestorsWithRoot.slice().reverse();
@@ -262,8 +264,14 @@ async function _install(parentDir, pkg, ancestors, options, context) {
       const res = await matchAncestorDependencies(childPkg, reverseAncestors, options, context);
       if (res) {
         pkgs.push({ name, version: res.ancestorSpec, peer: true });
-      } else {
+      } else if (peerDependenciesMeta[name]?.optional !== true) {
+        // 安装结束时仍按实际解析结果校验, 自动安装失败或被跳过时照旧告警
         unmatched[name] = version;
+        if (!options.legacyPeerDeps && !reverseAncestors.some(ancestor => ancestor.dependencies[name])) {
+          // 与 npm 7+ 一致: 没有祖先声明的 peer 作为本包的依赖自动安装, 失败时按可选依赖跳过;
+          // 祖先声明了不兼容版本时不自动安装, 否则同一个 peer 会出现两份实例, 只告警
+          pkgs.push({ name, version, optional: true });
+        }
       }
     }
     realPkg.peerDependencies = unmatched;
@@ -290,6 +298,7 @@ async function _install(parentDir, pkg, ancestors, options, context) {
         ancestors.concat({
           displayName: `${realPkg.name}@${realPkg.version}`,
           name: realPkg.name,
+          version: realPkg.version,
           dependencies: deps.prodMap,
           optional: !!pkg.optional,
         }),

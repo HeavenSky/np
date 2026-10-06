@@ -3,6 +3,7 @@
 const debug = require('debug')('npd:cli:install');
 const chalk = require('chalk');
 const path = require('path');
+const os = require('os');
 const util = require('util');
 const { execSync } = require('child_process');
 const fs = require('fs/promises');
@@ -17,11 +18,12 @@ const { LOCAL_TYPES, REMOTE_TYPES, ALIAS_TYPES } = require('../npa_types');
 const Context = require('../context');
 const mirror = require('../mirror');
 const { lockfileConverter } = require('../lockfile_resolver');
+const npLock = require('../np_lock');
 const help = require('./help');
 
-module.exports = async function install(args, { ignorePkgNames = false } = {}) {
+module.exports = async function install(args, { ignorePkgNames = false, ignoreLockfile = false } = {}) {
   try {
-    await main(args, { ignorePkgNames });
+    await main(args, { ignorePkgNames, ignoreLockfile });
   } catch (err) {
     // 失败汇总已列出每个包的错误, 不再打印调用栈
     console.error(chalk.red(err.code === utils.INSTALL_FAILURES_CODE ? err.message : err.stack));
@@ -31,7 +33,7 @@ module.exports = async function install(args, { ignorePkgNames = false } = {}) {
   }
 };
 
-async function main(args, { ignorePkgNames = false } = {}) {
+async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {}) {
   const originalArgv = args;
 
   // since minimist consider --no-xx is xx:false, we handle it manually here
@@ -62,6 +64,7 @@ async function main(args, { ignorePkgNames = false } = {}) {
          * 5. you're not supposed to install extra dependencies along with a lockfile.
          */
         'lockfile-path',
+        'probe-cache',
       ],
       boolean: [
         'version',
@@ -83,6 +86,7 @@ async function main(args, { ignorePkgNames = false } = {}) {
         'detail',
         'trace',
         'engine-strict',
+        'legacy-peer-deps',
         'flatten',
         'registry-only',
         'cache-strict',
@@ -91,6 +95,7 @@ async function main(args, { ignorePkgNames = false } = {}) {
         'save-dependencies-tree',
         'fetch-only',
         'refresh-cache',
+        'frozen-lockfile',
         'rebuild',
         'offline',
         // --force-link-latest 已移除: 提升到根目录时始终链接最高版本
@@ -148,7 +153,8 @@ async function main(args, { ignorePkgNames = false } = {}) {
     pkgs.push({
       name: p.name,
       // `mozilla/nunjucks#0f8b21b8df7e8e852b2e1889388653b7075f0d09` should be rawSpec
-      version: p.fetchSpec || p.rawSpec,
+      // `npd foo` 未写版本时 npa 补成 latest tag, 改传 `*` 以便选版时与显式的 `foo@latest` 区分并检查 engines
+      version: p.type === 'tag' && !p.rawSpec ? '*' : p.fetchSpec || p.rawSpec,
       type: p.type,
       alias: aliasPackageName,
       arg: p,
@@ -172,6 +178,11 @@ async function main(args, { ignorePkgNames = false } = {}) {
   if (process.env.np_cache) {
     cacheDir = process.env.np_cache;
   }
+  // 测速缓存不受 --production 关闭磁盘缓存影响, 只在 --no-cache 时停用
+  const probeCacheDir =
+    argv.cache === false
+      ? ''
+      : process.env.np_cache || process.env.npm_config_cache || path.join(os.homedir(), '.np_tarball');
   const offline = !!argv.offline;
   // rebuild 优先用磁盘缓存中的 manifest 与 tgz, 缓存缺失时才联网
   const preferOffline = !!argv.rebuild && !offline;
@@ -235,7 +246,12 @@ async function main(args, { ignorePkgNames = false } = {}) {
     const probed =
       offline || preferOffline
         ? mirror.defaultOrder({ prefer: preferSource })
-        : await mirror.probe({ prefer: preferSource, globalOptions: { console } });
+        : await mirror.probe({
+            prefer: preferSource,
+            globalOptions: { console },
+            cacheDir: probeCacheDir,
+            cacheMinutes: mirror.parseProbeCacheMinutes(argv['probe-cache'] ?? process.env.np_probe_cache),
+          });
     binaryMirrors = probed.binaryMirrorConfig?.mirrors?.china;
     if (!binaryMirrors) {
       try {
@@ -254,7 +270,12 @@ async function main(args, { ignorePkgNames = false } = {}) {
     if (probed.binaryOrder[0] === 'mirror') {
       Object.assign(env, binaryEnvs);
     }
-    console.info(chalk.gray('npd registry: %s, binary: %s'), probed.order.join(' > '), probed.binaryOrder.join(' > '));
+    console.info(
+      chalk.gray('npd registry: %s, binary: %s%s'),
+      probed.order.join(' > '),
+      probed.binaryOrder.join(' > '),
+      probed.cached ? ' (cached)' : ''
+    );
   }
 
   const config = {
@@ -280,6 +301,7 @@ async function main(args, { ignorePkgNames = false } = {}) {
   config.detail = argv.detail;
   config.trace = argv.trace;
   config.engineStrict = argv['engine-strict'];
+  config.legacyPeerDeps = argv['legacy-peer-deps'];
   config.registryOnly = argv['registry-only'];
   if (config.production || argv.global) {
     // make sure show detail on production install or global install
@@ -330,6 +352,24 @@ async function main(args, { ignorePkgNames = false } = {}) {
   }
   if (argv['save-dependencies-tree']) {
     config.saveDependenciesTree = true;
+  }
+
+  // 默认读写 <root>/np-lock.json; --lockfile-path, --dependencies-tree 与 -g 有各自的版本来源, 不使用它
+  let lockState = null;
+  const lockfileDisabled = argv.lockfile === false || ['0', 'false'].includes(process.env.np_lockfile);
+  if (!argv.global && !lockfilePath && !dependenciesTree && !lockfileDisabled) {
+    const lockExists = await npLock.exists(root);
+    if (argv['frozen-lockfile'] && !lockExists) {
+      throw new Error(`--frozen-lockfile requires ${npLock.LOCKFILE_NAME} in ${root}`);
+    }
+    if (lockExists || !(await npLock.hasForeignLockfile(root))) {
+      const previous = lockExists ? await npLock.read(root) : {};
+      // npd-x update 要升级到范围内的最新版本, 不复用已锁定的版本
+      config.dependenciesTree = ignoreLockfile ? {} : previous;
+      config.lockPackages = {};
+      config.frozenLockfile = !!argv['frozen-lockfile'];
+      lockState = { previous };
+    }
   }
 
   if (argv['high-speed-store']) {
@@ -391,6 +431,9 @@ async function main(args, { ignorePkgNames = false } = {}) {
       }
     }
     await installLocal(config, context);
+    await writeLockfile(root, lockState, config, {
+      full: pkgs.length === 0 && !config.production && argv.optional !== false && !argv.client,
+    });
     if (pkgs.length > 0) {
       // support --save, --save-dev, --save-optional, --save-client, --save-build and --save-isomorphic
       const map = {
@@ -418,6 +461,15 @@ async function main(args, { ignorePkgNames = false } = {}) {
       writeFileSync(path.join(root, 'npd-debug.log'), util.inspect(config, { depth: 2 }));
     }
   });
+}
+
+// 完整安装用本次实际用到的条目覆盖锁文件; 部分安装(指定包, --production 等)只追加, 保留其余条目
+async function writeLockfile(root, lockState, config, { full }) {
+  if (!lockState || config.frozenLockfile) return;
+  const packages = full ? config.lockPackages : { ...lockState.previous, ...config.lockPackages };
+  if (await npLock.write(root, packages)) {
+    console.info(chalk.gray('npd %s updated'), npLock.LOCKFILE_NAME);
+  }
 }
 
 function getVersionSavePrefix() {
