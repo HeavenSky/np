@@ -1,0 +1,38 @@
+'use strict';
+
+const coffee = require('coffee');
+const helper = require('../support/helper');
+
+describe('test/deps/engine-strict.test.js', () => {
+  const [tmp, cleanup] = helper.tmp();
+
+  beforeEach(cleanup);
+  afterEach(cleanup);
+
+  it('should show engine strict warn message', () => {
+    return (
+      coffee
+        .fork(helper.npminstall, ['express@1.0.8'], {
+          cwd: tmp,
+        })
+        // .debug()
+        .expect('stderr', /WARN node unsupported/)
+        .expect('stderr', /All packages installed/)
+        .expect('code', 0)
+        .end()
+    );
+  });
+
+  it('should install fail when --engine-strict enable', () => {
+    return (
+      coffee
+        .fork(helper.npminstall, ['express@1.0.8', '--engine-strict'], {
+          cwd: tmp,
+        })
+        // .debug()
+        .expect('stderr', /1 package\(s\) failed[\s\S]*is incompatible with express@1/)
+        .expect('code', 1)
+        .end()
+    );
+  });
+});

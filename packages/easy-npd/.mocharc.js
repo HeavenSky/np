@@ -10,5 +10,5 @@ module.exports = {
   // 用例大多在等网络而不是占 CPU, worker 数取核数两倍(8 ~ 16); 改回默认的核数减一会让 4 核 CI 只剩 3 个 worker, 全量耗时成倍增加
   jobs: Math.min(16, Math.max(8, os.cpus().length * 2)),
   exit: true,
-  require: ['test/.mocha-global.js'],
+  require: ['test/support/.mocha-global.js'],
 };

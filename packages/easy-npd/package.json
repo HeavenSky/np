@@ -36,9 +36,9 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "test": "npm run lint && mocha \"test/*.test.js\"",
-    "test-cov": "c8 --reporter=text --reporter=lcov mocha \"test/*.test.js\"",
-    "test-local": "npm_china=true local=true mocha --full-trace \"test/*.test.js\"",
+    "test": "npm run lint && mocha \"test/*/*.test.js\"",
+    "test-cov": "c8 --reporter=text --reporter=lcov mocha \"test/*/*.test.js\"",
+    "test-local": "npm_china=true local=true mocha --full-trace \"test/*/*.test.js\"",
     "lint": "oxlint",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
