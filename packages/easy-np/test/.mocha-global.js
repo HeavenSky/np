@@ -20,8 +20,26 @@ const testHome = path.join(fixtures, '.home');
 mkdirSync(testHome, { recursive: true });
 process.env.HOME = testHome;
 process.env.USERPROFILE = testHome;
+// 测速缓存跨次保留在测试 HOME 中, 会让依赖测速结果的用例互相影响; 需要缓存的用例显式传入分钟数
+process.env.np_probe_cache = '0';
+// 很多用例直接在已提交的 fixture 目录里运行 CLI, 生成的 np-lock.json 会跨次锁定版本; 锁文件用例显式打开
+process.env.np_lockfile = 'false';
+
+// 按快照固定公共源 manifest 中可见的版本与 dist-tags, 见 registry-snapshot.js; 被测 CLI 子进程经 NODE_OPTIONS 预加载同一逻辑
+const registrySnapshot = require('./registry-snapshot');
+registrySnapshot.install();
+const preload = `--require ${JSON.stringify(path.join(__dirname, 'registry-snapshot-preload.js'))}`;
+if (!(process.env.NODE_OPTIONS || '').includes(preload)) {
+  process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS || ''} ${preload}`.trim();
+}
+
+exports.mochaGlobalSetup = () => {
+  registrySnapshot.prepareCache(path.join(testHome, '.np_tarball/np-manifests'));
+};
 
 exports.mochaGlobalTeardown = async () => {
+  const recorded = registrySnapshot.mergeRecords();
+  if (recorded > 0) console.log('registry snapshot: recorded %d packages', recorded);
   const names = await fs.readdir(fixtures);
   await Promise.all(
     names

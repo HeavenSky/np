@@ -1,8 +1,8 @@
 const assert = require('node:assert');
 const path = require('node:path');
-const fs = require('node:fs/promises');
 const npminstall = require('./npminstall');
 const helper = require('./helper');
+const { getInstallState } = require('../lib/utils');
 
 describe('test/cleanup.test.js', () => {
   const [tmp, cleanup] = helper.tmp();
@@ -23,8 +23,8 @@ describe('test/cleanup.test.js', () => {
     assert(throwError);
 
     // 子依赖失败不中止安装, install-error 照常链接, 但保留阶段标记, 下次运行经由它找到失败的子依赖
-    const pkg = JSON.parse(await fs.readFile(path.join(tmp, 'node_modules/install-error/package.json'), 'utf8'));
-    assert.equal(pkg.__np_stage, 'finish');
+    const state = await getInstallState(path.join(tmp, 'node_modules/install-error'));
+    assert.equal(state.stage, 'finish');
 
     // install again will try to download
     throwError = false;

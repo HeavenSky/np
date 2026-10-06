@@ -25,7 +25,7 @@ describe('test/tarball-url-mapping.test.js', () => {
       )
       .debug()
       .expect('code', 0)
-      .expect('stdout', /pedding@latest installed/)
+      .expect('stdout', /pedding@\* installed/)
       .end();
   });
 });

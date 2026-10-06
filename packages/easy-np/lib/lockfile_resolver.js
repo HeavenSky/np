@@ -29,7 +29,6 @@ exports.lockfileConverter = function lockfileConverter(lockfile, options, nested
     for (const key in allMap) {
       const mani = exports.nodeModulesPath(pkgPath, key, packages);
       const dist = {
-        checkSSRI: true,
         integrity: mani.integrity,
         tarball: mani.resolved,
       };

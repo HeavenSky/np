@@ -179,6 +179,37 @@ describe('test/mirror.test.js', () => {
     assert.deepEqual(probed.binaryOrder, ['mirror', 'official']);
   });
 
+  it('should reuse the probe result within cacheMinutes', async () => {
+    await publish({ name: 'binary-mirror-config', version: '1.0.0' });
+    const cacheDir = path.join(tmp, 'probe-cache');
+    const probe = options => mirror.probe({ sources, globalOptions: { console: { warn() {} } }, cacheDir, ...options });
+    registries.mirror.behavior.delay = 500;
+    const first = await probe({ cacheMinutes: 5 });
+    assert.deepEqual(first.order, ['official', 'mirror']);
+    assert(!first.cached);
+
+    registries.mirror.behavior.delay = 0;
+    registries.official.behavior.delay = 500;
+    const second = await probe({ cacheMinutes: 5 });
+    assert.deepEqual(second.order, ['official', 'mirror']);
+    assert(second.cached);
+
+    // 指定源不同或缓存分钟数为 0 时重新测速
+    const preferred = await probe({ cacheMinutes: 5, prefer: 'mirror' });
+    assert(!preferred.cached);
+    const fresh = await probe({ cacheMinutes: 0 });
+    assert.deepEqual(fresh.order, ['mirror', 'official']);
+    assert(!fresh.cached);
+  });
+
+  it('should parse probe cache minutes', () => {
+    assert.equal(mirror.parseProbeCacheMinutes(undefined), 5);
+    assert.equal(mirror.parseProbeCacheMinutes('0'), 0);
+    assert.equal(mirror.parseProbeCacheMinutes('30'), 30);
+    assert.throws(() => mirror.parseProbeCacheMinutes('-1'), /non-negative number of minutes/);
+    assert.throws(() => mirror.parseProbeCacheMinutes('abc'), /non-negative number of minutes/);
+  });
+
   it('should download tarball from the other source when the first one fails', async () => {
     await publish({ name: 'foo', version: '1.0.0' });
     registries.mirror.behavior.tarballStatus = 500;

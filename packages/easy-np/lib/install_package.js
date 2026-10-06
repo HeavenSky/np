@@ -119,6 +119,7 @@ async function _install(parentDir, pkg, ancestors, options, context) {
         if (utils.fastSemverSatisfies(realPkg.version, p.fetchSpec)) {
           // add to cache.dependenciesTree, keep resolve version data complete
           options.cache.dependenciesTree[p.raw] = realPkg;
+          if (options.lockPackages) options.lockPackages[p.raw] = realPkg;
           const realPkgDir = c.dir;
           await linkModule(pkg, parentDir, realPkg, realPkgDir, options, displayName);
           return {
@@ -266,7 +267,16 @@ async function _install(parentDir, pkg, ancestors, options, context) {
           pkgs.push({ name, version: res.ancestorSpec });
           needLinkPeerDependencies.push({ name, version: res.ancestorSpec });
         } else if (peerDependenciesMeta[name]?.optional !== true) {
+          // 安装结束时仍按实际解析结果校验, 自动安装失败或被跳过时照旧告警
           unmatched[name] = version;
+          const declared =
+            reverseAncestors.some(ancestor => ancestor.dependencies[name]) ||
+            (options.isWorkspacePackage && context.workspaceRootDepNames?.has(name));
+          if (!options.legacyPeerDeps && !declared) {
+            // 与 npm 7+ 一致: 没有祖先声明的 peer 作为本包的依赖自动安装, 失败时按可选依赖跳过;
+            // 祖先或 workspace 根声明了不兼容版本时不自动安装, 否则同一个 peer 会出现两份实例, 只告警
+            pkgs.push({ name, version, optional: true });
+          }
         }
       }
       realPkg.peerDependencies = unmatched;
@@ -295,6 +305,7 @@ async function _install(parentDir, pkg, ancestors, options, context) {
           ancestors.concat({
             displayName: `${realPkg.name}@${realPkg.version}`,
             name: realPkg.name,
+            version: realPkg.version,
             dependencies: deps.prodMap,
             optional: !!pkg.optional,
           }),

@@ -34,7 +34,13 @@ async function resolve(pkg, options) {
   // check cache first
   if (dependenciesTree[pkg.raw]) {
     debug('resolve hit dependencies cache: %s', pkg.raw);
+    if (options.lockPackages) options.lockPackages[pkg.raw] = dependenciesTree[pkg.raw];
     return dependenciesTree[pkg.raw];
+  }
+  if (options.frozenLockfile) {
+    throw new Error(
+      `[${pkg.displayName}] ${pkg.raw} is not in np-lock.json, run np without --frozen-lockfile to update it`
+    );
   }
 
   const packageMetaKey = `npm:resolve:package:${pkg.name}`;
@@ -68,13 +74,20 @@ async function resolve(pkg, options) {
   }
 
   let spec = pkg.fetchSpec;
+  // 未写版本(`np i foo`)或写 `*` 时按 latest 取, 但 latest 的 engines 不兼容当前 Node.js 时改选兼容的版本
+  const implicitTag = spec === '*' || pkg.rawSpec === '';
   if (spec === '*') {
     spec = 'latest';
   }
 
   let distTags = packageMeta['dist-tags'];
+  const pickVersion = () =>
+    utils.findMaxSatisfyingVersion(spec, distTags, packageMeta.allVersions, {
+      versions: packageMeta.versions,
+      implicitTag,
+    });
 
-  let realPkgVersion = utils.findMaxSatisfyingVersion(spec, distTags, packageMeta.allVersions);
+  let realPkgVersion = pickVersion();
   // preferOffline 直接用了缓存的 manifest: 缓存里没有需要的版本时联网重新校验一次
   if (
     (!realPkgVersion || !packageMeta.versions[realPkgVersion]) &&
@@ -86,7 +99,7 @@ async function resolve(pkg, options) {
       const fullMeta = await getFullPackageMeta(pkg.name, options, { revalidate: true });
       Object.assign(packageMeta, fullMeta, { revalidated: true, allVersions: Object.keys(fullMeta.versions) });
       distTags = packageMeta['dist-tags'];
-      realPkgVersion = utils.findMaxSatisfyingVersion(spec, distTags, packageMeta.allVersions);
+      realPkgVersion = pickVersion();
     } catch (err) {
       debug('[%s] revalidate cached manifests error: %s', pkg.name, err.message);
     }
@@ -98,7 +111,7 @@ async function resolve(pkg, options) {
       const fullMeta = await getFullPackageMeta(pkg.name, options, { officialOnly: true });
       Object.assign(packageMeta, fullMeta, { fromOfficial: true, allVersions: Object.keys(fullMeta.versions) });
       distTags = packageMeta['dist-tags'];
-      realPkgVersion = utils.findMaxSatisfyingVersion(spec, distTags, packageMeta.allVersions);
+      realPkgVersion = pickVersion();
     } catch (err) {
       debug('[%s] refetch manifests from official registry error: %s', pkg.name, err.message);
     }
@@ -171,6 +184,7 @@ async function resolve(pkg, options) {
 
   // cache resolve result
   dependenciesTree[pkg.raw] = realPkg;
+  if (options.lockPackages) options.lockPackages[pkg.raw] = realPkg;
   return realPkg;
 }
 
@@ -620,12 +634,29 @@ async function getTarballStream(tarballUrl, pkg, options, mirrored = false) {
   return stream;
 }
 
+// 与 npm 一致按 dist.integrity 中最强的算法校验; 只有 manifest 没有可用的 integrity 时才退回 dist.shasum 的 sha1
+const INTEGRITY_ALGORITHMS = ['sha512', 'sha384', 'sha256', 'sha1'];
+function getExpectedDigest(dist) {
+  const entries = String(dist.integrity || '')
+    .trim()
+    .split(/\s+/)
+    .map(item => {
+      const index = item.indexOf('-');
+      // ssri 允许在摘要后附加 `?opt` 选项, 不参与比较
+      return index > 0 ? { algorithm: item.slice(0, index), digest: item.slice(index + 1).split('?')[0] } : null;
+    })
+    .filter(Boolean);
+  for (const algorithm of INTEGRITY_ALGORITHMS) {
+    const entry = entries.find(item => item.algorithm === algorithm);
+    if (entry) return { algorithm, encoding: 'base64', digest: entry.digest };
+  }
+  return { algorithm: 'sha1', encoding: 'hex', digest: dist.shasum };
+}
+
 function checkShasumAndUngzip(ungzipDir, readstream, pkg, useTarFormat) {
   return new Promise((resolve, reject) => {
-    const shasum = pkg.dist.shasum;
-    const integrity = pkg.dist.integrity;
-    const algorithmType = pkg.dist.checkSSRI ? 'sha512' : 'sha1';
-    const hash = crypto.createHash(algorithmType);
+    const expected = getExpectedDigest(pkg.dist);
+    const hash = crypto.createHash(expected.algorithm);
     let tarballSize = 0;
     const opts = {
       cwd: ungzipDir,
@@ -668,18 +699,10 @@ function checkShasumAndUngzip(ungzipDir, readstream, pkg, useTarFormat) {
     });
     readstream.on('end', () => {
       // this will be fire before extracter `env` event fire.
-      let hashResult = '';
-      let hashString = '';
-      if (pkg.dist.checkSSRI) {
-        hashResult = algorithmType + '-' + hash.digest('base64');
-        hashString = integrity;
-      } else {
-        hashResult = hash.digest('hex');
-        hashString = shasum;
-      }
-      if (hashResult !== hashString) {
+      const hashResult = hash.digest(expected.encoding);
+      if (hashResult !== expected.digest) {
         const err = new Error(
-          `real ${algorithmType}:${hashResult} not equal to remote:${hashString}, download url ${readstream.tarballUrl || ''}, download size ${tarballSize}`
+          `real ${expected.algorithm}:${hashResult} not equal to remote:${expected.digest}, download url ${readstream.tarballUrl || ''}, download size ${tarballSize}`
         );
         err.name = 'ShasumNotMatchError';
         handleCallback(err);

@@ -18,6 +18,7 @@ const destroy = require('destroy');
 const normalizeData = require('normalize-package-data');
 const normalizeBin = require('npm-normalize-package-bin');
 const semver = require('semver');
+const installState = require('./install_state');
 const globalConfig = require('./config');
 const get = require('./get');
 
@@ -170,26 +171,25 @@ exports.readPackageJSON = async root => {
   return pkg;
 };
 
-const INSTALL_DONE_KEY = '__np_done';
-// 包安装中断或失败时停在的阶段: deps, 下一个要执行的生命周期脚本名, 或 finish; 本次运行没有失败时统一删除该键
-const INSTALL_STAGE_KEY = '__np_stage';
+// 包安装中断或失败时停在的阶段: deps, 下一个要执行的生命周期脚本名, 或 finish; 本次运行没有失败时统一清除
 exports.FIRST_INSTALL_STAGE = 'deps';
 // finish: 包自身的步骤已完成, 但同一次运行中有包失败, 下次运行仍要遍历它的子依赖才能找到失败的包
 exports.FINISH_INSTALL_STAGE = 'finish';
 
+// 状态写入 store 的 .np-state.json; 不在 store 中的目录退回写 package.json
+async function updateInstallState(pkgRoot, patch) {
+  const legacy = await installState.update(pkgRoot, patch);
+  if (legacy) await exports.addMetaToJSONFile(path.join(pkgRoot, 'package.json'), legacy);
+}
+
 // 设置 pkg 解压完成的标记, 同一次写入记下起始阶段, 避免中断在两次写入之间时包被当作已完成
 exports.setInstallDone = async (pkgRoot, stage) => {
-  await exports.addMetaToJSONFile(path.join(pkgRoot, 'package.json'), {
-    [INSTALL_DONE_KEY]: true,
-    [INSTALL_STAGE_KEY]: stage,
-  });
+  await updateInstallState(pkgRoot, { done: true, stage });
 };
 
 // stage 为 undefined 时删除阶段标记
 exports.setInstallStage = async (pkgRoot, stage) => {
-  await exports.addMetaToJSONFile(path.join(pkgRoot, 'package.json'), {
-    [INSTALL_STAGE_KEY]: stage,
-  });
+  await updateInstallState(pkgRoot, { stage });
 };
 
 // 已解压的包要从哪个阶段继续; 无标记表示已完成, --rebuild 时先写回起始阶段再从头执行, 中断后仍能继续
@@ -198,38 +198,38 @@ exports.getResumeStage = async (pkgRoot, options) => {
     await exports.setInstallStage(pkgRoot, exports.FIRST_INSTALL_STAGE);
     return exports.FIRST_INSTALL_STAGE;
   }
-  const pkg = await exports.readJSON(path.join(pkgRoot, 'package.json'));
-  return pkg[INSTALL_STAGE_KEY];
+  return (await installState.get(pkgRoot))?.stage;
 };
 
 exports.unsetInstallDone = async pkgRoot => {
-  await exports.addMetaToJSONFile(path.join(pkgRoot, 'package.json'), {
-    [INSTALL_DONE_KEY]: false,
-  });
+  await updateInstallState(pkgRoot, { done: false });
 };
 
+// 清除项目根 package.json 中旧版本写入的完成标记
 exports.removeInstallDone = async pkgRoot => {
   const pkgFile = path.join(pkgRoot, 'package.json');
   if (!(await exports.exists(pkgFile))) return;
   const pkg = await exports.readJSON(pkgFile);
-  if (!(INSTALL_DONE_KEY in pkg)) return;
+  if (!('__np_done' in pkg)) return;
 
   await exports.addMetaToJSONFile(pkgFile, {
-    [INSTALL_DONE_KEY]: undefined,
+    __np_done: undefined,
   });
 };
 
-// 判断 pkg 是否已经安装完成
+// 判断 pkg 是否已经安装完成; 目录被手动删除后状态文件里的记录不再算数
 exports.isInstallDone = async pkgRoot => {
-  const pkg = await exports.readJSON(path.join(pkgRoot, 'package.json'));
-  return !!pkg[INSTALL_DONE_KEY];
+  return !!(await installState.get(pkgRoot))?.done && (await exports.exists(path.join(pkgRoot, 'package.json')));
 };
 
 // 只认显式的 false 与阶段标记: fetch-only 留下的包与安装中断或失败的包; 不带标记的包可能由 npm 等其他工具装出, 不算未完成
 exports.isInstallUnfinished = async pkgRoot => {
-  const pkg = await exports.readJSON(path.join(pkgRoot, 'package.json'));
-  return pkg[INSTALL_DONE_KEY] === false || !!pkg[INSTALL_STAGE_KEY];
+  const state = await installState.get(pkgRoot);
+  return state?.done === false || !!state?.stage;
 };
+
+// 测试与排查用: 返回 { done, stage } 或 undefined
+exports.getInstallState = pkgRoot => installState.get(pkgRoot);
 
 exports.addMetaToJSONFile = async (filepath, meta) => {
   await fs.chmod(filepath, '644');
@@ -333,7 +333,7 @@ exports.parseTarballUrls = tarball => {
 /*
  * Runs an npm script.
  */
-exports.runScript = async (pkgDir, script, globalOptions, runInForeground = false) => {
+exports.runScript = async (pkgDir, script, globalOptions, runInForeground = false, timeout = 0) => {
   // merge config.env <= process.env <= options.env
   const env = {};
 
@@ -392,6 +392,7 @@ exports.runScript = async (pkgDir, script, globalOptions, runInForeground = fals
       env,
       stdio: runInForeground ? 'inherit' : 'ignore',
       shell: true,
+      timeout,
     });
   } catch (err) {
     if (ignoreError) {
@@ -457,20 +458,41 @@ exports.fastSemverMaxSatisfying = (versions, range) => {
   return max;
 };
 
-exports.findMaxSatisfyingVersion = (spec, distTags, allVersions) => {
+// 对齐 npm-pick-manifest: 未写版本或写的是 range 时, 优先选 engines.node 兼容当前 Node.js 的版本;
+// 显式 tag 与精确版本原样使用; 范围内没有兼容版本时仍返回原本会选中的版本, 由安装阶段告警
+// options.versions: manifest 的 versions 字段, 不传时不检查 engines
+// options.implicitTag: spec 是未写版本时补上的 latest, 而不是用户显式写的 tag
+exports.findMaxSatisfyingVersion = (spec, distTags, allVersions, options = {}) => {
+  const { versions, nodeVersion = process.version, implicitTag = false } = options;
+  const engineOk = version => {
+    const node = versions && versions[version] && versions[version].engines && versions[version].engines.node;
+    return !node || exports.fastSemverSatisfies(nodeVersion, node);
+  };
+  const maxSatisfying = range => {
+    const max = exports.fastSemverMaxSatisfying(allVersions, range);
+    if (!max || engineOk(max)) return max;
+    return exports.fastSemverMaxSatisfying(allVersions.filter(engineOk), range) || max;
+  };
+
   // try tag first
   let realPkgVersion = distTags[spec];
-
-  if (!realPkgVersion) {
+  if (realPkgVersion) {
+    if (implicitTag && !engineOk(realPkgVersion)) {
+      const compatible = maxSatisfying('*');
+      if (compatible && engineOk(compatible)) {
+        realPkgVersion = compatible;
+      }
+    }
+  } else {
     const version = semver.valid(spec);
     const range = semver.validRange(spec, true);
-    if (exports.fastSemverSatisfies(distTags.latest, spec)) {
+    if (exports.fastSemverSatisfies(distTags.latest, spec) && (version || engineOk(distTags.latest))) {
       realPkgVersion = distTags.latest;
     } else if (version) {
       // use the valid version
       realPkgVersion = version;
     } else if (range) {
-      realPkgVersion = exports.fastSemverMaxSatisfying(allVersions, range);
+      realPkgVersion = maxSatisfying(range);
       if (realPkgVersion) {
         // try to use latest-{major} tag version on range
         // ^1.0.1 =range=> get 1.0.3 in (1.0.2, 1.0.3), but latest-1 tag is 1.0.2
@@ -478,7 +500,11 @@ exports.findMaxSatisfyingVersion = (spec, distTags, allVersions) => {
         const major = semver.major(realPkgVersion);
         if (major) {
           const latestMajorVersion = distTags[`latest-${major}`];
-          if (latestMajorVersion && exports.fastSemverSatisfies(latestMajorVersion, spec)) {
+          if (
+            latestMajorVersion &&
+            exports.fastSemverSatisfies(latestMajorVersion, spec) &&
+            (engineOk(latestMajorVersion) || !engineOk(realPkgVersion))
+          ) {
             realPkgVersion = latestMajorVersion;
           }
         }
@@ -954,4 +980,43 @@ exports.exitWithError = (cmd, err, code = 1) => {
   console.error(chalk.yellow(`${cmd} argv: %s`), process.argv.join(' '));
   console.log('');
   process.exit(code);
+};
+
+// 依赖树与 np-lock.json 只保存安装需要的 manifest 字段; cpu / libc / os 缺失会让换平台安装时选错可选依赖
+const LOCKED_PACKAGE_KEYS = [
+  'name',
+  'version',
+  'dependencies',
+  'optionalDependencies',
+  'clientDependencies',
+  'buildDependencies',
+  'isomorphicDependencies',
+  'peerDependencies',
+  'peerDependenciesMeta',
+  'bundleDependencies',
+  'bundledDependencies',
+  'bin',
+  'directories',
+  'publish_time',
+  'deprecated',
+  'license',
+  'os',
+  'cpu',
+  'libc',
+  'engines',
+  'dist',
+  'scripts',
+  'hasInstallScript',
+  'gypfile',
+  '_id',
+  '__fixDependencies',
+  '__fixScripts',
+];
+
+exports.omitPackage = pkg => {
+  const res = {};
+  for (const key of LOCKED_PACKAGE_KEYS) {
+    if (pkg[key]) res[key] = pkg[key];
+  }
+  return res;
 };

@@ -151,6 +151,59 @@ describe('test/utils.test.js', () => {
         ) === '1.0.2'
       );
     });
+
+    describe('engines.node', () => {
+      const distTags = { latest: '12.0.0' };
+      const allVersions = ['10.8.0', '10.9.0', '11.0.0', '12.0.0'];
+      const versions = {
+        '10.8.0': { engines: { node: '^18.17.0 || >=20.5.0' } },
+        '10.9.0': { engines: { node: '^18.17.0 || >=20.5.0' } },
+        '11.0.0': { engines: { node: '^20.17.0 || >=22.9.0' } },
+        '12.0.0': { engines: { node: '^22.14.0 || >=24.0.0' } },
+      };
+      const options = { versions, nodeVersion: 'v18.20.0' };
+
+      it('should pick the highest compatible version when no version is specified', () => {
+        assert.equal(
+          utils.findMaxSatisfyingVersion('latest', distTags, allVersions, { ...options, implicitTag: true }),
+          '10.9.0'
+        );
+      });
+
+      it('should keep the explicit tag', () => {
+        assert.equal(utils.findMaxSatisfyingVersion('latest', distTags, allVersions, options), '12.0.0');
+      });
+
+      it('should keep the exact version', () => {
+        assert.equal(utils.findMaxSatisfyingVersion('12.0.0', distTags, allVersions, options), '12.0.0');
+      });
+
+      it('should pick the highest compatible version in range', () => {
+        assert.equal(utils.findMaxSatisfyingVersion('>=10', distTags, allVersions, options), '10.9.0');
+      });
+
+      it('should skip incompatible latest-{major} version', () => {
+        assert.equal(
+          utils.findMaxSatisfyingVersion('^10.0.0', { ...distTags, 'latest-10': '10.9.0' }, allVersions, {
+            ...options,
+            versions: { ...versions, '10.9.0': { engines: { node: '>=20' } } },
+          }),
+          '10.8.0'
+        );
+      });
+
+      it('should fallback to the original version when none is compatible', () => {
+        assert.equal(utils.findMaxSatisfyingVersion('>=11', distTags, allVersions, options), '12.0.0');
+        assert.equal(
+          utils.findMaxSatisfyingVersion('latest', distTags, allVersions, {
+            ...options,
+            nodeVersion: 'v16.0.0',
+            implicitTag: true,
+          }),
+          '12.0.0'
+        );
+      });
+    });
   });
 
   describe('parseTarballUrls()', () => {
