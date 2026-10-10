@@ -44,7 +44,7 @@
     "fmt": "oxfmt --write",
     "fmt:check": "oxfmt --check",
     "ci": "npm run lint && npm run test-cov",
-    "prepublishOnly": "npm run lint"
+    "prepublishOnly": "npm run lint:check"
   },
   "dependencies": {
     "await-event": "^2.1.0",

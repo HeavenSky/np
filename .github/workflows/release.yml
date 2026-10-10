@@ -1,0 +1,89 @@
+# 推送 <包名>@<版本> 形式的 tag 时发布对应的包, 例: easy-np@0.0.5, easy-npd@0.0.5
+# npm 登录走 Trusted Publishing(OIDC), 不需要 NPM_TOKEN; 需先在 npmjs.com 的包设置里登记本仓库与 release.yml
+name: Release
+
+on:
+  push:
+    tags: ['easy-np@*', 'easy-npd@*']
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # 创建 GitHub Release
+      id-token: write # npm Trusted Publishing
+    env:
+      TAG: ${{ github.ref_name }}
+      NODE_OPTIONS: --max_old_space_size=6144
+    steps:
+      - uses: actions/checkout@v4
+
+      # 从 tag 解析包名与版本, 与 package.json 的 version 不一致时直接失败
+      - name: Resolve package
+        id: pkg
+        run: |
+          name="${TAG%@*}"
+          version="${TAG##*@}"
+          case "$name" in
+            easy-np|easy-npd) ;;
+            *) echo "::error::未知的包名: $name"; exit 1 ;;
+          esac
+          actual="$(node -p "require('./packages/$name/package.json').version")"
+          if [ "$actual" != "$version" ]; then
+            echo "::error::tag 版本 $version 与 packages/$name/package.json 的 $actual 不一致"
+            exit 1
+          fi
+          # 带预发布后缀(例: 0.0.5-beta.1)的版本发布到 next, 不覆盖 latest
+          case "$version" in
+            *-*) dist_tag=next; prerelease=true ;;
+            *) dist_tag=latest; prerelease=false ;;
+          esac
+          {
+            echo "name=$name"
+            echo "version=$version"
+            echo "dist_tag=$dist_tag"
+            echo "prerelease=$prerelease"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          registry-url: https://registry.npmjs.org
+      # Trusted Publishing 需要 npm >= 11.5.1
+      - run: npm i -g npm@11
+
+      - name: Test
+        working-directory: packages/${{ steps.pkg.outputs.name }}
+        run: |
+          npm i
+          npm test
+
+      # prepublishOnly 会再跑一次 lint:check
+      - name: Publish
+        working-directory: packages/${{ steps.pkg.outputs.name }}
+        run: npm publish --provenance --access public --tag "${{ steps.pkg.outputs.dist_tag }}"
+
+      # 取 CHANGELOG 中「## <版本>」到下一个二级标题之间的内容作为 Release 说明
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAME: ${{ steps.pkg.outputs.name }}
+          VERSION: ${{ steps.pkg.outputs.version }}
+          PRERELEASE: ${{ steps.pkg.outputs.prerelease }}
+        run: |
+          awk -v v="$VERSION" '
+            /^## / { if (found) exit; if ($0 == "## " v || index($0, "## " v " ") == 1) { found = 1; next } }
+            found { print }
+          ' "packages/$NAME/CHANGELOG.md" > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "CHANGELOG 中没有 $VERSION 的条目" > release-notes.md
+          fi
+          flags=()
+          if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi
+          gh release create "$TAG" --title "$TAG" --notes-file release-notes.md --verify-tag "${flags[@]}"

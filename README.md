@@ -37,6 +37,18 @@ npm run test:npd
 - 一个修复要同时用到两个包时, 分别修改并分别提交, 不抽公共代码.
 - 版本号, `CHANGELOG.md` 与发布各自独立.
 
+## 发布
+
+推送 `<包名>@<版本>` 形式的 tag 后, `.github/workflows/release.yml` 校验 tag 与 `package.json` 的 `version` 一致, 跑 `npm test`, 发布到 npm 并以 CHANGELOG 中该版本的段落创建 GitHub Release; 带 `-` 的预发布版本发布到 dist-tag `next`.
+
+```bash
+# 先改好 version 与 CHANGELOG 并提交
+git tag easy-np@0.0.5
+git push origin easy-np@0.0.5
+```
+
+npm 登录走 Trusted Publishing, 不需要 `NPM_TOKEN`: 每个包需在 npmjs.com 的 Settings → Trusted Publisher 中登记一次 GitHub Actions, 仓库 `HeavenSky/np`, 工作流 `release.yml`.
+
 ## 历史
 
 合仓前的历史: `packages/easy-np` 用 `git log 6339a73^ -- <包内路径>`, `packages/easy-npd` 用 `git log 775ef57^2 -- <包内路径>`.
