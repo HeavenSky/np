@@ -36,12 +36,48 @@ describe('test/resolution/public-hoist-pattern.test.js', () => {
 
   it('should hoist all packages with --dedup', async () => {
     await coffee
-      .fork(helper.npminstall, ['--dedup', '--public-hoist-pattern=none'], { cwd, env })
+      .fork(helper.npminstall, ['--shamefully-hoist', '--public-hoist-pattern=none'], { cwd, env })
       .debug()
       .expect('code', 0)
       .end();
     assertFile(rootModule('depd'));
     assertFile(rootModule('statuses'));
+  });
+
+  describe('pnpm and .npmrc settings', () => {
+    const [tmp, cleanupTmp] = helper.tmp();
+    const tmpModule = name => path.join(tmp, 'node_modules', name, 'package.json');
+
+    beforeEach(async () => {
+      await cleanupTmp();
+      await fs.mkdir(tmp, { recursive: true });
+      await fs.writeFile(
+        path.join(tmp, 'package.json'),
+        JSON.stringify({ name: 'cfg', version: '1.0.0', dependencies: { debug: '2.6.9' } })
+      );
+    });
+    after(cleanupTmp);
+
+    it('should hoist packages matched by publicHoistPattern globs with both entries', async () => {
+      await fs.writeFile(path.join(tmp, 'pnpm-workspace.yaml'), 'publicHoistPattern:\n  - "m*"\n');
+      await coffee.fork(helper.x, ['install'], { cwd: tmp }).debug().expect('code', 0).end();
+      assertFile(tmpModule('ms'));
+
+      await cleanupTmp();
+      await fs.writeFile(
+        path.join(tmp, 'package.json'),
+        JSON.stringify({ name: 'cfg', version: '1.0.0', dependencies: { debug: '2.6.9' } })
+      );
+      await fs.writeFile(path.join(tmp, 'pnpm-workspace.yaml'), 'publicHoistPattern:\n  - "m*"\n');
+      await coffee.fork(helper.npminstall, [], { cwd: tmp }).debug().expect('code', 0).end();
+      assertFile(tmpModule('ms'));
+    });
+
+    it('should hoist all packages with shamefully-hoist in .npmrc', async () => {
+      await fs.writeFile(path.join(tmp, '.npmrc'), 'shamefully-hoist=true\n');
+      await coffee.fork(helper.x, ['install'], { cwd: tmp }).debug().expect('code', 0).end();
+      assertFile(tmpModule('ms'));
+    });
   });
 
   describe('config.np.publicHoistPattern in package.json', () => {

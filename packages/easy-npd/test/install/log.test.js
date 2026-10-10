@@ -12,7 +12,7 @@ if (process.platform !== 'win32') {
 
     it('should install pedding with detail log', () => {
       return coffee
-        .fork(helper.npminstall, ['pedding', '-d'], {
+        .fork(helper.npminstall, ['pedding', '--detail'], {
           cwd: tmp,
         })
         .expect('stdout', /pedding@\* installed/)

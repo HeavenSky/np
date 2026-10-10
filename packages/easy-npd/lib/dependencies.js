@@ -3,35 +3,21 @@
 const npa = require('./npa');
 const { parsePackageName } = require('./alias');
 
-module.exports = function dependencies(pkg, options, nested) {
+// 选取根项目要安装的字段时的优先顺序: 同名依赖取先出现的字段, 与 npm 一致 optionalDependencies 覆盖 dependencies
+const FIELD_ORDER = ['optionalDependencies', 'dependencies', 'peerDependencies'];
+
+// rootFields: 命令行 --only / --include / --omit 选出的根项目字段, 只对根项目生效; 不传时按 npm 默认
+module.exports = function dependencies(pkg, options, nested, rootFields = null) {
+  if (rootFields) return select(pkg, nested, rootFields);
   const all = {};
   const prod = {};
-  const client = {};
   const optionalDependencies = pkg.optionalDependencies || {};
   const dependencies = pkg.dependencies || {};
   const devDependencies = pkg.devDependencies || {};
-  const clientDependencies = pkg.clientDependencies || {};
-  const buildDependencies = pkg.buildDependencies || {};
-  const isomorphicDependencies = pkg.isomorphicDependencies || {};
-
-  checkDumplicate(pkg);
 
   for (const name in dependencies) {
     all[name] = dependencies[name];
     prod[name] = dependencies[name];
-  }
-  for (const name in clientDependencies) {
-    all[name] = clientDependencies[name];
-    client[name] = clientDependencies[name];
-  }
-  for (const name in buildDependencies) {
-    all[name] = buildDependencies[name];
-    client[name] = buildDependencies[name];
-  }
-  for (const name in isomorphicDependencies) {
-    all[name] = isomorphicDependencies[name];
-    prod[name] = isomorphicDependencies[name];
-    client[name] = isomorphicDependencies[name];
   }
   // follow npm, optionalDependencies will rewrite dependencies
   for (const name in optionalDependencies) {
@@ -65,16 +51,40 @@ module.exports = function dependencies(pkg, options, nested) {
     get prod() {
       return mergeOptional(prod, optionalDependencies, nested);
     },
-
-    get clientMap() {
-      return client;
-    },
-
-    get client() {
-      return mergeOptional(client, optionalDependencies, nested);
-    },
   };
 };
+
+// 按字段选出的依赖; all 与 prod 相同, 安装与根依赖判断都只看选中的字段
+function select(pkg, nested, rootFields) {
+  const selected = {};
+  const fields = [
+    ...FIELD_ORDER.filter(field => rootFields.includes(field)),
+    ...rootFields.filter(field => !FIELD_ORDER.includes(field) && field !== 'devDependencies'),
+    ...(rootFields.includes('devDependencies') ? ['devDependencies'] : []),
+  ];
+  for (const field of fields) {
+    const deps = pkg[field] || {};
+    for (const name in deps) {
+      if (!selected.hasOwnProperty(name)) selected[name] = deps[name];
+    }
+  }
+  const optional = rootFields.includes('optionalDependencies') ? pkg.optionalDependencies || {} : {};
+  const list = () => mergeOptional(selected, optional, nested);
+  return {
+    get allMap() {
+      return selected;
+    },
+    get all() {
+      return list();
+    },
+    get prodMap() {
+      return selected;
+    },
+    get prod() {
+      return list();
+    },
+  };
+}
 
 function mergeOptional(deps, optional, nested) {
   const results = [];
@@ -102,30 +112,4 @@ function mergeOptional(deps, optional, nested) {
     results.push(pkg);
   }
   return results;
-}
-
-function checkDumplicate(pkg) {
-  const all = new Map();
-
-  function push(scope) {
-    const dependencies = pkg[scope] || {};
-    for (const name in dependencies) {
-      if (!all.has(name)) all.set(name, []);
-      all.get(name).push(scope);
-    }
-  }
-
-  push('dependencies');
-  push('clientDependencies');
-  push('isomorphicDependencies');
-
-  const duplicates = [];
-  for (const dep of all) {
-    if (dep[1].length > 1) duplicates.push(dep);
-  }
-
-  if (duplicates.length) {
-    const detail = duplicates.map(dep => `${dep[0]} defined multiple times in ${dep[1].join(',')}`).join('\n');
-    throw new Error(`duplicate dependencies error, put isomorphic dependency into isomorphicDependencies:\n${detail}`);
-  }
 }

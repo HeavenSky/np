@@ -73,11 +73,12 @@ function install(baseDir, pointer, pkg) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'package.json'), '{"private": true}\n');
   console.error('np installing %s into %s for Node %s', pkg.spec, dir, process.version);
-  const args = [CLI, `--root=${dir}`, '--no-lockfile', '--no-save', '--ignore-scripts'];
+  const args = [CLI, '--no-lockfile', '--no-save', '--ignore-scripts'];
   if (process.env.npm_config_registry) args.push(`--registry=${process.env.npm_config_registry}`);
   args.push(pkg.spec);
   // stdout 只能有 node-gyp 自己的输出, 调用方可能解析它; 安装日志全部写到 stderr
   const result = spawnSync(process.execPath, args, {
+    cwd: dir,
     stdio: ['ignore', 2, 2],
     timeout: INSTALL_TIMEOUT,
     env: { ...process.env, np_node_warning: 'false' },

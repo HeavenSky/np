@@ -12,6 +12,8 @@ const allowScripts = require('./allow_scripts');
 
 module.exports = async options => {
   options = formatInstallOptions(options);
+  // 与 easy-np 一致: 显式重跑的脚本总是显示输出
+  options.foregroundScripts = true;
   const targets = [];
   for (const spec of options.rebuildSpecs) {
     const matched = await findInstalled(spec, options);

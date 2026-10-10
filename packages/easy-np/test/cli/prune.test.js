@@ -22,11 +22,12 @@ describe('test/cli/prune.test.js', () => {
     await removeOutside();
   });
 
-  it('should keep every version when --root is a symlink to the project', async () => {
+  it('should keep every version when run from a symlink to the project', async () => {
     await writePkg({ debug: '4.3.4' });
     await run(helper.npminstall, []).expect('code', 0).end();
     await fs.symlink(tmp, outside, 'junction');
-    await run(x, ['prune', '--dry-run', `--root=${outside}`])
+    await coffee
+      .fork(x, ['prune', '--dry-run'], { cwd: outside })
       .expect('code', 0)
       .expect('stdout', /Found 0 unreferenced/)
       .end();
@@ -46,13 +47,12 @@ describe('test/cli/prune.test.js', () => {
     assert.deepEqual(await storeEntries(), before);
   });
 
-  it('should remove versions left by upgrades and uninstalls only when asked', async () => {
+  it('should remove versions left by upgrades only when asked, and by uninstalls right away', async () => {
     await writePkg({ debug: '4.3.4', pedding: '1.1.0' });
     await run(helper.npminstall, []).expect('code', 0).end();
-    await writePkg({ debug: '3.2.7' });
+    await writePkg({ debug: '3.2.7', pedding: '1.1.0' });
     await run(helper.npminstall, []).expect('code', 0).end();
-    await run(x, ['uninstall', 'pedding']).expect('code', 0).end();
-    // 安装与卸载本身不删除旧版本
+    // 重装不删除旧版本
     const before = await storeEntries();
     assert(before.includes('debug@4.3.4'));
     assert(before.includes('pedding@1.1.0'));
@@ -66,6 +66,11 @@ describe('test/cli/prune.test.js', () => {
     await run(x, ['prune'])
       .expect('code', 0)
       .expect('stdout', /removed debug@4\.3\.4/)
+      .end();
+    // 卸载后立即回收被卸载的版本
+    await run(x, ['uninstall', 'pedding'])
+      .expect('code', 0)
+      .expect('stdout', /- pedding@1\.1\.0/)
       .end();
     const after = await storeEntries();
     assert.deepEqual(after, ['debug@3.2.7', 'ms@2.1.3']);

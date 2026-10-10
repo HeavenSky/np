@@ -9,7 +9,7 @@ describe('test/cli/help.test.js', () => {
       .fork(x, ['-h'])
       .expect('stdout', /Commands:/)
       .expect('stdout', /install, i, add/)
-      .expect('stdout', /rebuild, rb/)
+      .expect('stdout', /uninstall, remove, rm /)
       .expect('code', 0)
       .end();
   });
@@ -29,12 +29,12 @@ describe('test/cli/help.test.js', () => {
 
   it('should show help of a command by name, alias or help <command>', async () => {
     await coffee
-      .fork(x, ['rb', '-h'])
-      .expect('stdout', /np-x rebuild <pkg>/)
+      .fork(x, ['approve', '-h'])
+      .expect('stdout', /np-x approve-scripts <pkg>/)
       .expect('code', 0)
       .end();
     await coffee
-      .fork(x, ['help', 'un'])
+      .fork(x, ['help', 'rm'])
       .expect('stdout', /np-x uninstall <pkg>/)
       .expect('code', 0)
       .end();
@@ -55,7 +55,7 @@ describe('test/cli/help.test.js', () => {
       .end();
     await coffee
       .fork(x, ['i', '-h'])
-      .expect('stdout', /np-x install, np-x i and np-x add are the same as np/)
+      .expect('stdout', /np-x install, np-x i and np-x add are np without the two options below/)
       .expect('code', 0)
       .end();
   });

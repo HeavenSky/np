@@ -19,8 +19,9 @@ module.exports = async function link(args) {
 
 async function main(args) {
   const orignalArgv = args;
+  utils.rejectRemovedArgs(args, { root: 'run np-x link in that folder instead' });
   const argv = parseArgs(orignalArgv, {
-    string: ['root'],
+    string: ['prefix'],
     boolean: ['version', 'help'],
     alias: {
       v: 'version',
@@ -29,7 +30,7 @@ async function main(args) {
   });
 
   if (argv.version) {
-    console.log('v%s', require('../../package.json').version);
+    console.log(`np v${require('../../package.json').version}`);
     process.exit(0);
   }
 
@@ -38,7 +39,7 @@ async function main(args) {
     process.exit(0);
   }
 
-  const root = argv.root || process.cwd();
+  const root = process.cwd();
 
   const globalMeta = utils.getGlobalInstallMeta(argv.prefix);
   const globalModuleDir = path.join(globalMeta.targetDir, 'node_modules');
@@ -47,9 +48,6 @@ async function main(args) {
 
   const installArgs = [];
   for (const arg of orignalArgv) {
-    if (arg.startsWith('--root')) {
-      continue;
-    }
     if (arg[0] !== '-') {
       continue;
     }

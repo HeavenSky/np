@@ -53,22 +53,25 @@ describe('test/workspaces/edge-cases.test.js', () => {
   });
 
   // workspace 按 lockfile 还原版本的用例在 install-with-lockfile.test.js; 这里确认不再拒绝 workspace
-  it('should accept --lockfile-path in workspaces', async () => {
+  it('should accept --from-package-lock in workspaces', async () => {
     await workspace({ 'packages/a': { name: 'pkg-a', dependencies: { ms: '^2.0.0' } } });
     await writeJSON(path.join(tmp, 'package-lock.json'), { lockfileVersion: 3, packages: {} });
-    await run(helper.npminstall, [`--lockfile-path=${path.join(tmp, 'package-lock.json')}`])
+    await run(helper.npminstall, [`--from-package-lock=${path.join(tmp, 'package-lock.json')}`])
       .expect('code', 0)
       .end();
     assert(require(path.join(tmp, 'packages/a/node_modules/ms/package.json')).version.startsWith('2.'));
   });
 
-  it('should keep other workspaces working after np-x update -w', async () => {
+  it('should keep other workspaces working after np-x update in one workspace', async () => {
     await workspace({
       'packages/x': { name: 'pkg-x', dependencies: { ms: '2.1.3' } },
       'packages/y': { name: 'pkg-y', dependencies: { pedding: '1.1.0' } },
     });
     await run(helper.npminstall).expect('code', 0).end();
-    await run(helper.x, ['update', '-w', 'pkg-x']).expect('code', 0).end();
+    await coffee
+      .fork(helper.x, ['update'], { cwd: path.join(tmp, 'packages/x') })
+      .expect('code', 0)
+      .end();
     assert.equal(require(path.join(tmp, 'packages/y/node_modules/pedding/package.json')).version, '1.1.0');
     assert.equal(require(path.join(tmp, 'packages/x/node_modules/ms/package.json')).version, '2.1.3');
   });
@@ -131,7 +134,7 @@ describe('test/workspaces/edge-cases.test.js', () => {
       'packages/b': { name: 'pkg-b' },
       'packages/c': { name: 'pkg-c' },
     });
-    await run(helper.npminstall, ['-d'])
+    await run(helper.npminstall, ['--detail'])
       .expect('code', 0)
       .expect('stdout', /pkg-b@\* is skipped because it resolves to the local workspace:/)
       .end();
@@ -199,9 +202,12 @@ describe('test/workspaces/edge-cases.test.js', () => {
         'packages/x': { name: 'pkg-x', dependencies: { pedding: '1.1.0' } },
         'packages/y': { name: 'pkg-y' },
       });
-      await run(helper.npminstall, ['--dedup']).expect('code', 0).end();
+      await run(helper.npminstall, ['--shamefully-hoist']).expect('code', 0).end();
       assert(await exists(rootLink('pedding')));
-      await run(helper.x, ['uninstall', 'pedding', '-w', 'pkg-x']).expect('code', 0).end();
+      await coffee
+        .fork(helper.x, ['uninstall', 'pedding'], { cwd: path.join(tmp, 'packages/x') })
+        .expect('code', 0)
+        .end();
       assert(!(await exists(rootLink('pedding'))));
     });
 
@@ -210,8 +216,11 @@ describe('test/workspaces/edge-cases.test.js', () => {
         'packages/x': { name: 'pkg-x', dependencies: { pedding: '1.1.0' } },
         'packages/y': { name: 'pkg-y', dependencies: { pedding: '1.1.0' } },
       });
-      await run(helper.npminstall, ['--dedup']).expect('code', 0).end();
-      await run(helper.x, ['uninstall', 'pedding', '-w', 'pkg-x']).expect('code', 0).end();
+      await run(helper.npminstall, ['--shamefully-hoist']).expect('code', 0).end();
+      await coffee
+        .fork(helper.x, ['uninstall', 'pedding'], { cwd: path.join(tmp, 'packages/x') })
+        .expect('code', 0)
+        .end();
       assert(await exists(rootLink('pedding')));
     });
 
@@ -220,15 +229,18 @@ describe('test/workspaces/edge-cases.test.js', () => {
         'packages/x': { name: 'pkg-x', dependencies: { ms: '2.1.3' } },
         'packages/y': { name: 'pkg-y', dependencies: { debug: '4.4.3' } },
       });
-      await run(helper.npminstall, ['--dedup']).expect('code', 0).end();
-      await run(helper.x, ['uninstall', 'ms', '-w', 'pkg-x']).expect('code', 0).end();
+      await run(helper.npminstall, ['--shamefully-hoist']).expect('code', 0).end();
+      await coffee
+        .fork(helper.x, ['uninstall', 'ms'], { cwd: path.join(tmp, 'packages/x') })
+        .expect('code', 0)
+        .end();
       assert(await exists(rootLink('ms')));
     });
   });
 
   it('should fail when the lockfile can not be loaded', async () => {
     await writeJSON(path.join(tmp, 'package.json'), { name: 'r', version: '1.0.0', dependencies: { ms: '2.1.3' } });
-    await run(helper.npminstall, [`--lockfile-path=${path.join(tmp, 'missing-lock.json')}`])
+    await run(helper.npminstall, [`--from-package-lock=${path.join(tmp, 'missing-lock.json')}`])
       .expect('code', 1)
       .expect('stderr', /load lockfile from .*missing-lock\.json error/)
       .end();

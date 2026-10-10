@@ -212,7 +212,7 @@ async function _install(parentDir, pkg, ancestors, options, context) {
     options.console.warn(
       chalk.yellow('[np:resume] %s continue from %s, root: %j'),
       displayName,
-      options.rebuild ? 'the beginning (--rebuild)' : stage,
+      options.rebuild ? 'the beginning (np-x rebuild)' : stage,
       realPkgDir
     );
   }

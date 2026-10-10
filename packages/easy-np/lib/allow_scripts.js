@@ -5,15 +5,27 @@ const chalk = require('chalk');
 const npa = require('npm-package-arg');
 const semver = require('semver');
 const npConfig = require('./np_config');
+const foreignConfig = require('./foreign_config');
 const utils = require('./utils');
 
 const BIN = 'np';
 
-// 取第一个有配置的来源, 低优先级来源整体忽略: --allow-scripts > 根 package.json 的 allowScripts > ~/.nprc 的 allow-scripts
-// global: 全局安装没有项目 package.json, 跳过该来源
-exports.load = ({ root, global = false, argv = {}, logger = console }) => {
-  const flag = name => {
-    for (const value of [argv[name], process.env[`npm_config_${name.replace(/-/g, '_')}`], npConfig.get(name)]) {
+// 取第一个有配置的来源, 低优先级来源整体忽略:
+// --allow-scripts > 根 package.json 的 allowScripts > pnpm 构建策略 > ~/.nprc 的 allow-scripts
+// global: 全局安装没有项目 package.json, 跳过项目内的来源
+// pnpm: 调用方已读取的 pnpm 设置, 不传时按 root 读取
+exports.load = ({ root, global = false, argv = {}, pnpm, logger = console }) => {
+  if (!pnpm) pnpm = !global && root ? foreignConfig.pnpm(root, logger) : {};
+  // 命令行 > npm_config_* > ~/.nprc > .npmrc > pnpm; np 入口的默认值已作为命令行参数传入
+  const flag = (name, pnpmKey) => {
+    const candidates = [
+      argv[name],
+      process.env[`npm_config_${name.replace(/-/g, '_')}`],
+      npConfig.get(name),
+      foreignConfig.npmrcFlag(name),
+      pnpm[pnpmKey],
+    ];
+    for (const value of candidates) {
       if (value === true || value === 'true' || value === '') return true;
       if (value === false || value === 'false') return false;
     }
@@ -21,6 +33,7 @@ exports.load = ({ root, global = false, argv = {}, logger = console }) => {
   };
   let policy = null;
   let source = null;
+  let allowUnreviewed = false;
   const cli = parseList(argv['allow-scripts']);
   if (cli) {
     [policy, source] = [cli, '--allow-scripts'];
@@ -28,17 +41,23 @@ exports.load = ({ root, global = false, argv = {}, logger = console }) => {
     const pkg = readPackage(root);
     if (pkg.allowScripts && typeof pkg.allowScripts === 'object' && Object.keys(pkg.allowScripts).length) {
       [policy, source] = [pkg.allowScripts, 'package.json allowScripts'];
+    } else {
+      const fromPnpm = foreignConfig.pnpmScriptPolicy(pnpm);
+      if (fromPnpm.policy || fromPnpm.allowUnreviewed) {
+        [policy, source, allowUnreviewed] = [fromPnpm.policy, 'pnpm build settings', fromPnpm.allowUnreviewed];
+      }
     }
   }
-  if (!policy) {
+  if (!policy && !source) {
     const rc = parseList(npConfig.get('allow-scripts'));
     if (rc) [policy, source] = [rc, '~/.nprc allow-scripts'];
   }
   return {
     policy: policy && validate(policy, source, logger),
     source,
-    allowAll: flag('dangerously-allow-all-scripts'),
-    strict: flag('strict-allow-scripts'),
+    allowAll: flag('dangerously-allow-all-scripts', 'dangerouslyAllowAllBuilds'),
+    allowUnreviewed,
+    strict: flag('strict-allow-scripts', 'strictDepBuilds'),
     // 被跳过的依赖: { displayName, name, version, scripts, key, denied }
     skipped: [],
   };
@@ -47,7 +66,14 @@ exports.load = ({ root, global = false, argv = {}, logger = console }) => {
 // git 依赖构建时的子安装: 不读克隆仓库的 allowScripts 与 ~/.nprc, 不放行任何依赖脚本
 exports.GIT_PREPARE_CHILD_ENV = '_NP_GIT_PREPARE_CHILD_';
 
-exports.empty = () => ({ policy: null, source: null, allowAll: false, strict: false, skipped: [] });
+exports.empty = () => ({
+  policy: null,
+  source: null,
+  allowAll: false,
+  allowUnreviewed: false,
+  strict: false,
+  skipped: [],
+});
 
 // 未经 CLI 入口(API 调用, 测试)时按 options.root 懒加载
 exports.ensure = options => {
@@ -179,7 +205,7 @@ exports.allow = (options, identity, { displayName, name, scripts }) => {
   const state = exports.ensure(options);
   if (state.allowAll) return true;
   const result = exports.check(state.policy, identity);
-  if (result === true) return true;
+  if (result === true || (result === null && state.allowUnreviewed)) return true;
   state.skipped.push({
     displayName,
     name,
@@ -215,7 +241,7 @@ exports.report = options => {
     const allowed = Object.keys(state.policy || {}).filter(key => state.policy[key] === true);
     const keys = [...new Set([...allowed, ...pending.map(item => item.key)])].join(',');
     print(
-      chalk.yellow('review them, then reinstall with: %s -g %s %s'),
+      chalk.yellow('review them, then reinstall with: %s-x install -g %s %s'),
       BIN,
       shellArg(`--allow-scripts=${keys}`),
       shellArg(options.globalSpec)

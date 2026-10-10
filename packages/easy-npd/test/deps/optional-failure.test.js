@@ -11,6 +11,6 @@ describe('test/deps/optional-failure.test.js', () => {
   afterEach(cleanup);
 
   it('should install success when optionalDependencies fails', async () => {
-    await coffee.fork(helper.npminstall, ['-d'], { cwd }).debug().expect('code', 0).end();
+    await coffee.fork(helper.npminstall, ['--detail'], { cwd }).debug().expect('code', 0).end();
   });
 });

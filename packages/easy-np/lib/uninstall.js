@@ -31,16 +31,11 @@ module.exports.cleanupHoistedLinks = async (root, names, logger = console) => {
   ];
   const declared = new Set();
   for (const pkg of pkgs) {
-    for (const field of [
-      'dependencies',
-      'devDependencies',
-      'optionalDependencies',
-      'peerDependencies',
-      'clientDependencies',
-      'buildDependencies',
-      'isomorphicDependencies',
-    ]) {
-      for (const name in pkg[field] || {}) declared.add(name);
+    // 含 --include 安装的 <type>Dependencies: 卸载时不知道当初传了哪些类型, 按全部声明保留链接
+    for (const field of Object.keys(pkg).filter(key => key === 'dependencies' || key.endsWith('Dependencies'))) {
+      if (pkg[field] && typeof pkg[field] === 'object' && !Array.isArray(pkg[field])) {
+        for (const name in pkg[field]) declared.add(name);
+      }
     }
   }
   let storeEntries = [];

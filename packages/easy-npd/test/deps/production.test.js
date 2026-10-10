@@ -26,15 +26,15 @@ describe('test/deps/production.test.js', () => {
     assert(dirs.includes('koa'));
   });
 
-  it('should show detail and check node_modules dir on production mode', async () => {
+  it('should show detail with --detail and check node_modules dir on production mode', async () => {
     await coffee
-      .fork(helper.npminstall, ['--production'], { cwd })
+      .fork(helper.npminstall, ['--production', '--detail'], { cwd })
       .expect('code', 0)
       .expect('stdout', /installed at node_modules/)
       .end();
     // again
     await coffee
-      .fork(helper.npminstall, ['--production'], { cwd })
+      .fork(helper.npminstall, ['--production', '--detail'], { cwd })
       .debug()
       .expect('code', 0)
       .expect('stdout', /koa@\* is skipped because it already exists at/)

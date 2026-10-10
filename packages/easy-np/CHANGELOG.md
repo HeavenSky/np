@@ -4,6 +4,42 @@ easy-np 基于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1, 上�
 
 0.0.0 列出相对 npminstall 8.0.1 的全部变更, 分为「新增功能」与「与 npminstall 8.0.1 的差异」; 之后的版本只列相对上一个版本的变更.
 
+## 0.0.4 (2026-10-10)
+
+### 不兼容变更
+
+- `np` 改为 `np-x install` 加上 `--no-lockfile --dangerously-allow-all-scripts`, 其余行为与 `np-x install` 完全相同(同样读取 `.npmrc` 与 pnpm 配置); 这两个参数视同命令行参数, `np_lockfile`, `config.np.lockfile`, `npm_config_*`, `~/.nprc`, `.npmrc` 与 pnpm 设置都不能改变, 只能在命令行用 `--lockfile` / `--frozen-lockfile` 与 `--no-dangerously-allow-all-scripts` 覆盖.
+- 安装参数重构, 不保留旧写法, 传入已移除的参数时报错并提示替代写法:
+  - 依赖类型统一为 `--only`, `--include`, `--omit`(同 `--exclude`), `--write=<type>`, 类型 `prod` 对应 `dependencies`, 其他类型对应 `<type>Dependencies`; `--prod` 等同 `--only=prod`, `--production` 等同 `NODE_ENV=production`.
+  - 移除 `-S/--save`, `-D/--save-dev`, `-O/--save-optional`, `-E/--save-exact`(改用 `--write=<type>`, `--write-exact`), `--no-optional`, `--legacy-peer-deps`(改用 `--omit`), `--client` 与 `--save-client` 等 cnpm 参数.
+  - `clientDependencies` 等非标准字段默认不再安装, 完整安装时告警; 依赖包自身的这些字段不再安装.
+  - 移除 `--root`, `-w`, `--workspace`: 在 workspace 目录中运行即只处理该 workspace, 与 npm 7+ 一致.
+  - `--dedup` 改名 `--shamefully-hoist`, `--lockfile-path` 改名 `--from-package-lock`, `-d` 移除(用 `--detail`).
+  - 移除 `--flatten`, `--fix-bug-versions`, `--tarball-url-mapping`, `--dependencies-tree`, `--save-dependencies-tree`, `--cache-strict`; 安装参数 `--fetch-only` 与 `--rebuild` 移除, 只能用 `np-x fetch` 与 `np-x rebuild`.
+  - `--production` 不再关闭磁盘缓存, 也不再强制输出详细日志.
+- 子命令别名调整: `np-x uninstall` 只保留 `rm`, `remove`; `np-x rebuild` 不再有别名 `rb`.
+- `np-x uninstall` 结束时自动回收不再被任何链接引用的版本目录; 传入 `--ignore-scripts` 报错.
+- registry 凭据: `.npmrc` 的 `_authToken` 与 `~/.nprc` 的用户名密码都只发给与 registry 同 host 的请求, `always-auth` 不再把凭据发给其他 host.
+- `~/.nprc` 的 `registry` 现在决定安装源(优先级: `--registry` > `npm_registry` > `~/.nprc` > `.npmrc` / `npm_config_registry`), 原先只用于匹配凭据的 host.
+- 上游 npminstall 的 `-c` / `--china`, `--custom-china-mirror-url`, `--prune`, `--force-link-latest`, `--disable-fallback-store` 传入时报错, 原先会把紧随其后的包名当作参数值吞掉.
+- 全局安装跳过依赖脚本时的重装提示改为 `np-x install -g --allow-scripts=...`.
+- 环境变量 `np_lockfile` 优先于 `config.np.lockfile`, 原先两者任一为 false 即关闭.
+
+### 新增功能
+
+- 后台执行的依赖脚本失败时, 命令与完整输出写入缓存目录下的 `np-script-logs/`, 报错末尾给出日志路径(之前输出被丢弃); 超过 7 天的日志自动删除.
+- 公共源从 npmmirror 与 npmjs 扩展为 npm, yarn, alibaba(npmmirror), tencent, huawei 5 个: 测速记住最快的 3 个, manifest 与 tgz 失败时按先后逐个重试, 最多循环 2 轮共 6 次(原来两个源交替最多 4 次); 指定其中一个时它排第一, 其余仍按测速. 二进制仍只在 npmmirror 与官方地址之间切换, 最多 4 次. 升级后第一次运行重新测速.
+- 兼容读取 npm 与 pnpm 配置(两个入口相同): `pnpm-workspace.yaml` 与 `package.json` 的 `pnpm` 字段中的 `onlyBuiltDependencies`, `ignoredBuiltDependencies`, `neverBuiltDependencies`, `allowBuilds`, `dangerouslyAllowAllBuilds`, `strictDepBuilds`, `lockfile`, `shamefullyHoist`, `publicHoistPattern`(glob), `nodeLinker: hoisted`, `packages`(作为 workspaces); `.npmrc` 的 `registry`, `@scope:registry`, `dangerously-allow-all-scripts`, `strict-allow-scripts`, `lockfile`, `package-lock`, `shamefully-hoist`, `public-hoist-pattern`, `node-linker`, `install-strategy=hoisted`.
+- 只配置了 pnpm `neverBuiltDependencies` 时放行其余依赖的脚本.
+- `--no-write` 与 `--no-save` 相同.
+- `--lockfile` 显式开启 `np-lock.json`, `--frozen-lockfile` 视为开启; 新增 `--prefer-offline`, `--ws`(同 `--workspaces`).
+- 子命令别名 `np-x approve`, `np-x deny`; 全部子命令支持 `-v`.
+- `np-x uninstall --write=<type>` 另外从 `<type>Dependencies` 删除被卸载的包; 四个标准字段总是删除.
+
+### 问题修复
+
+- 设置了 `np_cache` 时 `--no-cache` 不再失效.
+
 ## 0.0.3 (2026-10-06)
 
 ### 新增功能

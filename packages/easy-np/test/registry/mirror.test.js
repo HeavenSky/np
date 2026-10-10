@@ -1,4 +1,4 @@
-// 公共源自动切换: 用两个本地 registry 模拟 npmmirror 与 npmjs, 覆盖测速, 交替换源, 镜像滞后, 缓存共用与损坏缓存
+// 公共源自动切换: 用 4 个本地 registry 模拟公共源, 覆盖测速取前 3, 逐个换源, 镜像滞后, 缓存共用与损坏缓存
 const assert = require('node:assert');
 const path = require('node:path');
 const fs = require('node:fs/promises');
@@ -13,21 +13,26 @@ describe('test/registry/mirror.test.js', () => {
   let log;
   let registries;
   let sources;
+  let binarySources;
 
   before(async () => {
     log = [];
-    registries = { mirror: helper.createRegistry('mirror', log), official: helper.createRegistry('official', log) };
+    registries = {};
     sources = {};
-    for (const name in registries) {
-      const registry = registries[name];
+    for (const name of ['npm', 'yarn', 'alibaba', 'tencent']) {
+      const registry = (registries[name] = helper.createRegistry(name, log));
       await new Promise(resolve => registry.server.listen(0, '127.0.0.1', resolve));
       registry.prefix = `http://127.0.0.1:${registry.server.address().port}/`;
       sources[name] = {
         registry: registry.prefix.slice(0, -1),
         prefixes: [registry.prefix],
-        binaryProbe: `${registry.prefix}node/index.json`,
+        binary: name === 'npm' || name === 'yarn' ? 'official' : 'mirror',
       };
     }
+    binarySources = {
+      mirror: `${registries.alibaba.prefix}node/index.json`,
+      official: `${registries.npm.prefix}node/index.json`,
+    };
   });
 
   after(async () => {
@@ -57,7 +62,7 @@ describe('test/registry/mirror.test.js', () => {
     return tarball;
   }
 
-  function install(pkgs, { order = ['mirror', 'official'], binaryOrder = order, extra } = {}) {
+  function install(pkgs, { order = ['alibaba', 'npm', 'yarn'], binaryOrder = ['mirror', 'official'], extra } = {}) {
     const state = mirror.create({ order, binaryOrder, sources, binaryEnvs: extra?.binaryEnvs });
     return installLocal({
       root: path.join(tmp, 'root'),
@@ -73,52 +78,74 @@ describe('test/registry/mirror.test.js', () => {
 
   const tgzLog = () => log.filter(line => line.includes(':tgz:')).map(line => line.split(':')[0]);
 
+  const probe = options => mirror.probe({ sources, binarySources, globalOptions: { console: { warn() {} } }, ...options });
+  const delays = values => {
+    for (const name in values) registries[name].behavior.delay = values[name];
+  };
+
   it('should expand only urls of known sources', () => {
-    const state = mirror.create({ order: ['official', 'mirror'], binaryOrder: ['official', 'mirror'] });
+    const state = mirror.create({ order: ['npm', 'alibaba', 'huawei'], binaryOrder: ['official', 'mirror'] });
     assert.deepEqual(state.expand('https://registry.npmmirror.com/a/-/a-1.0.0.tgz'), [
       'https://registry.npmjs.org/a/-/a-1.0.0.tgz',
       'https://registry.npmmirror.com/a/-/a-1.0.0.tgz',
+      'https://mirrors.huaweicloud.com/repository/npm/a/-/a-1.0.0.tgz',
     ]);
     assert.equal(state.expand('https://npm.corp.local/a/-/a-1.0.0.tgz'), null);
-    assert.equal(mirror.sourceOf('https://registry.npmjs.com'), 'official');
+    assert.equal(mirror.sourceOf('https://registry.npmjs.com'), 'npm');
+    assert.equal(mirror.sourceOf('https://registry.yarnpkg.com'), 'yarn');
+    assert.equal(mirror.sourceOf('https://mirrors.cloud.tencent.com/npm/'), 'tencent');
+    assert.equal(mirror.sourceOf('https://repo.huaweicloud.com/repository/npm'), 'huawei');
     assert.equal(mirror.sourceOf('https://npm.corp.local'), null);
   });
 
-  it('should order sources by the first probe response', async () => {
-    registries.mirror.behavior.delay = 500;
+  it('should keep the TOP fastest sources in probe order', async () => {
     await publish({ name: 'binary-mirror-config', version: '1.0.0' });
-    const probed = await mirror.probe({ sources, globalOptions: { console: { warn() {} } } });
-    assert.deepEqual(probed.order, ['official', 'mirror']);
+    delays({ yarn: 0, npm: 200, tencent: 400, alibaba: 800 });
+    const probed = await probe();
+    assert.deepEqual(probed.order, ['yarn', 'npm', 'tencent']);
     assert.deepEqual(probed.binaryOrder, ['official', 'mirror']);
   });
 
-  it('should skip registry probing with a preferred source', async () => {
-    registries.mirror.behavior.delay = 500;
-    const probed = await mirror.probe({ prefer: 'mirror', sources, globalOptions: { console: { warn() {} } } });
-    assert.deepEqual(probed.order, ['mirror', 'official']);
+  it('should put the preferred source first and rank the rest by probing', async () => {
+    await publish({ name: 'binary-mirror-config', version: '1.0.0' });
+    delays({ yarn: 0, npm: 200, tencent: 400, alibaba: 800 });
+    const probed = await probe({ prefer: 'alibaba' });
+    assert.deepEqual(probed.order, ['alibaba', 'yarn', 'npm']);
     assert.deepEqual(probed.binaryOrder, ['mirror', 'official']);
+  });
+
+  it('should fill up with the defined order when fewer sources respond', async () => {
+    await publish({ name: 'binary-mirror-config', version: '1.0.0' }, {}, { only: ['tencent'] });
+    const probed = await probe();
+    assert.deepEqual(probed.order, ['tencent', 'npm', 'yarn']);
+  });
+
+  it('should order sources by definition without probing', () => {
+    assert.deepEqual(mirror.defaultOrder(), { order: ['npm', 'yarn', 'alibaba'], binaryOrder: ['official', 'mirror'] });
+    assert.deepEqual(mirror.defaultOrder({ prefer: 'huawei' }), {
+      order: ['huawei', 'npm', 'yarn'],
+      binaryOrder: ['mirror', 'official'],
+    });
   });
 
   it('should reuse the probe result within cacheMinutes', async () => {
     await publish({ name: 'binary-mirror-config', version: '1.0.0' });
     const cacheDir = path.join(tmp, 'probe-cache');
-    const probe = options => mirror.probe({ sources, globalOptions: { console: { warn() {} } }, cacheDir, ...options });
-    registries.mirror.behavior.delay = 500;
-    const first = await probe({ cacheMinutes: 5 });
-    assert.deepEqual(first.order, ['official', 'mirror']);
+    delays({ alibaba: 500 });
+    const first = await probe({ cacheDir, cacheMinutes: 5 });
+    assert(!first.order.includes('alibaba'), first.order.join(','));
     assert(!first.cached);
 
-    registries.mirror.behavior.delay = 0;
-    registries.official.behavior.delay = 500;
-    const second = await probe({ cacheMinutes: 5 });
-    assert.deepEqual(second.order, ['official', 'mirror']);
+    delays({ alibaba: 0, npm: 500, yarn: 500, tencent: 500 });
+    const second = await probe({ cacheDir, cacheMinutes: 5 });
+    assert.deepEqual(second.order, first.order);
     assert(second.cached);
 
     // 指定源不同或缓存分钟数为 0 时重新测速
-    const preferred = await probe({ cacheMinutes: 5, prefer: 'mirror' });
+    const preferred = await probe({ cacheDir, cacheMinutes: 5, prefer: 'npm' });
     assert(!preferred.cached);
-    const fresh = await probe({ cacheMinutes: 0 });
-    assert.deepEqual(fresh.order, ['mirror', 'official']);
+    const fresh = await probe({ cacheDir, cacheMinutes: 0 });
+    assert.equal(fresh.order[0], 'alibaba');
     assert(!fresh.cached);
   });
 
@@ -132,34 +159,33 @@ describe('test/registry/mirror.test.js', () => {
 
   it('should download tarball from the other source when the first one fails', async () => {
     await publish({ name: 'foo', version: '1.0.0' });
-    registries.mirror.behavior.tarballStatus = 500;
+    registries.alibaba.behavior.tarballStatus = 500;
     await install([{ name: 'foo', version: '1.0.0' }]);
     assert(await fs.stat(path.join(tmp, 'root/node_modules/foo/package.json')));
-    assert.deepEqual(tgzLog(), ['mirror', 'official']);
+    assert.deepEqual(tgzLog(), ['alibaba', 'npm']);
   });
 
-  it('should try each source twice in turn and then fail', async () => {
+  it('should try the TOP sources twice in turn and then fail', async () => {
     await publish({ name: 'foo', version: '1.0.0' });
-    registries.mirror.behavior.tarballStatus = 500;
-    registries.official.behavior.tarballStatus = 500;
+    for (const name in registries) registries[name].behavior.tarballStatus = 500;
     await assert.rejects(install([{ name: 'foo', version: '1.0.0' }]), /500/);
-    assert.deepEqual(tgzLog(), ['mirror', 'official', 'mirror', 'official']);
+    assert.deepEqual(tgzLog(), ['alibaba', 'npm', 'yarn', 'alibaba', 'npm', 'yarn']);
   });
 
   it('should fetch manifests from the other source when the first one fails', async () => {
     await publish({ name: 'foo', version: '1.0.0' });
-    registries.mirror.behavior.metaStatus = 502;
+    registries.alibaba.behavior.metaStatus = 502;
     await install([{ name: 'foo', version: '1.0.0' }]);
     assert.deepEqual(
       log.filter(line => line.includes(':meta:')).map(line => line.split(':')[0]),
-      ['mirror', 'official']
+      ['alibaba', 'npm']
     );
   });
 
   it('should refetch manifests from official when the mirror lags behind', async () => {
     await publish({ name: 'foo', version: '1.0.0' });
     await publish({ name: 'foo', version: '1.0.1' });
-    registries.mirror.behavior.hiddenVersions = ['1.0.1'];
+    registries.alibaba.behavior.hiddenVersions = ['1.0.1'];
     await install([{ name: 'foo', version: '1.0.1' }]);
     const pkg = JSON.parse(await fs.readFile(path.join(tmp, 'root/node_modules/foo/package.json')));
     assert.equal(pkg.version, '1.0.1');
@@ -167,10 +193,10 @@ describe('test/registry/mirror.test.js', () => {
 
   it('should share the manifest cache between sources', async () => {
     await publish({ name: 'foo', version: '1.0.0' });
-    await install([{ name: 'foo', version: '1.0.0' }], { order: ['mirror', 'official'] });
+    await install([{ name: 'foo', version: '1.0.0' }], { order: ['alibaba', 'npm', 'yarn'] });
     await fs.rm(path.join(tmp, 'root/node_modules'), { recursive: true });
     log.length = 0;
-    await install([{ name: 'foo', version: '1.0.0' }], { order: ['official', 'mirror'] });
+    await install([{ name: 'foo', version: '1.0.0' }], { order: ['npm', 'yarn', 'alibaba'] });
     assert.deepEqual(log, []);
   });
 
@@ -192,19 +218,19 @@ describe('test/registry/mirror.test.js', () => {
     await install([{ name: 'foo', version: '1.0.0' }], { extra: { refreshCache: true } });
     assert.deepEqual(
       log.map(line => line.split(':').slice(0, 2).join(':')),
-      ['mirror:meta', 'mirror:tgz']
+      ['alibaba:meta', 'alibaba:tgz']
     );
   });
 
   it('should not switch sources for a scope with its own registry', async () => {
-    await publish({ name: '@corp/foo', version: '1.0.0' }, {}, { only: ['official'] });
+    await publish({ name: '@corp/foo', version: '1.0.0' }, {}, { only: ['npm'] });
     const home = path.join(tmp, 'home');
     await fs.mkdir(home, { recursive: true });
-    await fs.writeFile(path.join(home, '.nprc'), `@corp:registry=${sources.official.registry}`);
+    await fs.writeFile(path.join(home, '.nprc'), `@corp:registry=${sources.npm.registry}`);
     const args = {
       root: path.join(tmp, 'root'),
       pkgs: [{ name: '@corp/foo', version: '1.0.0' }],
-      order: ['mirror', 'official'],
+      order: ['alibaba', 'npm', 'yarn'],
       sources,
       cacheDir: path.join(tmp, 'cache'),
     };
@@ -215,7 +241,7 @@ describe('test/registry/mirror.test.js', () => {
       .debug()
       .expect('code', 0)
       .end();
-    assert(log.length > 0 && log.every(line => line.startsWith('official:')), log.join(', '));
+    assert(log.length > 0 && log.every(line => line.startsWith('npm:')), log.join(', '));
   });
 
   it('should retry dependency install scripts with the other binary source', async () => {
@@ -227,7 +253,6 @@ describe('test/registry/mirror.test.js', () => {
       { manifest: { scripts: { install: script } } }
     );
     await install([{ name: 'bin-pkg', version: '1.0.0' }], {
-      order: ['mirror', 'official'],
       binaryOrder: ['official', 'mirror'],
       extra: {
         scriptPolicy: allowScripts.load({ argv: { 'allow-scripts': 'bin-pkg' } }),

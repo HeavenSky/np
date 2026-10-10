@@ -36,7 +36,7 @@ describe('test/scripts/postinstall-error.test.js', () => {
     await rimraf(path.join(cwd, 'node_modules'));
 
     await coffee
-      .fork(helper.npminstall, ['--production'], { cwd })
+      .fork(helper.npminstall, ['--production', '--detail'], { cwd })
       .debug()
       .expect('code', 0)
       .expect('stderr', /httpsync@\* optional error: .*Error: Command failed with exit code \d+: sh build\.sh/)

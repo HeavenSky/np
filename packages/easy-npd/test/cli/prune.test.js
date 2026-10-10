@@ -30,17 +30,15 @@ describe('test/cli/prune.test.js', () => {
     await cleanup();
   });
 
-  it('should remove versions left by upgrades only when asked', async () => {
+  it('should remove versions left by upgrades only when asked, and by uninstalls right away', async () => {
     await writePkg({ debug: '4.3.4', pedding: '1.1.0' });
     await run(helper.npminstall, []).expect('code', 0).end();
-    await writePkg({ debug: '3.2.7' });
+    await writePkg({ debug: '3.2.7', pedding: '1.1.0' });
     await run(helper.npminstall, []).expect('code', 0).end();
-    await run(x, ['uninstall', 'pedding']).expect('code', 0).end();
-    // 重装不删除旧版本; npd-x uninstall 自己会删除被卸载的版本目录
+    // 重装不删除旧版本
     const before = await storeEntries();
     assert(before.includes('_debug@4.3.4@debug'));
     assert((await stateKeys()).includes('_debug@4.3.4@debug'));
-    assert(!(await stateKeys()).some(key => key.startsWith('_pedding@')));
 
     await run(x, ['prune', '--dry-run'])
       .expect('code', 0)
@@ -52,6 +50,9 @@ describe('test/cli/prune.test.js', () => {
       .expect('code', 0)
       .expect('stdout', /removed _debug@4\.3\.4@debug/)
       .end();
+    // 卸载后立即回收被卸载的版本
+    await run(x, ['uninstall', 'pedding']).expect('code', 0).end();
+    assert(!(await stateKeys()).some(key => key.startsWith('_pedding@')));
     const after = await storeEntries();
     assert.deepEqual(after, ['_debug@3.2.7@debug', '_ms@2.1.3@ms']);
     assert.deepEqual((await stateKeys()).sort(), after);
@@ -59,14 +60,15 @@ describe('test/cli/prune.test.js', () => {
     assert.equal(require(path.join(tmp, 'node_modules/debug/package.json')).version, '3.2.7');
   });
 
-  it('should resolve symlinked --root and node_modules before comparing link targets', async () => {
+  it('should resolve a symlinked project folder and node_modules before comparing link targets', async () => {
     await writePkg({ debug: '4.3.4' });
     await run(helper.npminstall, []).expect('code', 0).end();
     const before = await storeEntries();
     assert(before.length > 0);
 
     await fs.symlink(tmp, link, 'junction');
-    await run(x, ['prune', '--dry-run', `--root=${link}`])
+    await coffee
+      .fork(x, ['prune', '--dry-run'], { cwd: link, env: { ...process.env, np_lockfile: 'false' } })
       .expect('code', 0)
       .expect('stdout', /Found 0 unreferenced/)
       .end();

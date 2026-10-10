@@ -1,7 +1,6 @@
 'use strict';
 
 const npminstall = require('../..');
-const config = require('../../lib/config');
 const utils = require('../../lib/utils');
 const Context = require('../../lib/context');
 
@@ -19,7 +18,7 @@ module.exports.installGlobal = async options => {
 
 async function formatOptions(options) {
   if (process.env.local) {
-    options.registry = config.chineseRegistry;
+    options.registry = 'https://registry.npmmirror.com';
     options.binaryMirrors = await utils.getBinaryMirrors(options.registry);
     options.env = options.env || {};
     for (const key in options.binaryMirrors.ENVS) {

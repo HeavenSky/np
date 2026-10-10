@@ -5,7 +5,7 @@ const npa = require('npm-package-arg');
 const ms = require('ms');
 const { LOCAL_TYPES } = require('./npa_types');
 const utils = require('./utils');
-const { MIRROR_ATTEMPTS } = require('./get');
+const { BINARY_ATTEMPTS } = require('./get');
 const { useBinarySource } = require('./download/npm');
 const allowScripts = require('./allow_scripts');
 
@@ -129,7 +129,7 @@ async function runScriptWithMirrors(root, cmd, displayName, script, binarySource
     try {
       return await utils.runScript(root, cmd, { ...globalOptions, env }, runInForeground);
     } catch (err) {
-      if (attempt >= MIRROR_ATTEMPTS) throw err;
+      if (attempt >= BINARY_ATTEMPTS) throw err;
       binarySource.current = mirrorState.binaryOrder.find(name => name !== binarySource.current);
       globalOptions.console.warn(
         chalk.yellow('[np:runscript] %s %s failed, retry with %s binary source (%s/%s): %s'),
@@ -137,7 +137,7 @@ async function runScriptWithMirrors(root, cmd, displayName, script, binarySource
         script,
         binarySource.current,
         attempt + 1,
-        MIRROR_ATTEMPTS,
+        BINARY_ATTEMPTS,
         err.message
       );
       await useBinarySource(root, binarySource.current, globalOptions);

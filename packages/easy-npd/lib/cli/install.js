@@ -22,115 +22,149 @@ const npLock = require('../np_lock');
 const proxy = require('../proxy');
 const runtime = require('../runtime');
 const allowScripts = require('../allow_scripts');
+const foreignConfig = require('../foreign_config');
+const npConfig = require('../np_config');
+const cliProfile = require('./profile');
 const { PREPARE_CHILD_ENV } = require('../download/git');
 const help = require('./help');
 
 // 三态开关: 命令行开 / 关, 未传时由环境变量与 ~/.nprc 决定
-const TRISTATE_FLAGS = ['dangerously-allow-all-scripts', 'strict-allow-scripts', 'strict-ssl'];
+const TRISTATE_FLAGS = ['dangerously-allow-all-scripts', 'strict-allow-scripts', 'strict-ssl', 'lockfile'];
 // 可重复传入且各项合并的参数; 其余参数重复传入时与 npm 一致取最后一个
-const MULTI_VALUE_FLAGS = ['allow-scripts'];
+const MULTI_VALUE_FLAGS = ['allow-scripts', 'only', 'include', 'omit', 'exclude'];
+// 已移除的参数报错而不是忽略: 未声明的开关会把紧跟其后的包名当作自己的值吞掉, 安装结果静默改变
+const REMOVED_FLAGS = {
+  save: 'packages are saved to dependencies by default',
+  'save-dev': 'use --write=dev',
+  'save-optional': 'use --write=optional',
+  'save-exact': 'use --write-exact',
+  'save-client': 'use --write=client',
+  'save-build': 'use --write=build',
+  'save-isomorphic': 'use --write=isomorphic',
+  'save-deps': 'use --write=<type>',
+  client: 'use --only=client,build,isomorphic',
+  'with-deps': 'use --include=<type>',
+  optional: 'use --omit=optional',
+  'legacy-peer-deps': 'use --omit=peer',
+  'cache-strict': '--production no longer turns off the disk cache, use --no-cache to turn it off',
+  'dependencies-tree': 'np-lock.json records the resolved versions',
+  'save-dependencies-tree': 'np-lock.json records the resolved versions',
+  'lockfile-path': 'use --from-package-lock',
+  'fetch-only': 'use npd-x fetch',
+  rebuild: 'use npd-x rebuild',
+  root: 'run npd in that folder instead',
+  flatten: 'it is no longer supported',
+  'fix-bug-versions': 'it is no longer supported',
+  'tarball-url-mapping': 'it is no longer supported',
+  'high-speed-store': 'it is no longer supported',
+  china: 'public registries and binary mirrors switch automatically by speed',
+  'custom-china-mirror-url': 'binary mirrors switch automatically by speed',
+  prune: 'it silently broke packages such as @tsconfig/*',
+  'force-link-latest': 'the latest version is always linked',
+  'disable-dedupe': 'the latest version of every package is always linked into node_modules',
+};
+const REMOVED_SHORT_FLAGS = {
+  S: 'packages are saved to dependencies by default',
+  D: 'use --write=dev',
+  O: 'use --write=optional',
+  E: 'use --write-exact',
+  d: 'use --detail',
+  c: 'public registries and binary mirrors switch automatically by speed',
+};
+// <type> 的格式, 对应 package.json 的 <type>Dependencies 字段
+const DEP_TYPE = /^[a-z][a-zA-Z0-9]*$/;
+// 内置类型的字段名, 其他 <type> 对应 <type>Dependencies
+const TYPE_FIELDS = {
+  prod: 'dependencies',
+  dev: 'devDependencies',
+  optional: 'optionalDependencies',
+  peer: 'peerDependencies',
+};
+const fieldOf = type => TYPE_FIELDS[type] || `${type}Dependencies`;
+// 不传 --only 时安装的类型
+const DEFAULT_TYPES = ['prod', 'dev', 'optional'];
+// npm 定义的依赖字段, 其余 <type>Dependencies 字段只在 --only / --include 列出时安装
+const STANDARD_DEP_FIELDS = new Set([
+  'dependencies',
+  'devDependencies',
+  'optionalDependencies',
+  'peerDependencies',
+  'bundleDependencies',
+  'bundledDependencies',
+]);
 
-module.exports = async function install(args, { ignorePkgNames = false, ignoreLockfile = false } = {}) {
+// mode: install, 或由 npd-x fetch / npd-x rebuild 转入的 fetch, rebuild
+module.exports = async function install(
+  args,
+  { ignorePkgNames = false, ignoreLockfile = false, mode = 'install' } = {}
+) {
   try {
-    await main(args, { ignorePkgNames, ignoreLockfile });
+    await main(args, { ignorePkgNames, ignoreLockfile, mode });
   } catch (err) {
-    // 失败汇总已列出每个包的错误, 不再打印调用栈
-    console.error(chalk.red(utils.redactUrl(err.code === utils.INSTALL_FAILURES_CODE ? err.message : err.stack)));
-    console.error(chalk.yellow('npd version: %s'), require('../../package.json').version);
-    console.error(chalk.yellow('npd args: %s'), utils.redactUrl(process.argv.join(' ')));
-    process.exit(1);
+    utils.exitWithError('npd', err);
   }
 };
 
-async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {}) {
+async function main(args, { ignorePkgNames = false, ignoreLockfile = false, mode = 'install' } = {}) {
   const originalArgv = args;
 
   // since minimist consider --no-xx is xx:false, we handle it manually here
-  const argv = { 'no-save': originalArgv.includes('--no-save') };
+  // --no-write 与 --no-save 相同
+  const argv = { 'no-save': originalArgv.includes('--no-save') || originalArgv.includes('--no-write') };
   Object.assign(
     argv,
     parseArgs(originalArgv, {
       string: [
-        'root',
         'registry',
         'prefix',
         'forbidden-licenses',
-        // {"http://a.com":"http://b.com"}
-        'tarball-url-mapping',
         'proxy',
         'https-proxy',
         'noproxy',
         'cafile',
         // 依赖脚本放行名单, 可重复传入
         'allow-scripts',
-        // --high-speed-store=filepath
-        'high-speed-store',
-        'dependencies-tree',
-        /**
-         * set package-lock.json path
-         *
-         * 1. only support package lock v2 and v3.
-         * 2. npd doesn't inspect <cwd>/package-lock.json by default.
-         * 3. because arborist doesn't support client/build/isomorphic dependencies,
-         *    these kinds of dependencies will all be ignored.
-         * 4. this option doesn't do extra check for the equivalence of package-lock.json and package.json
-         *    simply behaves like `npm ci` but doesn't remove the node_modules in advance.
-         * 5. you're not supposed to install extra dependencies along with a lockfile.
-         */
-        'lockfile-path',
+        // npd --only=prod, npd --only=client,build: 只安装这些类型对应的字段
+        'only',
+        // npd --include=client: 另外安装 clientDependencies
+        'include',
+        // npd --omit=dev, --exclude 与它相同
+        'omit',
+        'exclude',
+        // npd foo --write=dev: 保存到 devDependencies
+        'write',
+        // 按 package-lock.json(lockfileVersion >= 2)中锁定的版本安装, 其中的 optionalDependencies 被忽略
+        'from-package-lock',
         'probe-cache',
       ],
       boolean: [
         'version',
         'help',
         'production',
-        'client',
+        'prod',
         'global',
-        'save',
-        'save-dev',
-        'save-optional',
-        'save-client',
-        'save-build',
-        'save-isomorphic',
         // Saved dependencies will be configured with an exact version rather than using npm's default semver range operator.
-        'save-exact',
+        'write-exact',
         'ignore-scripts',
-        // install ignore optionalDependencies
-        'optional',
         'detail',
         'trace',
         'engine-strict',
-        'legacy-peer-deps',
-        'flatten',
         'registry-only',
-        'cache-strict',
-        'fix-bug-versions',
+        'prefer-offline',
         // --prune 已移除: 按固定名单跳过解压文件会误删 tsconfig.json 等运行时文件
-        'save-dependencies-tree',
-        'fetch-only',
         'refresh-cache',
         'frozen-lockfile',
-        'rebuild',
         'offline',
-        // 只为兼容 npm 与 easy-np 而接受, npd 的脚本输出总是直接显示; 不声明时会吞掉紧跟其后的包名
+        // run scripts on foreground, default is background
         'foreground-scripts',
         ...TRISTATE_FLAGS,
         // --force-link-latest 已移除: 提升到根目录时始终链接最高版本
       ],
-      default: {
-        optional: true,
-      },
       alias: {
-        // npm install [-S|--save|-D|--save-dev|-O|--save-optional] [-E|--save-exact] [-d|--detail]
-        S: 'save',
-        D: 'save-dev',
-        O: 'save-optional',
-        E: 'save-exact',
         v: 'version',
         h: 'help',
         g: 'global',
         r: 'registry',
-        d: 'detail',
       },
     })
   );
@@ -141,29 +175,61 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
       argv[key] = argv[key][argv[key].length - 1];
     }
   }
+  const end = originalArgv.indexOf('--');
+  const flagArgs = end === -1 ? originalArgv : originalArgv.slice(0, end);
+  for (const [name, hint] of Object.entries(REMOVED_FLAGS)) {
+    // --no-save 仍然有效, 只有 --save 被移除
+    const negated = name === 'save' ? null : `--no-${name}`;
+    if (flagArgs.some(arg => arg === `--${name}` || arg === negated || arg.startsWith(`--${name}=`))) {
+      throw new Error(`--${name} has been removed, ${hint}`);
+    }
+  }
+  for (const arg of flagArgs.filter(arg => /^-[^-]/.test(arg))) {
+    const letter = [...arg.slice(1).split('=')[0]].find(letter => REMOVED_SHORT_FLAGS[letter]);
+    if (letter) throw new Error(`-${letter} has been removed, ${REMOVED_SHORT_FLAGS[letter]}`);
+  }
+  // npd foo --write dev 也能解析, 但 npd foo --write bar 会把包名 bar 当作类型吞掉, 只接受 --write=<type>
+  if (flagArgs.includes('--write')) throw new Error('--write only accepts the --write=<type> form, e.g. --write=dev');
+
+  // npd 补上 --no-lockfile 与 --dangerously-allow-all-scripts; 命令行给出了同名参数或 --frozen-lockfile 时不补
+  for (const [name, value] of Object.entries(cliProfile.defaultArgs())) {
+    if (argv[name] !== undefined || (name === 'lockfile' && argv['frozen-lockfile'])) continue;
+    argv[name] = value;
+  }
 
   if (argv.version) {
     console.log(`npd v${require('../../package.json').version}`);
     process.exit(0);
   }
 
-  if (argv.help && argv['fetch-only']) {
-    console.log(help.fetch());
-    process.exit(0);
-  }
-
-  if (argv.help && argv.rebuild) {
-    console.log(help.rebuild());
-    process.exit(0);
-  }
-
   if (argv.help) {
-    console.log(help.install());
+    console.log(mode === 'fetch' ? help.fetch() : mode === 'rebuild' ? help.rebuild() : help.install());
     process.exit(0);
   }
+
+  const only = parseDepTypes(argv.only, '--only');
+  if (argv.prod) only.push('prod');
+  const include = parseDepTypes(argv.include, '--include');
+  const omit = parseDepTypes([].concat(argv.omit ?? [], argv.exclude ?? []), '--omit');
+  // 只在没有 --only 时生效: --production 与 NODE_ENV=production 省略 dev, --omit=optional / peer 作用到整棵依赖树
+  if (only.length === 0 && (argv.production || process.env.NODE_ENV === 'production')) omit.push('dev');
+  // 同时出现在 --include 与 --omit 中的类型照常安装
+  const omitted = new Set(omit.filter(type => !include.includes(type)));
+  const installTypes = [...new Set([...(only.length ? only : DEFAULT_TYPES), ...include])].filter(
+    type => !omitted.has(type)
+  );
+  const rootFields = installTypes.map(fieldOf);
+  const omitTreeOptional = only.length === 0 && omitted.has('optional');
+  const omitPeers = only.length === 0 && omitted.has('peer');
+  // minimist 把 --no-write 解析为 write: false, 它只表示不保存
+  const write = argv.write === undefined || argv.write === false ? null : parseDepTypes(argv.write, '--write');
+  if (write && write.length !== 1) throw new Error('--write takes one type, e.g. --write=dev');
+  if (write && argv._.length === 0) throw new Error('--write needs package names, e.g. npd foo --write=dev');
 
   // 首个网络请求与子进程启动之前写入, 安装脚本, node-gyp 与 git 通过环境变量继承
   proxy.configure(argv);
+  // 下面按 argv 生成的 npm_config_* 会覆盖给安装脚本, 必须用 proxy 转换后的绝对路径
+  if (argv.cafile) argv.cafile = process.env.npm_config_cafile;
   runtime.warnIfDegraded();
 
   const pkgs = [];
@@ -177,7 +243,7 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
   for (const name of argv._) {
     context.nested.update([name]);
     const [aliasPackageName] = parsePackageName(name, context.nested);
-    const p = npa(name, { where: argv.root, nested: context.nested });
+    const p = npa(name, { nested: context.nested });
     // `mozilla/nunjucks#0f8b21b8df7e8e852b2e1889388653b7075f0d09` should be rawSpec
     // `npd foo` 未写版本时 npa 补成 latest tag, 改传 `*` 以便选版时与显式的 `foo@latest` 区分并检查 engines
     const version = p.type === 'tag' && !p.rawSpec ? '*' : p.fetchSpec || p.rawSpec;
@@ -194,47 +260,42 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
       floating: spec.type === 'tag' || spec.fetchSpec === '*',
     });
   }
-  if (argv['frozen-lockfile'] && pkgs.length > 0 && !argv.global && !argv.rebuild && !argv['fetch-only']) {
+  if (argv['frozen-lockfile'] && pkgs.length > 0 && !argv.global && mode === 'install') {
     throw new Error('--frozen-lockfile can not be used with package arguments, they would change np-lock.json');
   }
 
-  const root = argv.root || process.cwd();
-  const production = argv.production || process.env.NODE_ENV === 'production';
+  const root = process.cwd();
+  // pnpm-workspace.yaml 与 package.json 的 pnpm 字段; 全局安装没有项目配置
+  const pnpmSettings = !argv.global ? foreignConfig.pnpm(root) : {};
+  const production = !installTypes.includes('dev');
   let cacheDir = argv.cache === false ? '' : null;
-  if (production) {
-    cacheDir = '';
-  }
   // support npm_config_cache to change default cache dir
   if (cacheDir === null && process.env.npm_config_cache) {
     cacheDir = process.env.npm_config_cache;
   }
-  if (process.env.np_cache) {
+  // --no-cache 优先于 np_cache
+  if (process.env.np_cache && argv.cache !== false) {
     cacheDir = process.env.np_cache;
   }
-  // 测速缓存不受 --production 关闭磁盘缓存影响, 只在 --no-cache 时停用
+  // 测速缓存与磁盘缓存一样只在 --no-cache 时停用
   const probeCacheDir =
     argv.cache === false
       ? ''
       : process.env.np_cache || process.env.npm_config_cache || path.join(os.homedir(), '.np_tarball');
   const offline = !!argv.offline;
   // rebuild 优先用磁盘缓存中的 manifest 与 tgz, 缓存缺失时才联网
-  const preferOffline = !!argv.rebuild && !offline;
-  if (offline && cacheDir === '' && !argv['cache-strict']) {
-    console.error(
-      chalk.red(
-        'npd ERROR --offline needs the disk cache, it can not be used with --no-cache, or --production without --cache-strict'
-      )
-    );
+  const preferOffline = (mode === 'rebuild' || !!argv['prefer-offline']) && !offline;
+  if (offline && cacheDir === '') {
+    console.error(chalk.red('npd ERROR --offline needs the disk cache, it can not be used with --no-cache'));
     process.exit(1);
   }
 
   let forbiddenLicenses = argv['forbidden-licenses'];
   forbiddenLicenses = forbiddenLicenses ? forbiddenLicenses.split(',') : null;
 
-  const flatten = argv.flatten;
-
-  let registry = argv.registry || process.env.npm_registry;
-  // 未指定 registry 或指定的是 npmmirror / npmjs 时自动换源, 指定私有源时全部关闭; 指定公共源时跳过测速并以它优先
+  // --registry > npm_registry > ~/.nprc > .npmrc
+  let registry = argv.registry || process.env.npm_registry || npConfig.get('registry') || foreignConfig.registry();
+  // 未指定 registry 或指定的是 5 个公共源之一时自动换源, 指定私有源时全部关闭; 指定公共源时它排第一, 其余名次仍按测速
   const preferSource = registry ? mirror.sourceOf(registry) : null;
   const autoMirror = !registry || !!preferSource;
   // for env.npm_config_registry
@@ -315,7 +376,6 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
     registry,
     pkgs,
     production,
-    cacheStrict: argv['cache-strict'],
     cacheDir,
     refreshCache: argv['refresh-cache'],
     offline,
@@ -324,25 +384,25 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
     env,
     binaryMirrors,
     forbiddenLicenses,
-    flatten,
   };
   const gitPrepareChild = process.env[PREPARE_CHILD_ENV] === '1';
   config.ignoreScripts = gitPrepareChild || argv['ignore-scripts'] || getIgnoreScripts();
   config.scriptPolicy = gitPrepareChild
     ? allowScripts.empty()
-    : allowScripts.load({ root, global: !!argv.global, argv });
-  config.rebuild = argv.rebuild;
-  config.ignoreOptionalDependencies = !argv.optional;
+    : allowScripts.load({ root, global: !!argv.global, argv, pnpm: pnpmSettings });
+  config.rebuild = mode === 'rebuild';
+  config.foregroundScripts = argv['foreground-scripts'];
+  config.ignoreOptionalDependencies = omitTreeOptional;
   config.detail = argv.detail;
   config.trace = argv.trace;
   config.engineStrict = argv['engine-strict'];
-  config.legacyPeerDeps = argv['legacy-peer-deps'];
+  config.legacyPeerDeps = omitPeers;
   config.registryOnly = argv['registry-only'];
-  if (config.production || argv.global) {
-    // make sure show detail on production install or global install
+  if (argv.global) {
+    // make sure show detail on global install
     config.detail = true;
   }
-  config.client = argv.client;
+  config.rootFields = rootFields;
 
   process.on('exit', code => {
     if (code !== 0) {
@@ -350,26 +410,7 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
     }
   });
 
-  if (argv['tarball-url-mapping']) {
-    const tarballUrlMapping = JSON.parse(argv['tarball-url-mapping']);
-    config.formatNpmTarbalUrl = function formatNpmTarbalUrl(url) {
-      for (const fromUrl in tarballUrlMapping) {
-        const toUrl = tarballUrlMapping[fromUrl];
-        url = url.replace(fromUrl, toUrl);
-      }
-      return url;
-    };
-  }
-
-  if (argv['fix-bug-versions']) {
-    const packageVersionMapping = await utils.getBugVersions(registry, { offline, preferOffline });
-    config.autoFixVersion = function autoFixVersion(name, version) {
-      const fixVersions = packageVersionMapping[name];
-      return (fixVersions && fixVersions[version]) || null;
-    };
-  }
-
-  const lockfilePath = argv['lockfile-path'];
+  const lockfilePath = argv['from-package-lock'];
   if (lockfilePath) {
     // 加载失败必须中止: 回退到联网解析会装出与 lockfile 不一致的版本且退出码为 0
     try {
@@ -382,26 +423,21 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
     }
   }
 
-  const dependenciesTree = argv['dependencies-tree'];
-  if (dependenciesTree) {
-    try {
-      const content = await fs.readFile(dependenciesTree);
-      config.dependenciesTree = JSON.parse(content);
-    } catch (err) {
-      console.warn(chalk.yellow('npd WARN load dependencies tree %s error: %s'), dependenciesTree, err.message);
-    }
-  }
-  if (argv['save-dependencies-tree']) {
-    config.saveDependenciesTree = true;
-  }
-
-  // 默认读写 <root>/np-lock.json; --lockfile-path, --dependencies-tree 与 -g 有各自的版本来源, 不使用它
+  // 默认读写 <root>/np-lock.json; --from-package-lock 与 -g 有各自的版本来源, 不使用它
   let lockState = null;
   // 与 easy-np 共用同一份锁文件, 开关也读同一个 config.np.lockfile
   const rootPkg = await utils.readJSON(path.join(root, 'package.json'));
   const rootConfig = rootPkg.config?.np || {};
-  const lockfileDisabled = argv.lockfile === false || ['0', 'false'].includes(process.env.np_lockfile);
-  if (!argv.global && !lockfilePath && !dependenciesTree && !lockfileDisabled && rootConfig.lockfile !== false) {
+  // 取第一个有配置的来源: --lockfile / --no-lockfile > --frozen-lockfile > 环境变量 np_lockfile > config.np.lockfile > npm 与 pnpm 配置; npd 入口的 --no-lockfile 已作为命令行参数传入
+  const lockfileEnabled =
+    [
+      argv.lockfile,
+      argv['frozen-lockfile'] || undefined,
+      foreignConfig.toBool(process.env.np_lockfile),
+      rootConfig.lockfile,
+      foreignConfig.lockfile(pnpmSettings),
+    ].find(value => typeof value === 'boolean') ?? true;
+  if (!argv.global && !lockfilePath && lockfileEnabled) {
     const lockExists = await npLock.exists(root);
     if (argv['frozen-lockfile'] && !lockExists) {
       throw new Error(`--frozen-lockfile requires ${npLock.LOCKFILE_NAME} in ${root}`);
@@ -416,7 +452,12 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
       config.lockPackages = {};
       config.frozenLockfile = !!argv['frozen-lockfile'];
       // 锁文件与 easy-np 共用, easy-np 在 workspace 根记录全部成员的依赖; 按完整安装覆盖会删掉它们
-      lockState = { previous, workspaces: !!rootPkg.workspaces };
+      // np-x 还把 pnpm-workspace.yaml 的 packages 当作 workspaces, 这里不论入口都要识别
+      const pnpmPackages = foreignConfig.pnpm(root).packages;
+      lockState = {
+        previous,
+        workspaces: !!rootPkg.workspaces || (Array.isArray(pnpmPackages) && pnpmPackages.length > 0),
+      };
     }
   }
   if (rootPkg.workspaces && !argv.global) {
@@ -426,11 +467,7 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
     );
   }
 
-  if (argv['high-speed-store']) {
-    config.highSpeedStore = require(argv['high-speed-store']);
-  }
-
-  if (argv['fetch-only']) {
+  if (mode === 'fetch') {
     if (argv.global || pkgs.length === 0) {
       throw new Error('npd-x fetch needs at least one package and does not support -g');
     }
@@ -438,7 +475,7 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
     return;
   }
 
-  if (argv.rebuild && pkgs.length > 0) {
+  if (mode === 'rebuild' && pkgs.length > 0) {
     if (argv.global) {
       throw new Error('npd-x rebuild <pkg> does not support -g');
     }
@@ -484,35 +521,61 @@ async function main(args, { ignorePkgNames = false, ignoreLockfile = false } = {
         console.warn(chalk.yellow(`npd WARN package.json does not exist: ${pkgFile}`));
       }
     }
-    await installLocal(config, context);
-    const saved = [];
-    if (pkgs.length > 0) {
-      // support --save, --save-dev, --save-optional, --save-client, --save-build and --save-isomorphic
-      const map = {
-        save: 'dependencies',
-        'save-dev': 'devDependencies',
-        'save-optional': 'optionalDependencies',
-        'save-client': 'clientDependencies',
-        'save-build': 'buildDependencies',
-        'save-isomorphic': 'isomorphicDependencies',
-      };
-
-      //    install saves any specified packages into dependencies by default.
-      if (Object.keys(map).every(key => !argv[key]) && !argv['no-save']) {
-        saved.push(...(await updateDependencies(root, pkgs, map.save, argv['save-exact'], config.remoteNames)));
-      } else {
-        for (const key in map) {
-          if (argv[key]) {
-            saved.push(...(await updateDependencies(root, pkgs, map[key], argv['save-exact'], config.remoteNames)));
-          }
+    // npd --only foo 会把本想安装的包名 foo 当作类型: 自定义类型在 package.json 中没有对应字段时报错
+    if (pkgs.length === 0) {
+      for (const type of new Set([...only, ...include, ...omit])) {
+        if (!TYPE_FIELDS[type] && !rootPkg[fieldOf(type)]) {
+          throw new Error(`no ${fieldOf(type)} in package.json for type "${type}"`);
         }
       }
     }
+    // 只在没有 --only 的完整安装时提示; 有跳过的字段时锁文件按部分安装只追加, 保留用 --include 安装时记下的条目
+    const skippedDepFields = pkgs.length === 0 && only.length === 0 ? getSkippedDepFields(rootPkg, rootFields) : [];
+    if (skippedDepFields.length > 0) {
+      console.warn(
+        chalk.yellow('npd WARN %s in package.json are not installed, pass --include=%s to install them'),
+        skippedDepFields.join(', '),
+        skippedDepFields.map(field => field.replace(/Dependencies$/, '')).join(',')
+      );
+    }
+    await installLocal(config, context);
+    const saved = [];
+    // 默认保存到 dependencies, --write=<type> 保存到对应字段, --no-save 不修改 package.json
+    if (pkgs.length > 0 && !argv['no-save']) {
+      const field = write ? fieldOf(write[0]) : 'dependencies';
+      saved.push(...(await updateDependencies(root, pkgs, field, argv['write-exact'], config.remoteNames)));
+    }
     relockSavedPackages(lockState, config, pkgs, saved);
     await writeLockfile(root, lockState, config, {
-      full: pkgs.length === 0 && !config.production && argv.optional !== false && !argv.client,
+      full: pkgs.length === 0 && only.length === 0 && omitted.size === 0 && skippedDepFields.length === 0,
     });
   }
+}
+
+// 逗号分隔且可重复传入的依赖类型名; 校验格式, 防止把包名或路径当作类型
+function parseDepTypes(value, flag) {
+  const types = []
+    .concat(value ?? [])
+    .flatMap(item => String(item).split(','))
+    .map(item => item.trim())
+    .filter(Boolean);
+  for (const type of types) {
+    if (!DEP_TYPE.test(type)) throw new Error(`${flag} takes dependency types like client or build, got "${type}"`);
+  }
+  return [...new Set(types)];
+}
+
+// package.json 中声明了但本次不安装的非标准依赖字段, 如未传 --include=client 时的 clientDependencies
+function getSkippedDepFields(pkg, rootFields) {
+  return Object.keys(pkg).filter(
+    field =>
+      /^[a-z][a-zA-Z0-9]*Dependencies$/.test(field) &&
+      !STANDARD_DEP_FIELDS.has(field) &&
+      !rootFields.includes(field) &&
+      pkg[field] &&
+      typeof pkg[field] === 'object' &&
+      Object.keys(pkg[field]).length > 0
+  );
 }
 
 // 必须等于安装时记录锁文件条目所用的键, 否则保存后改挂锁键时静默找不到条目

@@ -45,7 +45,6 @@ const Context = require('./context');
  *  - {Boolean} [production] - production mode install, default is `false`
  *  - {Object} [env] - postinstall and preinstall scripts custom env.
  *  - {String} [cacheDir] - tarball cache store dir, default is `$HOME/.np_tarball`.
- *  	if `production` mode enable, `cacheDir` will be disable.
  *  - {Object} [binaryMirrors] - binary mirror config, default is `{}`
  *  - {Boolean} [ignoreScripts] - ignore pre / post install scripts, default is `false`
  *  - {Array} [forbiddenLicenses] - forbid installing packages that use these licenses
@@ -126,19 +125,17 @@ async function _install(options, context) {
   const rootPkg = await utils.readJSON(rootPkgFile);
   const displayName = `${rootPkg.name}@${rootPkg.version}`;
   let pkgs = options.pkgs;
-  const rootPkgDependencies = dependencies(rootPkg, options, context.nested);
+  const rootPkgDependencies = dependencies(rootPkg, options, context.nested, options.rootFields);
   options.rootPkgDependencies = rootPkgDependencies;
   options.resolution = createResolution(rootPkg, options);
   if (pkgs.length === 0) {
-    if (options.client) {
-      pkgs = rootPkgDependencies.client;
-    } else if (options.production) {
+    if (options.production) {
       pkgs = rootPkgDependencies.prod;
     } else {
       pkgs = rootPkgDependencies.all;
     }
     debug(
-      `about to locally install pkgs (production: ${options.production}, client: ${options.client}): ${JSON.stringify(pkgs, null, 2)}`
+      `about to locally install pkgs (production: ${options.production}, rootFields: ${options.rootFields}): ${JSON.stringify(pkgs, null, 2)}`
     );
   } else {
     // try to fix no version package from rootPkgDependencies
@@ -209,8 +206,6 @@ async function _install(options, context) {
   recordPackageVersions(options);
 
   // record dependencies tree resolved from npm
-  recordDependenciesTree(options);
-
   printOptionalFailures(options);
   const scriptPolicyError = allowScripts.report(options);
   if (scriptPolicyError) options.failures.push({ displayName: 'allowScripts', error: scriptPolicyError });
@@ -375,7 +370,7 @@ async function linkAllLatestVersion(rootPkgsMap, options) {
 // 根目录直接依赖与提升链接都指向 _name@ver@name, 只能按 package.json 声明名单区分, 声明过的包永不覆盖
 function isDeclaredRootPkg(name, options) {
   const { rootPkgDependencies } = options;
-  return name in rootPkgDependencies.allMap || name in rootPkgDependencies.clientMap;
+  return name in rootPkgDependencies.allMap;
 }
 
 // 完整安装时指向本 storeDir 下 _name@ver@name 的链接视为上次的提升结果, 直接更新为本次依赖树中的最高版本
@@ -640,17 +635,6 @@ function recordPackageVersions(options) {
   }
   const packageVersionsFile = path.join(options.storeDir, '.package_versions.json');
   writeFileSync(packageVersionsFile, JSON.stringify(versions, null, 2));
-}
-
-function recordDependenciesTree(options) {
-  if (!options.saveDependenciesTree) return;
-
-  const tree = {};
-  for (const key in options.cache.dependenciesTree) {
-    tree[key] = utils.omitPackage(options.cache.dependenciesTree[key]);
-  }
-  const installCacheFile = path.join(options.storeDir, '.dependencies_tree.json');
-  writeFileSync(installCacheFile, JSON.stringify(tree, null, 2));
 }
 
 function finishInstall(options) {

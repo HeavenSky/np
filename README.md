@@ -1,13 +1,15 @@
 # np
 
-本仓库维护两个互相独立的 npm 包, 均 fork 自 [cnpm/npminstall](https://github.com/cnpm/npminstall), 各自安装依赖, 测试与发布, 不共享代码. 选用哪个包, 或要在本仓库开发时读本页; 用法见各包 README.
+本仓库维护两个互相独立的 npm 包安装工具, 各自安装依赖, 测试与发布, 不共享代码. 选用哪个包, 或要在本仓库开发时读本页; 命令与参数见各包 README.
 
-| 包                                          | 上游 npminstall | 命令                     | 适用场景                                                  |
-| ------------------------------------------- | --------------- | ------------------------ | --------------------------------------------------------- |
-| [`easy-np`](./packages/easy-np/README.md)   | 8.0.1           | `np`, `np-x <command>`   | `.store` 布局, 支持 npm workspaces                        |
-| [`easy-npd`](./packages/easy-npd/README.md) | 6.8.0           | `npd`, `npd-x <command>` | `_name@version@name` 扁平布局, 根目录链接每个包的最高版本 |
+| 包                                          | 命令                     | 适用场景                                                  |
+| ------------------------------------------- | ------------------------ | --------------------------------------------------------- |
+| [`easy-np`](./packages/easy-np/README.md)   | `np`, `np-x <command>`   | `.store` 布局, 支持 npm workspaces                        |
+| [`easy-npd`](./packages/easy-npd/README.md) | `npd`, `npd-x <command>` | `_name@version@name` 扁平布局, 根目录链接每个包的最高版本 |
 
-各包 README 分「新增功能」与「与上游的差异」两部分说明相对 npminstall 的变化. 两个包的命令名互不冲突, 可以同时全局安装: `npm i -g easy-np easy-npd`; npm 不支持从 git 仓库子目录安装.
+`np-x install` / `npd-x install` 贴近 npm 与 pnpm: 默认读写 `np-lock.json`, 依赖脚本按 `allowScripts` 放行, 兼容读取 `.npmrc`, `pnpm-workspace.yaml` 与 `package.json` 的 `pnpm` 字段. `np` / `npd` 与之完全相同, 只是固定补上 `--no-lockfile --dangerously-allow-all-scripts`, 这两个参数只能在命令行覆盖. 两个包的命令名互不冲突, 可以同时全局安装: `npm i -g easy-np easy-npd`; npm 不支持从 git 仓库子目录安装.
+
+两个包的代码分别起源于 [cnpm/npminstall](https://github.com/cnpm/npminstall) 8.0.1(easy-np)与 6.8.0(easy-npd); 与 npminstall 的差异与移除项见各包 README.
 
 ## 共用缓存与配置
 
@@ -30,7 +32,7 @@ npm run test:np
 npm run test:npd
 ```
 
-- 两个包的脚本名一致: `test`, `test-cov`, `lint`, `fmt`, `fmt:check`.
+- 两个包的脚本名一致: `test`, `test-cov`, `lint`(带 `--fix`), `lint:check`, `fmt`(带 `--write`), `fmt:check`.
 - 测试按功能放在 `test/<目录>/` 下一层, 支持文件在 `test/support/`; package.json 与 CI 的 mocha spec 写作 `test/*/*.test.js`, 不能写成 `test/**`: fixtures 中依赖包自带的 `*.test.js` 会被当作用例; spec 也不能放进 `.mocharc.js`, 否则命令行指定单个文件时会与它合并成全量.
 - 一个修复要同时用到两个包时, 分别修改并分别提交, 不抽公共代码.
 - 版本号, `CHANGELOG.md` 与发布各自独立.

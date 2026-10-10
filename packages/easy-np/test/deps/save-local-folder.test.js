@@ -14,7 +14,7 @@ describe('test/deps/save-local-folder.test.js', () => {
 
   it('should --save install work', async () => {
     await coffee
-      .fork(helper.npminstall, ['--save', demo], {
+      .fork(helper.npminstall, [demo], {
         cwd: root,
       })
       // .debug()
@@ -27,7 +27,7 @@ describe('test/deps/save-local-folder.test.js', () => {
 
   it('should --save-dev install work', async () => {
     await coffee
-      .fork(helper.npminstall, ['--save-dev', demo], {
+      .fork(helper.npminstall, ['--write=dev', demo], {
         cwd: root,
       })
       // .debug()
@@ -38,9 +38,9 @@ describe('test/deps/save-local-folder.test.js', () => {
     assert(await exists(path.join(root, 'node_modules/demo')));
   });
 
-  it('should --save-client install work', async () => {
+  it('should --write=client install work', async () => {
     await coffee
-      .fork(helper.npminstall, ['--save-client', demo], {
+      .fork(helper.npminstall, ['--write=client', demo], {
         cwd: root,
       })
       // .debug()
@@ -51,9 +51,9 @@ describe('test/deps/save-local-folder.test.js', () => {
     assert(await exists(path.join(root, 'node_modules/demo')));
   });
 
-  it('should --save-build install work', async () => {
+  it('should --write=build install work', async () => {
     await coffee
-      .fork(helper.npminstall, ['--save-build', demo], {
+      .fork(helper.npminstall, ['--write=build', demo], {
         cwd: root,
       })
       // .debug()
@@ -64,9 +64,9 @@ describe('test/deps/save-local-folder.test.js', () => {
     assert(await exists(path.join(root, 'node_modules/demo')));
   });
 
-  it('should --save-isomorphic install work', async () => {
+  it('should --write=isomorphic install work', async () => {
     await coffee
-      .fork(helper.npminstall, ['--save-isomorphic', demo], {
+      .fork(helper.npminstall, ['--write=isomorphic', demo], {
         cwd: root,
       })
       // .debug()

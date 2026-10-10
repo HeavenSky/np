@@ -17,7 +17,7 @@ describe('test/deps/license.test.js', () => {
 
   it('should install none / allowed license ok', async () => {
     await coffee
-      .fork(helper.npminstall, ['--forbidden-licenses=mit,sic', './allow', './none', '-d'], { cwd })
+      .fork(helper.npminstall, ['--forbidden-licenses=mit,sic', './allow', './none', '--detail'], { cwd })
       .expect('stdout', /2 packages installed from local file/)
       .end();
   });

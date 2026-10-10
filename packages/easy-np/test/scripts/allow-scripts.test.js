@@ -67,7 +67,7 @@ describe('test/scripts/allow-scripts.test.js', () => {
 
     it('should skip unreviewed dependency scripts, approve them and rebuild', async () => {
       await writePkg();
-      await run(helper.npminstall, ['--foreground-scripts'])
+      await run(x, ['install', '--foreground-scripts'])
         .expect('code', 0)
         .notExpect('stdout', /run on postinstall-hello/)
         .expect('stderr', /1 package\(s\) have install scripts that are not in allowScripts and were skipped/)
@@ -90,14 +90,14 @@ describe('test/scripts/allow-scripts.test.js', () => {
 
     it('should fail with --strict-allow-scripts and stay quiet for denied packages', async () => {
       await writePkg();
-      await run(helper.npminstall, ['--strict-allow-scripts'])
+      await run(x, ['install', '--strict-allow-scripts'])
         .expect('code', 1)
         .expect('stderr', /were blocked/)
         .end();
 
       await cleanup();
       await writePkg({ allowScripts: { 'postinstall-hello': false } });
-      await run(helper.npminstall, ['--strict-allow-scripts', '--foreground-scripts'])
+      await run(x, ['install', '--strict-allow-scripts', '--foreground-scripts'])
         .expect('code', 0)
         .notExpect('stderr', /allowScripts/)
         .notExpect('stdout', /run on postinstall-hello/)
@@ -106,19 +106,61 @@ describe('test/scripts/allow-scripts.test.js', () => {
 
     it('should run every script with --dangerously-allow-all-scripts', async () => {
       await writePkg();
-      await run(helper.npminstall, ['--dangerously-allow-all-scripts', '--foreground-scripts'])
+      await run(x, ['install', '--dangerously-allow-all-scripts', '--foreground-scripts'])
         .expect('code', 0)
         .expect('stdout', /run on postinstall-hello/)
         .end();
     });
 
+    it('should run every script by default with np, unless turned off', async () => {
+      await writePkg();
+      await run(helper.npminstall, ['--foreground-scripts'])
+        .expect('code', 0)
+        .expect('stdout', /run on postinstall-hello/)
+        .notExpect('stderr', /allowScripts/)
+        .end();
+
+      await cleanup();
+      await writePkg();
+      await run(helper.npminstall, ['--no-dangerously-allow-all-scripts', '--foreground-scripts'])
+        .expect('code', 0)
+        .notExpect('stdout', /run on postinstall-hello/)
+        .expect('stderr', /were skipped/)
+        .end();
+    });
+
+    it('should read pnpm build settings with np-x install', async () => {
+      await writePkg();
+      await fs.writeFile(path.join(root, 'pnpm-workspace.yaml'), 'onlyBuiltDependencies:\n  - postinstall-hello\n');
+      await run(x, ['install', '--foreground-scripts'])
+        .expect('code', 0)
+        .expect('stdout', /run on postinstall-hello/)
+        .notExpect('stderr', /allowScripts/)
+        .end();
+
+      await cleanup();
+      await writePkg({ pnpm: { ignoredBuiltDependencies: ['postinstall-hello'] } });
+      await run(x, ['install', '--strict-allow-scripts', '--foreground-scripts'])
+        .expect('code', 0)
+        .notExpect('stdout', /run on postinstall-hello/)
+        .notExpect('stderr', /allowScripts/)
+        .end();
+    });
+
+    it('should allow unlisted packages with only neverBuiltDependencies, and keep them allowed after deny-scripts', async () => {
+      await writePkg({ pnpm: { neverBuiltDependencies: ['other'] } });
+      await run(x, ['install', '--foreground-scripts'])
+        .expect('code', 0)
+        .expect('stdout', /run on postinstall-hello/)
+        .end();
+      await run(x, ['deny-scripts', 'never-installed']).expect('code', 0).end();
+      const pkg = await helper.readJSON(path.join(root, 'package.json'));
+      assert.deepEqual(pkg.allowScripts, { other: false, 'postinstall-hello': true, 'never-installed': false });
+    });
+
     it('should not take the package after a switch as its value', async () => {
       await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'root', version: '1.0.0' }));
-      await run(helper.npminstall, [
-        '--foreground-scripts',
-        '--dangerously-allow-all-scripts',
-        'postinstall-hello@1.0.0',
-      ])
+      await run(x, ['install', '--foreground-scripts', '--dangerously-allow-all-scripts', 'postinstall-hello@1.0.0'])
         .expect('code', 0)
         .expect('stdout', /run on postinstall-hello/)
         .end();
@@ -127,7 +169,7 @@ describe('test/scripts/allow-scripts.test.js', () => {
 
       await cleanup();
       await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'root', version: '1.0.0' }));
-      await run(helper.npminstall, ['--strict-allow-scripts', 'postinstall-hello@1.0.0'])
+      await run(x, ['install', '--strict-allow-scripts', 'postinstall-hello@1.0.0'])
         .expect('code', 1)
         .expect('stderr', /were blocked/)
         .end();
@@ -135,7 +177,7 @@ describe('test/scripts/allow-scripts.test.js', () => {
 
     it('should deny scripts by name and drop existing approvals', async () => {
       await writePkg({ allowScripts: { 'postinstall-hello@1.0.0': true } });
-      await run(helper.npminstall, []).expect('code', 0).end();
+      await run(x, ['install']).expect('code', 0).end();
       await run(x, ['deny-scripts', 'postinstall-hello', 'never-installed']).expect('code', 0).end();
       const pkg = await helper.readJSON(path.join(root, 'package.json'));
       assert.deepEqual(pkg.allowScripts, { 'postinstall-hello': false, 'never-installed': false });
@@ -146,8 +188,8 @@ describe('test/scripts/allow-scripts.test.js', () => {
 
     it('should not report rebuilt for packages whose scripts were skipped', async () => {
       await writePkg();
-      await run(helper.npminstall, []).expect('code', 0).end();
-      await run(x, ['rebuild', 'postinstall-hello', '-d'])
+      await run(x, ['install']).expect('code', 0).end();
+      await run(x, ['rebuild', 'postinstall-hello', '--detail'])
         .expect('code', 0)
         .notExpect('stdout', /rebuilt postinstall-hello/)
         .notExpect('stdout', /run on postinstall-hello/)
@@ -161,7 +203,7 @@ describe('test/scripts/allow-scripts.test.js', () => {
         path.join(root, 'package.json'),
         JSON.stringify({ name: 'root', version: '1.0.0', dependencies: { 'postinstall-hello': url } })
       );
-      await run(helper.npminstall, [])
+      await run(x, ['install'])
         .expect('code', 0)
         .expect('stderr', /were skipped/)
         .end();
@@ -208,7 +250,7 @@ describe('test/scripts/allow-scripts.test.js', () => {
         path.join(root, 'package.json'),
         JSON.stringify({ name: 'app', version: '1.0.0', dependencies: { 'auth-hello': url } })
       );
-      const { stdout, stderr } = await run(helper.npminstall, [`--registry=${registry.prefix}`])
+      const { stdout, stderr } = await run(x, ['install', `--registry=${registry.prefix}`])
         .expect('code', 0)
         .expect('stderr', /were skipped/)
         .end();
@@ -225,7 +267,7 @@ describe('test/scripts/allow-scripts.test.js', () => {
       });
 
       await fs.rm(path.join(root, 'node_modules'), { recursive: true, force: true });
-      await run(helper.npminstall, [`--registry=${registry.prefix}`])
+      await run(x, ['install', `--registry=${registry.prefix}`])
         .expect('code', 0)
         .end();
       assert.equal(await exists(marker), true);
@@ -243,7 +285,7 @@ describe('test/scripts/allow-scripts.test.js', () => {
           allowScripts: { [url]: true },
         })
       );
-      await run(helper.npminstall, [`--registry=${registry.prefix}`])
+      await run(x, ['install', `--registry=${registry.prefix}`])
         .expect('code', 0)
         .end();
       assert.equal(await exists(marker), true);

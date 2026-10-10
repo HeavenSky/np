@@ -53,9 +53,9 @@ describe('test/cli/uninstall.test.js', () => {
     assert(!(await stateKeys()).includes(storeName));
   });
 
-  it('should uninstall --save', async () => {
+  it('should uninstall --write=prod', async () => {
     await coffee
-      .fork(npmuninstall, ['uninstall', 'pkg@1.0.0', '--save'], {
+      .fork(npmuninstall, ['uninstall', 'pkg@1.0.0', '--write=prod'], {
         cwd: root,
         stdio: 'pipe',
       })
@@ -66,9 +66,9 @@ describe('test/cli/uninstall.test.js', () => {
     assert(!pkg.dependencies.pkg);
   });
 
-  it('should uninstall --save-dev', async () => {
+  it('should uninstall --write=dev', async () => {
     await coffee
-      .fork(npmuninstall, ['uninstall', 'pkg@1.0.0', '--save-dev'], {
+      .fork(npmuninstall, ['uninstall', 'pkg@1.0.0', '--write=dev'], {
         cwd: root,
         stdio: 'pipe',
       })
@@ -80,9 +80,9 @@ describe('test/cli/uninstall.test.js', () => {
     assert(!pkg.devDependencies.pkg);
   });
 
-  it('should uninstall --save-optional', async () => {
+  it('should uninstall --write=optional', async () => {
     await coffee
-      .fork(npmuninstall, ['uninstall', 'pkg@1.0.0', '--save-optional'], {
+      .fork(npmuninstall, ['uninstall', 'pkg@1.0.0', '--write=optional'], {
         cwd: root,
         stdio: 'pipe',
       })
@@ -108,7 +108,7 @@ describe('test/cli/uninstall.test.js', () => {
 
   it('should not uninstall when version not match', async () => {
     await coffee
-      .fork(npmuninstall, ['uninstall', 'pkg@1.0.1', '--save-optional'], {
+      .fork(npmuninstall, ['uninstall', 'pkg@1.0.1', '--write=optional'], {
         cwd: root,
         stdio: 'pipe',
       })
@@ -120,7 +120,7 @@ describe('test/cli/uninstall.test.js', () => {
 
   it('should not uninstall when name not match', async () => {
     await coffee
-      .fork(npmuninstall, ['uninstall', 'pkg1@1.0.0', '--save-optional'], {
+      .fork(npmuninstall, ['uninstall', 'pkg1@1.0.0', '--write=optional'], {
         cwd: root,
         stdio: 'pipe',
       })

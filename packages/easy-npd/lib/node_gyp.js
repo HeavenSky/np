@@ -112,11 +112,12 @@ function install(dir, pointer, { name, spec }) {
   fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'npd-node-gyp', private: true }));
   process.stderr.write(`npd node-gyp not found, installing ${spec} into ${dir}\n`);
   // node-gyp 及其依赖都没有安装脚本, --ignore-scripts 避免 allowScripts 告警与读取 npm 配置
-  const args = [CLI, `--root=${dir}`, '--no-lockfile', '--no-save', '--ignore-scripts'];
+  const args = [CLI, '--no-lockfile', '--no-save', '--ignore-scripts'];
   // 安装脚本环境中的源只在 npm_config_registry 上, CLI 不读它
   if (process.env.npm_config_registry) args.push(`--registry=${process.env.npm_config_registry}`);
   args.push(spec);
   const result = spawnSync(process.execPath, args, {
+    cwd: dir,
     // stdout 只能留给 node-gyp 自己的输出, 调用方会解析它
     stdio: ['ignore', 2, 2],
     timeout: INSTALL_TIMEOUT,

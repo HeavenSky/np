@@ -12,7 +12,7 @@ describe('test/resolution/use-existing-version.test.js', () => {
 
   it('should replace tarball url to other', async () => {
     await coffee
-      .fork(helper.npminstall, ['-d', '--flatten'], { cwd })
+      .fork(helper.npminstall, ['--detail'], { cwd })
       .debug()
       .expect('code', 0)
       .expect('stdout', /All packages installed/)

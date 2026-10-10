@@ -14,7 +14,7 @@ if (process.platform !== 'win32') {
 
         it('should install raw-socket with python3', async () => {
           // https://github.com/cnpm/npminstall/issues/384
-          await coffee.fork(helper.npminstall, ['-d'], { cwd }).debug().expect('code', 0).end();
+          await coffee.fork(helper.npminstall, ['--detail'], { cwd }).debug().expect('code', 0).end();
         });
       });
     }
@@ -29,7 +29,7 @@ if (process.platform !== 'win32') {
         afterEach(cleanup);
 
         it('should install xprofiler with python3', async () => {
-          await coffee.fork(helper.npminstall, ['-d'], { cwd }).debug().expect('code', 0).end();
+          await coffee.fork(helper.npminstall, ['--detail'], { cwd }).debug().expect('code', 0).end();
         });
       });
     }

@@ -6,18 +6,7 @@ const chalk = require('chalk');
 const normalize = require('npm-normalize-package-bin');
 const utils = require('./utils');
 const installState = require('./install_state');
-const preUninstall = require('./preuninstall');
-const postUninstall = require('./postuninstall');
-
-const DEP_FIELDS = [
-  'dependencies',
-  'devDependencies',
-  'optionalDependencies',
-  'peerDependencies',
-  'clientDependencies',
-  'buildDependencies',
-  'isomorphicDependencies',
-];
+const prune = require('./prune');
 
 module.exports = async options => {
   const pkgs = options.pkgs;
@@ -32,6 +21,8 @@ module.exports = async options => {
       depNames.push(...getDepNames(pkgInfo));
     }
   }
+  // 先回收失去引用的版本目录, 否则被卸载的包仍会被当作其依赖的提升链接的引用者
+  if (!options.global && uninstalled.length) await prune({ root: options.targetDir });
   // 全部目标卸载完再统一判断, 否则同一次卸载的后一个包仍会被当作引用者
   if (!options.global && depNames.length) {
     await cleanupHoistedLinks(options.targetDir, depNames, options);
@@ -49,8 +40,11 @@ async function cleanupHoistedLinks(root, names, options) {
   const nodeModules = path.join(root, 'node_modules');
   const rootPkg = await utils.readJSON(path.join(root, 'package.json'));
   const declared = new Set();
-  for (const field of DEP_FIELDS) {
-    for (const name in rootPkg[field] || {}) declared.add(name);
+  // 含 --include 安装的 <type>Dependencies: 卸载时不知道当初传了哪些类型, 按全部声明保留链接
+  for (const field of Object.keys(rootPkg).filter(key => key === 'dependencies' || key.endsWith('Dependencies'))) {
+    if (rootPkg[field] && typeof rootPkg[field] === 'object' && !Array.isArray(rootPkg[field])) {
+      for (const name in rootPkg[field]) declared.add(name);
+    }
   }
   const stores = await listStorePackages(nodeModules);
   const removed = new Set();
@@ -134,20 +128,18 @@ async function uninstall(pkg, options) {
 
   const realRoot = await installedStorePath(pkgRoot, storeDir, pkgInfo);
 
-  await preUninstall(pkgInfo, realRoot, options);
   if (options.global) {
     await utils.rimraf(pkgRoot);
     await utils.rimraf(storeDir);
   } else {
+    // 版本目录可能还被其他包引用, 由命令行在卸载后统一按引用关系回收
     await installState.remove(realRoot);
     await utils.rimraf(pkgRoot);
-    await utils.rimraf(realRoot);
   }
   const pkgFile = path.resolve(options.targetDir, 'package.json');
   if (await utils.exists(pkgFile)) {
     await utils.pruneJSON(pkgFile, pkg.name);
   }
-  await postUninstall(pkgInfo, realRoot, options);
   options.console.log(
     '- %s %s -> %s',
     chalk.yellow(`${pkgInfo.name}@${pkgInfo.version}`),

@@ -15,7 +15,7 @@ describe('test/registry/binary-mirror-vscode.test.js', () => {
 
   it('should install vscode version on dependencies', async () => {
     await coffee
-      .fork(helper.npminstall, ['-d'], { cwd, env: { ...process.env, NPD_TEST_LOCAL_PKG: '1' } })
+      .fork(helper.npminstall, ['--detail'], { cwd, env: { ...process.env, NPD_TEST_LOCAL_PKG: '1' } })
       .debug()
       .expect('code', 0)
       .expect('stdout', /All packages installed/)

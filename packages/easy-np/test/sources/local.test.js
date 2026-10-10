@@ -236,24 +236,12 @@ describe('test/sources/local.test.js', () => {
     }
   });
 
-  it('should use the last value of a repeated --root', async () => {
-    const [tmp, tmpCleanup] = helper.tmp();
-    await tmpCleanup();
-    try {
-      await fs.writeFile(path.join(tmp, 'package.json'), JSON.stringify({ name: 'app', version: '1.0.0' }));
-      await coffee
-        .fork(
-          helper.npminstall,
-          ['--root=not-exists', `--root=${tmp}`, '--registry=http://127.0.0.1:1', '--no-lockfile', 'file:../local/pkg'],
-          { cwd: path.dirname(tmp) }
-        )
-        .expect('code', 0)
-        .end();
-      const pkg = await helper.readJSON(path.join(tmp, 'node_modules/pkg/package.json'));
-      assert.equal(pkg.name, 'pkg');
-    } finally {
-      await fs.rm(tmp, { recursive: true, force: true });
-    }
+  it('should reject the removed --root', async () => {
+    await coffee
+      .fork(helper.npminstall, ['--root=not-exists'])
+      .expect('code', 1)
+      .expect('stderr', /--root has been removed/)
+      .end();
   });
 
   if (process.platform !== 'win32') {

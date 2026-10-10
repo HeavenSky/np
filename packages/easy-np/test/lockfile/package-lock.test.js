@@ -19,7 +19,7 @@ describe('test/lockfile/package-lock.test.js', () => {
   if (process.platform !== 'win32') {
     it('should install successfully', async () => {
       await coffee
-        .fork(helper.npminstall, ['--lockfile-path', path.join(cwd, 'package-lock.json')], { cwd })
+        .fork(helper.npminstall, ['--from-package-lock', path.join(cwd, 'package-lock.json')], { cwd })
         .debug()
         .expect('code', 0)
         .notExpect('stdout', "TypeError: Cannot read properties of undefined (reading 'ignoreOptionalDependencies')")
@@ -88,7 +88,7 @@ describe('test/lockfile/package-lock.test.js', () => {
     if (process.platform !== 'win32') {
       it('should install every workspace with the locked versions', async () => {
         await coffee
-          .fork(helper.npminstall, ['--lockfile-path', path.join(root, 'package-lock.json')], { cwd: root })
+          .fork(helper.npminstall, ['--from-package-lock', path.join(root, 'package-lock.json')], { cwd: root })
           .debug()
           .expect('code', 0)
           .end();

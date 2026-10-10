@@ -15,7 +15,7 @@ describe('test/registry/custom.test.js', () => {
     const args = [
       '--registry=https://registry.npmmirror.com?bucket=foo',
       '--registry=https://registry.npmmirror.com?bucket=bar',
-      '-d',
+      '--detail',
     ];
     await coffee
       .fork(helper.npminstall, args, { cwd: tmp })

@@ -67,6 +67,8 @@ module.exports = async (options, context) => {
         root: targetDir,
         // don't install devDeps
         production: true,
+        // --only / --include / --omit 选的是用户项目的字段, 被装的包只装 dependencies 与 optionalDependencies
+        rootFields: null,
         // allowScripts 汇总按它给出重装命令
         globalSpec: pkg.arg ? pkg.arg.raw : p.raw,
         global: true,

@@ -2,8 +2,8 @@
 'use strict';
 
 const SUMMARIES = {
-  install: 'install dependencies, same as npd',
-  uninstall: 'remove packages',
+  install: 'install dependencies with npm / pnpm style defaults',
+  uninstall: 'remove packages, their version folders and hoisted links nothing uses',
   update: 'remove node_modules then reinstall',
   link: 'link local folders or global packages',
   fetch: 'only download and extract packages, no dependencies or scripts',
@@ -28,7 +28,7 @@ Commands:
 ${rows.map(([names, summary]) => `  ${names.padEnd(width)}${summary}`).join('\n')}
 
 Run "npd-x <command> -h" for the options of a command.
-npd is the same as npd-x install.
+npd is npd-x install with --no-lockfile --dangerously-allow-all-scripts added.
 
 Options:
 
@@ -40,65 +40,91 @@ Options:
 exports.install = () => `
 Usage:
 
-  npd
-  npd <pkg>
-  npd <pkg>@<tag>
-  npd <pkg>@<version>
-  npd <pkg>@<version range>
-  npd <folder>
-  npd <tarball file>
-  npd <tarball url>
-  npd <git:// url>
-  npd <github username>/<github project>
-  npd --lockfile-path=</path/to/package-lock.json>
+  npd [<pkg> ...] [options]
 
-Can specify one or more: npd ./foo.tgz bar@stable /some/folder
-If no argument is supplied, installs dependencies from ./package.json.
-npd-x install, npd-x i and npd-x add are the same as npd; run npd-x -h for other commands.
+  <pkg>: <name>[@<tag|version|range>], <alias>@npm:<name>, <folder>, <tarball file>, <tarball url>, <git url>, <user>/<repo>
+  Without <pkg>, installs dependencies from ./package.json; with <pkg>, only the given packages are installed and saved,
+  other dependencies are not refreshed and root lifecycle scripts are not run.
+  npd-x install, npd-x i and npd-x add are npd without the two options below; run npd-x -h for other commands.
 
-Options:
+  npd adds --no-lockfile and --dangerously-allow-all-scripts as if given on the command line: env and config files can't change them,
+  only --lockfile, --frozen-lockfile or --no-dangerously-allow-all-scripts on the command line can.
+  Both read settings from ~/.nprc, .npmrc, pnpm-workspace.yaml and the pnpm field of package.json.
 
-  --production: won't install devDependencies
-  --client: install clientDependencies and buildDependencies
-  --save, --save-dev, --save-optional, --save-exact, --save-client, --save-build, --save-isomorphic: save installed dependencies into package.json
-  --no-save: Prevents saving to dependencies
-  -g, --global: install packages to the global directory specified by 'npm config get prefix'
-  -r, --registry: specify custom registry
-  --proxy, --https-proxy: proxy for http / https requests, also passed to install scripts, node-gyp and git; default from npm_config_proxy, ~/.nprc, HTTP_PROXY / HTTPS_PROXY
-  --noproxy: comma separated hosts that bypass the proxy, default from NO_PROXY
-  --cafile: CA certificate file for https requests
-  --no-strict-ssl: skip https certificate verification
-  --root: install root directory, default is current working directory
-  --prefix: global install prefix used with -g, default is '$npm config get prefix'
-  --no-cache: don't use the tarball disk cache, ignored when --cache-strict is set
-  --tarball-url-mapping: JSON object to rewrite tarball urls before request, redirect targets are not rewritten, e.g.: --tarball-url-mapping='{"https://a.com":"https://b.com"}'
-  --lockfile-path: install from package-lock.json (lockfileVersion >= 2), optionalDependencies in lockfile are ignored, fail if the lockfile can't be loaded
-  --save-dependencies-tree: save the resolved dependencies tree to node_modules/.dependencies_tree.json
+Dependency types:
+
+  <type> is a dependency field of package.json: prod is dependencies, dev is devDependencies, optional is optionalDependencies,
+  peer is peerDependencies, any other <type> is <type>Dependencies, e.g. client, build. Every option below takes any <type>.
+
+  --only=<type>[,...]: install only these fields of package.json, e.g. --only=prod, --only=client,build
+  --include=<type>[,...]: also install these fields, e.g. --include=client
+  --omit=<type>[,...], --exclude=<type>[,...]: skip these fields, e.g. --omit=dev
+  --write=<type>: save the given packages to this field instead of dependencies, e.g. --write=dev, --write=peer;
+    only the --write=<type> form is accepted
+  --write-exact: save the exact version instead of a ^ range
+  --no-save, --no-write: don't change package.json
+  --prod: same as --only=prod
+  --production: same as NODE_ENV=production
+
+  Without --only, prod, dev and optional are installed; --production or NODE_ENV=production adds --omit=dev;
+  --omit=optional also skips optional dependencies of every package, --omit=peer stops installing missing peerDependencies.
+  A type in both --include and --omit is installed.
+
+  --engine-strict: refuse packages whose engines.node does not match the current Node.js
+
+Lockfile:
+
+  --lockfile, --no-lockfile: read and write np-lock.json or not, default on (npd adds --no-lockfile);
+    also set by env np_lockfile=true|false, config.np.lockfile in package.json, lockfile in pnpm settings, lockfile / package-lock in .npmrc
+  --frozen-lockfile: install exactly the versions in np-lock.json, fail if a dependency is not locked, never update it;
+    can't be used with package names
+  --from-package-lock=<file>: install the versions in a package-lock.json (lockfileVersion >= 2), optionalDependencies in it are ignored
+
+Install scripts:
+
+  --ignore-scripts: run no install scripts at all
+  --allow-scripts=<pkg>[,<pkg>]: allow install scripts of these dependencies, overrides allowScripts in package.json,
+    pnpm build settings (onlyBuiltDependencies, ...) and ~/.nprc; mainly for -g
+  --strict-allow-scripts: fail when a dependency has install scripts not reviewed in allowScripts;
+    also npm_config_*, ~/.nprc, .npmrc, pnpm strictDepBuilds
+  --dangerously-allow-all-scripts: run install scripts of every dependency, ignoring allowScripts;
+    default off (npd adds it, turn it off with --no-dangerously-allow-all-scripts); also npm_config_*, ~/.nprc, .npmrc, pnpm dangerouslyAllowAllBuilds
+  --foreground-scripts: show the output of dependency install scripts, they run in the background by default;
+    scripts of the root project and local folder dependencies always show their output
+
+Registry and network:
+
+  -r, --registry=<url>: registry to install from, default from npm_registry, ~/.nprc, .npmrc / npm_config_registry;
+    npmmirror and npmjs switch automatically by speed, other registries turn the switch off
+  --probe-cache=<minutes>: reuse the last registry speed test for this long, 0 to test on every run, default 5; also env np_probe_cache
+  --proxy=<url>, --https-proxy=<url>: proxy for http / https requests, also passed to install scripts, node-gyp and git;
+    default from npm_config_proxy, ~/.nprc, HTTP_PROXY / HTTPS_PROXY
+  --noproxy=<host>[,<host>]: hosts that bypass the proxy; default from npm_config_noproxy, ~/.nprc, NO_PROXY
+  --cafile=<file>: CA certificate file for https requests
+  --strict-ssl, --no-strict-ssl: verify https certificates or not, default on; also npm_config_strict_ssl and ~/.nprc,
+    --strict-ssl overrides npm_config_strict_ssl=false inherited from the environment
+  --registry-only: fail when any package comes from git or a remote url
+  --forbidden-licenses=<license>[,<license>]: fail when a package uses one of these licenses
+
+Cache:
+
+  --offline: only use the disk cache and never request the network; git and remote url packages are not supported
+  --prefer-offline: use cached manifests without revalidating them, only request the network for packages not in the cache
+  --refresh-cache: ignore cached manifests and tarballs, download again and overwrite the cache
+  --no-cache: don't use the disk cache
+  The disk cache is ~/.np_tarball, shared with easy-np; env np_cache or npm_config_cache changes it
+
+Global install:
+
+  -g, --global: install packages to the global directory
+  --prefix=<dir>: global install prefix, default is 'npm config get prefix'
+
+Output:
+
+  --detail: show detail log of installation
+  --trace: show memory and CPU usage of the installation
   -v, --version: show version
   -h, --help: show help
-  --refresh-cache: ignore cached manifests and tarballs, download again and overwrite the cache
-  --no-lockfile: don't read or write np-lock.json, same as env np_lockfile=false, or set config.np.lockfile=false in package.json
-  --frozen-lockfile: install exactly the versions in np-lock.json, fail if a dependency is not locked, never update it
-  --probe-cache: minutes to reuse the last registry speed test result, 0 to test on every run, default 5, also read from env np_probe_cache
-  --offline: only use the disk cache and never request the network, fail when a manifest or tarball is not cached. git and remote url packages are not supported.
-  -d, --detail: show detail log of installation
-  --trace: show memory and CPU usage traces of the installation
-  --ignore-scripts: ignore all preinstall / install and postinstall scripts during the installation
-  --allow-scripts=<pkg>[,<pkg>]: allow install scripts of these dependencies, overrides allowScripts in package.json; mainly for -g
-  --strict-allow-scripts: fail the install when a dependency has install scripts not reviewed in allowScripts
-  --dangerously-allow-all-scripts: run install scripts of every dependency, ignoring allowScripts
-  --rebuild: same as npd-x rebuild, rerun lifecycle scripts of installed dependencies, see npd-x rebuild --help
-  --no-optional: ignore all optionalDependencies during the installation
-  --forbidden-licenses: forbid installing packages that use these licenses
-  --engine-strict: refuse to install (or even consider installing) any package that claims to not be compatible with the current Node.js version.
-  --legacy-peer-deps: don't install missing peerDependencies automatically, only warn like npm 6
-  --flatten: flatten dependencies by matching ancestors' dependencies
-  --registry-only: make sure all packages are installed from the registry, installing any package from a remote source (e.g.: git, remote url) fails the install.
-  --cache-strict: use disk cache even on production env.
-  --fix-bug-versions: automatically fix bug version of packages.
-  --high-speed-store: specify high speed store script to cache tgz files, and so on. Should export '* getStream(url)' function.
-  --dependencies-tree: install with dependencies tree to restore the last install.
-  --fetch-only: same as npd-x fetch, only download and extract the listed packages without their dependencies and scripts
 `;
 
 exports.uninstall = () => `
@@ -110,24 +136,26 @@ Usage:
 
 Options:
 
-  --root: project root directory, default is current working directory
   -g, --global: uninstall from the global directory
-  --prefix: global install prefix used with -g, default is '$npm config get prefix'
-  -S, --save, -D, --save-dev, -O, --save-optional: also remove the packages from dependencies, devDependencies or optionalDependencies in package.json
+  --prefix=<dir>: global install prefix used with -g, default is 'npm config get prefix'
+  --write=<type>: also remove the packages from <type>Dependencies, e.g. --write=client;
+    dependencies, devDependencies, optionalDependencies and peerDependencies are always cleaned
   -v, --version: show version
   -h, --help: show help
 `;
 
-exports.update = root => `
+exports.update = () => `
 Usage:
 
-  npd-x update [--root=${root}]
+  npd-x update
 
-Remove node_modules, then reinstall.
+Remove node_modules, then reinstall, ignoring the versions locked in np-lock.json.
+Options of npd-x install, e.g. --registry, are passed to the reinstall.
 
 Options:
 
-  --root: project root directory, default is current working directory
+  --clean-only: only remove node_modules, don't reinstall
+  -v, --version: show version
   -h, --help: show help
 `;
 
@@ -138,11 +166,11 @@ Usage:
 
 Can specify one or more: npd-x link /some/folder1 /some/folder2
 Without <folder>, install current package and link it to the global directory.
+Options of npd-x install written as --name or --name=value, e.g. --registry=<url>, are passed to the installs it runs.
 
 Options:
 
-  --root: project root directory, default is current working directory
-  --prefix: global install prefix, default is '$npm config get prefix'
+  --prefix=<dir>: global install prefix, default is 'npm config get prefix'
   -v, --version: show version
   -h, --help: show help
 `;
@@ -159,15 +187,8 @@ git packages are not supported, fetching them runs their prepare script.
 
 Options:
 
-  -r, --registry: specify custom registry
-  --proxy, --https-proxy: proxy for http / https requests, also passed to install scripts, node-gyp and git; default from npm_config_proxy, ~/.nprc, HTTP_PROXY / HTTPS_PROXY
-  --noproxy: comma separated hosts that bypass the proxy, default from NO_PROXY
-  --cafile: CA certificate file for https requests
-  --no-strict-ssl: skip https certificate verification
-  --root: install root directory, default is current working directory
-  --no-cache: don't use the tarball disk cache
-  --refresh-cache: ignore cached manifests and tarballs, download again and overwrite the cache
-  --offline: only use the disk cache and never request the network
+  -r, --registry, --proxy, --https-proxy, --noproxy, --cafile, --no-strict-ssl: same as npd-x install
+  --offline, --prefer-offline, --refresh-cache, --no-cache: same as npd-x install
   -v, --version: show version
   -h, --help: show help
 `;
@@ -185,10 +206,10 @@ Without <pkg>, install every dependency in package.json again without downloadin
 and rerun the preinstall / install / postinstall scripts of every dependency in dependency order.
 With <pkg>, only rerun the preinstall / install / postinstall scripts of every installed version of the listed packages,
 <version range> limits the versions. Packages are not downloaded again, dependencies and package.json are not changed.
+Options of npd-x install, e.g. --registry, --offline, --ignore-scripts, also apply.
 
 Options:
 
-  --root: install root directory, default is current working directory
   -v, --version: show version
   -h, --help: show help
 `;
@@ -197,6 +218,7 @@ exports.approveScripts = () => `
 Usage:
 
   npd-x approve-scripts <pkg> [<pkg> ...]
+  npd-x approve <pkg> [<pkg> ...]
   npd-x approve-scripts --all
   npd-x approve-scripts --pending
 
@@ -211,7 +233,7 @@ Options:
   --all: approve every installed package whose install scripts are not reviewed yet
   --pending: only list installed packages whose install scripts are not reviewed yet
   --no-pin: write name-only entries that allow any version, default writes <pkg>@<installed version>
-  --root: project root directory, default is current working directory
+  -v, --version: show version
   -h, --help: show help
 `;
 
@@ -221,14 +243,14 @@ Usage:
   npd-x prune
   npd-x prune --dry-run
 
-Uninstalling or upgrading packages leaves their old versions as _<name>@<version>@<name> folders in node_modules.
+Upgrading packages leaves their old versions as _<name>@<version>@<name> folders in node_modules; npd-x uninstall removes unreferenced versions by itself.
 This command walks the links from the top level of node_modules, removes the version folders that are not reachable.
 Installs never remove these folders by themselves.
 
 Options:
 
   --dry-run: only list what would be removed
-  --root: project root directory, default is current working directory
+  -v, --version: show version
   -h, --help: show help
 `;
 
@@ -236,6 +258,7 @@ exports.denyScripts = () => `
 Usage:
 
   npd-x deny-scripts <pkg> [<pkg> ...]
+  npd-x deny <pkg> [<pkg> ...]
   npd-x deny-scripts --all
 
 Writes name-only false entries into the allowScripts field of the root package.json, same as npm 12:
@@ -246,6 +269,6 @@ Git and tarball url dependencies are denied by their repository or url.
 Options:
 
   --all: deny every installed package whose install scripts are not reviewed yet
-  --root: project root directory, default is current working directory
+  -v, --version: show version
   -h, --help: show help
 `;

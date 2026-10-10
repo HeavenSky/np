@@ -96,116 +96,33 @@ describe('test/deps/fields.test.js', () => {
     assert.deepEqual(parsed.prodMap, { koa: '1' });
   });
 
-  it('should work with dependencies, devDependencies, clientDependencies, buildDependencies and isomorphicDependencies', () => {
+  it('should only install the listed fields with rootFields', () => {
     const pkg = {
-      dependencies: {
-        koa: '1',
-        express: '2',
-      },
-      devDependencies: {
-        mocha: '3',
-        eslint: '4',
-      },
-      clientDependencies: {
-        react: '3',
-        vue: '1',
-      },
-      buildDependencies: {
-        webpack: '1',
-        babel: '2',
-      },
-      isomorphicDependencies: {
-        utility: '1',
-        validator: '2',
-      },
+      dependencies: { koa: '1', express: '2' },
+      optionalDependencies: { express: '3' },
+      devDependencies: { mocha: '3', koa: '9' },
+      clientDependencies: { react: '3', koa: '9' },
     };
 
-    const parsed = dependencies(pkg, {}, nested);
-    assert.deepEqual(parsed.all, [
-      { name: 'koa', version: '1', optional: false },
-      { name: 'express', version: '2', optional: false },
-      { name: 'react', version: '3', optional: false },
-      { name: 'vue', version: '1', optional: false },
-      { name: 'webpack', version: '1', optional: false },
-      { name: 'babel', version: '2', optional: false },
-      { name: 'utility', version: '1', optional: false },
-      { name: 'validator', version: '2', optional: false },
-      { name: 'mocha', version: '3', optional: false },
-      { name: 'eslint', version: '4', optional: false },
+    assert.deepEqual(dependencies(pkg, {}, nested, ['dependencies']).prodMap, { koa: '1', express: '2' });
+    const parsed = dependencies(pkg, {}, nested, [
+      'dependencies',
+      'optionalDependencies',
+      'devDependencies',
+      'clientDependencies',
     ]);
-    assert.deepEqual(parsed.allMap, {
-      koa: '1',
-      express: '2',
-      react: '3',
-      vue: '1',
-      webpack: '1',
-      babel: '2',
-      utility: '1',
-      validator: '2',
-      mocha: '3',
-      eslint: '4',
-    });
-    assert.deepEqual(parsed.prod, [
-      { name: 'koa', version: '1', optional: false },
-      { name: 'express', version: '2', optional: false },
-      { name: 'utility', version: '1', optional: false },
-      { name: 'validator', version: '2', optional: false },
-    ]);
-    assert.deepEqual(parsed.prodMap, { koa: '1', express: '2', utility: '1', validator: '2' });
-
-    assert.deepEqual(parsed.client, [
-      { name: 'react', version: '3', optional: false },
-      { name: 'vue', version: '1', optional: false },
-      { name: 'webpack', version: '1', optional: false },
-      { name: 'babel', version: '2', optional: false },
-      { name: 'utility', version: '1', optional: false },
-      { name: 'validator', version: '2', optional: false },
-    ]);
-    assert.deepEqual(parsed.clientMap, {
-      react: '3',
-      vue: '1',
-      webpack: '1',
-      babel: '2',
-      utility: '1',
-      validator: '2',
-    });
-  });
-
-  it('should check dumplicated', () => {
-    const pkg = {
-      dependencies: {
-        koa: '1',
-        express: '2',
-      },
-      clientDependencies: {
-        koa: '1',
-        react: '3',
-        vue: '1',
-      },
-      buildDependencies: {
-        koa: '2',
-        webpack: '1',
-        babel: '2',
-      },
-      isomorphicDependencies: {
-        vue: '1',
-        express: '1',
-        utility: '1',
-        validator: '2',
-      },
-    };
-
-    try {
-      dependencies(pkg, {}, nested);
-      throw new Error('should not excute');
-    } catch (err) {
-      assert(
-        err.message ===
-          `duplicate dependencies error, put isomorphic dependency into isomorphicDependencies:
-koa defined multiple times in dependencies,clientDependencies
-express defined multiple times in dependencies,isomorphicDependencies
-vue defined multiple times in clientDependencies,isomorphicDependencies`
-      );
-    }
+    // optionalDependencies 覆盖 dependencies, 其余字段同名时取先选中的
+    assert.deepEqual(parsed.allMap, { express: '3', koa: '1', react: '3', mocha: '3' });
+    assert.deepEqual(parsed.prodMap, parsed.allMap);
+    assert.deepEqual(
+      parsed.prod.map(item => [item.name, item.optional]),
+      [
+        ['express', true],
+        ['koa', false],
+        ['react', false],
+        ['mocha', false],
+      ]
+    );
+    assert.deepEqual(dependencies(pkg, {}, nested, ['clientDependencies']).allMap, { react: '3', koa: '9' });
   });
 });

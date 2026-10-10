@@ -6,6 +6,7 @@ const coffee = require('coffee');
 const urllib = require('urllib');
 const helper = require('../support/helper');
 const npLock = require('../../lib/np_lock');
+const { exists } = require('../../lib/utils');
 
 const x = path.join(__dirname, '../..', 'bin', 'x.js');
 
@@ -23,7 +24,11 @@ describe('test/lockfile/np-lock.test.js', () => {
     );
   }
   const readLock = async () => JSON.parse(await fs.readFile(lockFile, 'utf8'));
-  const run = (bin, args) => coffee.fork(bin, args, { cwd: tmp, env: { ...process.env, np_lockfile: '' } });
+  // np 固定带 --no-lockfile, 锁文件用例统一走 np-x install
+  const run = (bin, args) =>
+    bin === helper.npminstall
+      ? coffee.fork(x, ['install', ...args], { cwd: tmp, env: { ...process.env, np_lockfile: '' } })
+      : coffee.fork(bin, args, { cwd: tmp, env: { ...process.env, np_lockfile: '' } });
   const installedVersion = async name =>
     (await helper.readJSON(path.join(await fs.realpath(path.join(tmp, 'node_modules', name)), 'package.json'))).version;
   // 不用 require.resolve: 它缓存解析结果, 重装后仍返回旧版本目录
@@ -63,6 +68,37 @@ describe('test/lockfile/np-lock.test.js', () => {
     await fs.writeFile(lockFile, JSON.stringify(lock));
     await fs.rm(path.join(tmp, 'node_modules'), { recursive: true, force: true });
   }
+
+  it('should only use the lockfile with np-x install, or np with --lockfile', async () => {
+    await fs.writeFile(
+      path.join(tmp, 'package.json'),
+      JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        dependencies: { ms: '^2.1.1' },
+        config: { np: { lockfile: true } },
+      })
+    );
+    // np 的 --no-lockfile 视同命令行参数, 环境变量与 config.np.lockfile 都不能打开
+    const env = { ...process.env, np_lockfile: 'true' };
+    const fork = (bin, args) => coffee.fork(bin, args, { cwd: tmp, env });
+    await fork(helper.npminstall, []).expect('code', 0).end();
+    assert(!(await exists(lockFile)));
+    await fork(helper.npminstall, ['--lockfile']).expect('code', 0).end();
+    assert(await exists(lockFile));
+
+    await cleanup();
+    await writePkg({ ms: '^2.1.1' });
+    delete env.np_lockfile;
+    await fork(x, ['install']).expect('code', 0).end();
+    assert(await exists(lockFile));
+
+    await cleanup();
+    await writePkg({ ms: '^2.1.1' });
+    await fs.writeFile(path.join(tmp, 'pnpm-workspace.yaml'), 'lockfile: false\n');
+    await fork(x, ['install']).expect('code', 0).end();
+    assert(!(await exists(lockFile)));
+  });
 
   it('should write the lockfile and reuse locked versions', async () => {
     await writePkg({ debug: '4.1.0' });

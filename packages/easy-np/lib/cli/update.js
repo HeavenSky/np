@@ -1,11 +1,12 @@
 const path = require('node:path');
 const parseArgs = require('minimist');
-const { rimraf, readWorkspaces, getWorkspaceInfos, formatWorkspaceNames, exitWithError } = require('../utils');
+const utils = require('../utils');
+const { rimraf, readWorkspaces, getWorkspaceInfos, exitWithError } = utils;
 const help = require('./help');
 const install = require('./install');
 
-function printHelp(root) {
-  console.log(help.update(root));
+function printHelp() {
+  console.log(help.update());
   process.exit(0);
 }
 
@@ -18,24 +19,33 @@ module.exports = async function update(args) {
 };
 
 async function main(args) {
+  utils.rejectRemovedArgs(args, {
+    root: 'run np-x update in that folder instead',
+    workspace: 'run np-x update inside the workspace folder instead',
+    w: 'run np-x update inside the workspace folder instead',
+  });
   const argv = parseArgs(args, {
-    string: ['root', 'workspace'],
-    boolean: ['help', 'clean-only'],
+    boolean: ['help', 'version', 'clean-only'],
     alias: {
       h: 'help',
-      w: 'workspace',
+      v: 'version',
     },
   });
 
-  const root = argv.root || process.cwd();
-  if (argv.help) return printHelp(root);
-  const installWorkspaceNames = formatWorkspaceNames(argv);
+  if (argv.version) {
+    console.log(`np v${require('../../package.json').version}`);
+    return;
+  }
+  if (argv.help) return printHelp();
+  // 在 workspace 目录中运行时只清理并重装这个 workspace
+  const { root, workspaceName } = await utils.resolveProjectRoot();
+  const installWorkspaceNames = workspaceName ? [workspaceName] : [];
   const { workspaceRoots, workspacesMap } = await readWorkspaces(root);
   let cleanRoots = [];
   if (installWorkspaceNames.length > 0) {
     const installWorkspaceInfos = await getWorkspaceInfos(root, installWorkspaceNames, workspacesMap);
     if (installWorkspaceInfos.length === 0) {
-      throw new Error(`No workspaces found: --workspace=${installWorkspaceNames.join(',')}`);
+      throw new Error(`No workspaces found: ${installWorkspaceNames.join(',')}`);
     }
     // 不清理 root/node_modules: 其中的 .store 被所有 workspace 共享, 只重装指定 workspace 无法恢复其他 workspace 的依赖
     cleanRoots = installWorkspaceInfos.map(info => info.root);

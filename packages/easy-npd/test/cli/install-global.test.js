@@ -7,6 +7,8 @@ const coffee = require('coffee');
 const helper = require('../support/helper');
 const { exists } = require('../../lib/utils');
 
+const x = path.join(__dirname, '../..', 'bin', 'x.js');
+
 describe('test/cli/install-global.test.js', () => {
   const registry = process.env.npm_registry || 'https://r.cnpmjs.org';
   const [tmp, cleanup] = helper.tmp();
@@ -110,10 +112,10 @@ describe('test/cli/install-global.test.js', () => {
         ),
       };
       const install = args =>
-        coffee.fork(helper.npminstall, [`--prefix=${tmp}`, `--registry=${registry.prefix}`, '-g', ...args]).debug();
+        coffee.fork(x, ['install', `--prefix=${tmp}`, `--registry=${registry.prefix}`, '-g', ...args]).debug();
       await install(['global-host'])
         .expect('stderr', /inner@file:\.\/inner \(declared by global-host@1\.0\.0\)/)
-        .expect('stderr', /reinstall with: npd -g "--allow-scripts=global-host@1\.0\.0" global-host/)
+        .expect('stderr', /reinstall with: npd-x install -g "--allow-scripts=global-host@1\.0\.0" global-host/)
         .notExpect('stderr', /approve-scripts/)
         .expect('code', 0)
         .end();

@@ -104,7 +104,7 @@ describe('test/scripts/lifecycle.test.js', () => {
 
         it('should install --save pedding and update dependencies', async () => {
           await coffee
-            .fork(helper.npminstall, ['--foo_bar_haha=okok', '-d'], {
+            .fork(helper.npminstall, ['--foo_bar_haha=okok', '--detail'], {
               cwd: root,
             })
             .debug()

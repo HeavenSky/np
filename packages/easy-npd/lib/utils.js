@@ -3,6 +3,7 @@
 const debug = require('debug')('npd:utils');
 const fs = require('fs/promises');
 const { accessSync } = require('fs');
+const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const cp = require('child_process');
@@ -14,6 +15,7 @@ require('./runtime');
 const tar = require('tar');
 const zlib = require('zlib');
 const runscript = require('runscript');
+const chalk = require('chalk');
 const homedir = require('node-homedir');
 const fse = require('fs-extra');
 const destroy = require('destroy');
@@ -334,6 +336,13 @@ exports.parseTarballUrls = tarball => {
  * Runs an npm script.
  */
 
+// 与 easy-np 一致: 根项目与本地目录依赖的脚本总是显示输出, 其他依赖的脚本默认在后台执行, --foreground-scripts 时显示
+// 本地目录依赖的版本目录带 fileSource 生成的 file.<hash> 来源后缀, 改动其格式时必须同步这里的正则
+exports.runsInForeground = (pkgDir, options) =>
+  !!options.foregroundScripts ||
+  (path.resolve(pkgDir) === path.resolve(options.root) && !options.global) ||
+  /[+.]file\.[0-9a-f]{8}@/.test(pkgDir);
+
 exports.runScript = async (pkgDir, script, options) => {
   // merge config.env <= process.env <= options.env
   const env = {};
@@ -387,18 +396,68 @@ exports.runScript = async (pkgDir, script, options) => {
     ignoreError = true;
   }
 
+  const foreground = exports.runsInForeground(pkgDir, options);
   try {
+    // 后台执行时收集输出, 失败时写入日志文件; stdin 保持 ignore, 等待输入的脚本不会挂起
     return await runscript(script, {
       cwd: pkgDir,
       env,
-      stdio: 'inherit',
+      stdio: foreground ? 'inherit' : ['ignore', 'pipe', 'pipe'],
     });
   } catch (err) {
     if (ignoreError) {
       options.console.info('[npd:runScript] ignore runscript error: %s', err);
     } else {
+      if (!foreground) await exports.writeScriptLog(pkgDir, pkg, script, err, scriptOutput(err.stdio), options);
       throw err;
     }
+  }
+};
+
+function scriptOutput(stdio) {
+  if (!stdio || (!stdio.stdout && !stdio.stderr)) return '';
+  return [`[stdout]`, String(stdio.stdout || ''), `[stderr]`, String(stdio.stderr || '')].join('\n');
+}
+
+// 与 easy-np 共用同一目录, 文件名带随机后缀不会互相覆盖
+const SCRIPT_LOG_DIR = 'np-script-logs';
+const SCRIPT_LOG_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+
+// 后台脚本失败时把命令与输出写入 <缓存目录>/np-script-logs, 日志路径附在 err.message 末尾; 写日志失败不影响原错误
+// 缓存目录优先取本次安装的 cacheDir, --no-cache 时按 np_cache, npm_config_cache, ~/.np_tarball 的顺序取
+exports.writeScriptLog = async (pkgDir, pkg, script, err, output, options) => {
+  const cacheRoot =
+    options.cacheDir || process.env.np_cache || process.env.npm_config_cache || path.join(os.homedir(), '.np_tarball');
+  const dir = path.join(cacheRoot, SCRIPT_LOG_DIR);
+  const time = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+  const name = `${String(pkg.name || 'unknown').replace(/[\\/]/g, '+')}@${pkg.version || '0.0.0'}`;
+  const file = path.join(dir, `${time}-${name}-${crypto.randomUUID().slice(0, 8)}.log`);
+  const content = [
+    `cwd: ${pkgDir}`,
+    `script: ${exports.redactUrl(script)}`,
+    `error: ${exports.redactUrl(err.message)}`,
+    '',
+    output ? exports.redactUrl(output) : '(no output)',
+    '',
+  ].join('\n');
+  try {
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(file, content);
+    err.message = `${err.message}\nscript output: ${file}`;
+    err.logFile = file;
+  } catch (writeErr) {
+    debug('write script log %s error: %s', file, writeErr.message);
+    return;
+  }
+  // 顺带清理过期日志
+  try {
+    const now = Date.now();
+    for (const entry of await fs.readdir(dir)) {
+      const stat = await fs.stat(path.join(dir, entry)).catch(() => null);
+      if (stat && now - stat.mtimeMs > SCRIPT_LOG_MAX_AGE) await fs.rm(path.join(dir, entry), { force: true });
+    }
+  } catch (cleanErr) {
+    debug('clean script logs %s error: %s', dir, cleanErr.message);
   }
 };
 
@@ -532,6 +591,16 @@ exports.stripUrlAuth = str => {
 };
 
 // 遮住 URL 中的 userinfo 与 .npmrc 风格的凭据, 用于报错, 日志与 debug 输出; 传给子进程的环境变量不经过这里
+// 与 easy-np 一致的出错输出: 错误或调用栈, 版本号与命令行参数, 均去掉凭据
+exports.exitWithError = (cmd, err, code = 1) => {
+  // 失败汇总已列出每个包的错误, 不再打印调用栈
+  console.error(chalk.red(exports.redactUrl(err.code === INSTALL_FAILURES_CODE ? err.message : err.stack)));
+  console.error(chalk.yellow(`${cmd} version: %s`), require('../package.json').version);
+  console.error(chalk.yellow(`${cmd} argv: %s`), exports.redactUrl(process.argv.join(' ')));
+  console.log('');
+  process.exit(code);
+};
+
 exports.redactUrl = str => {
   if (typeof str !== 'string') return str;
   return str
@@ -913,7 +982,6 @@ async function getRemotePackage(name, registry, globalOptions) {
   }
   const registries = [registry].concat([
     'https://registry.npmmirror.com',
-    'https://r.cnpmjs.org',
     'https://registry.npmjs.com',
   ]);
   let lastErr;
@@ -1019,6 +1087,18 @@ exports.getGlobalPrefix = prefix => {
     }
   }
   return exports.formatPath(prefix);
+};
+
+// 子命令中已移除的参数报错而不是忽略: 未声明的参数会把紧跟其后的包名当作自己的值吞掉
+// removed: { root: '提示', w: '提示' }, 单个字母表示短参数
+exports.rejectRemovedArgs = (args, removed) => {
+  const end = args.indexOf('--');
+  for (const arg of end === -1 ? args : args.slice(0, end)) {
+    const long = /^--(?:no-)?([^=]+)/.exec(arg)?.[1];
+    const name = long ?? (/^-[^-]/.test(arg) ? [...arg.slice(1).split('=')[0]].find(letter => removed[letter]) : null);
+    if (name && removed[name])
+      throw new Error(`${name.length === 1 ? '-' : '--'}${name} has been removed, ${removed[name]}`);
+  }
 };
 
 exports.getGlobalInstallMeta = prefix => {

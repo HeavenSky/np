@@ -22,6 +22,7 @@ const { MIRROR_ATTEMPTS } = get;
 const utils = require('../utils');
 const installState = require('../install_state');
 const config = require('../np_config');
+const foreignConfig = require('../foreign_config');
 
 module.exports = async (pkg, options) => {
   const realPkg = await resolve(pkg.subSpec || pkg, options);
@@ -196,10 +197,15 @@ function _getScope(name) {
   if (name[0] === '@') return name.slice(0, name.indexOf('/'));
 }
 
+// ~/.nprc 优先, npd-x 再读 .npmrc 的 @scope:registry
+function scopeRegistryOf(scope) {
+  return config.get(scope + ':registry') || foreignConfig.registry(scope + ':registry');
+}
+
 // scope 单独指定 registry 时该 scope 不换源
 function _getMirror(name, options) {
   const scope = _getScope(name);
-  if (scope && config.get(scope + ':registry')) return null;
+  if (scope && scopeRegistryOf(scope)) return null;
   return options.mirror || null;
 }
 
@@ -208,9 +214,9 @@ async function _getCacheInfo(fullname, globalOptions, { officialOnly = false } =
   let registry = globalOptions.registry;
   const scope = _getScope(fullname);
   if (scope) {
-    registry = config.get(scope + ':registry') || globalOptions.registry;
+    registry = scopeRegistryOf(scope) || globalOptions.registry;
   }
-  // 换源时缓存键统一取官方源地址, 使两个源共用缓存
+  // 换源时缓存键统一取官方源地址, 使各公共源共用缓存
   const mirror = _getMirror(fullname, globalOptions);
   const info = {
     pkgUrl: utils.formatPackageUrl(mirror ? mirror.officialRegistry : registry, fullname),

@@ -14,9 +14,9 @@ describe('test/deps/save-local-folder.test.js', () => {
   beforeEach(cleanup);
   afterEach(cleanup);
 
-  it('should --save install work', async () => {
+  it('should save to dependencies by default', async () => {
     await coffee
-      .fork(helper.npminstall, ['--save', demo], {
+      .fork(helper.npminstall, [demo], {
         cwd: root,
       })
       // .debug()
@@ -27,9 +27,9 @@ describe('test/deps/save-local-folder.test.js', () => {
     assert(await exists(path.join(root, 'node_modules/demo')));
   });
 
-  it('should --save-dev install work', async () => {
+  it('should --write=dev install work', async () => {
     await coffee
-      .fork(helper.npminstall, ['--save-dev', demo], {
+      .fork(helper.npminstall, ['--write=dev', demo], {
         cwd: root,
       })
       // .debug()
@@ -40,9 +40,9 @@ describe('test/deps/save-local-folder.test.js', () => {
     assert(await exists(path.join(root, 'node_modules/demo')));
   });
 
-  it('should --save-client install work', async () => {
+  it('should --write=client install work', async () => {
     await coffee
-      .fork(helper.npminstall, ['--save-client', demo], {
+      .fork(helper.npminstall, ['--write=client', demo], {
         cwd: root,
       })
       // .debug()
@@ -53,22 +53,22 @@ describe('test/deps/save-local-folder.test.js', () => {
     assert(await exists(path.join(root, 'node_modules/demo')));
   });
 
-  it('should --save-build install work', async () => {
+  it('should --write=build --write-exact install work', async () => {
     await coffee
-      .fork(helper.npminstall, ['--save-build', demo], {
+      .fork(helper.npminstall, ['--write=build', '--write-exact', demo], {
         cwd: root,
       })
       // .debug()
       .end();
 
     const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json')));
-    assert(pkg.buildDependencies.demo, '^1.0.0');
+    assert.equal(pkg.buildDependencies.demo, '1.0.0');
     assert(await exists(path.join(root, 'node_modules/demo')));
   });
 
-  it('should --save-isomorphic install work', async () => {
+  it('should --write=isomorphic install work', async () => {
     await coffee
-      .fork(helper.npminstall, ['--save-isomorphic', demo], {
+      .fork(helper.npminstall, ['--write=isomorphic', demo], {
         cwd: root,
       })
       // .debug()

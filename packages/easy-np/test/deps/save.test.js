@@ -66,7 +66,7 @@ if (process.platform !== 'win32') {
 
     it('should install --save pedding and update dependencies', done => {
       coffee
-        .fork(helper.npminstall, ['--save', '-d', 'pedding'], {
+        .fork(helper.npminstall, ['--detail', 'pedding'], {
           cwd: tmp,
         })
         .expect('stdout', /pedding@\* installed/)
@@ -87,7 +87,7 @@ if (process.platform !== 'win32') {
     it('should install --save pedding and update dependencies and sort', done => {
       fs.writeFileSync(path.join(tmp, 'package.json'), '{"dependencies":{"zhi":"^0.3.1"}}');
       coffee
-        .fork(helper.npminstall, ['--save', '-d', 'pedding'], {
+        .fork(helper.npminstall, ['--detail', 'pedding'], {
           cwd: tmp,
         })
         .debug()
@@ -105,7 +105,7 @@ if (process.platform !== 'win32') {
 
     it('should install --save-dev pedding and update devDependencies', done => {
       coffee
-        .fork(helper.npminstall, ['--save-dev', '-d', 'pedding@0'], {
+        .fork(helper.npminstall, ['--write=dev', '--detail', 'pedding@0'], {
           cwd: tmp,
         })
         .expect('stdout', /pedding@0 installed/)
@@ -124,7 +124,7 @@ if (process.platform !== 'win32') {
 
     it('should install --save alias and update dependencies', done => {
       coffee
-        .fork(helper.npminstall, ['--save', 'lodash-has-v3@npm:lodash.has@^3', 'lodash-has-v4@npm:lodash.has@^4'], {
+        .fork(helper.npminstall, ['lodash-has-v3@npm:lodash.has@^3', 'lodash-has-v4@npm:lodash.has@^4'], {
           cwd: tmp,
         })
         // .debug()
@@ -152,7 +152,7 @@ if (process.platform !== 'win32') {
 
     it('should install --save-optional pedding and update optionalDependencies', done => {
       coffee
-        .fork(helper.npminstall, ['--save-optional', '-d', 'pedding@1'], {
+        .fork(helper.npminstall, ['--write=optional', '--detail', 'pedding@1'], {
           cwd: tmp,
         })
         .expect('stdout', /pedding@1 installed/)
@@ -173,7 +173,7 @@ if (process.platform !== 'win32') {
       const url = `${registry}/taffydb/-/taffydb-2.7.2.tgz`;
       console.log(url);
       coffee
-        .fork(helper.npminstall, ['--save', url], {
+        .fork(helper.npminstall, [url], {
           cwd: tmp,
         })
         .debug()
@@ -191,7 +191,7 @@ if (process.platform !== 'win32') {
       const url = `${registry}/taffydb/-/taffydb-2.7.2.tgz`;
       console.log(url);
       coffee
-        .fork(helper.npminstall, ['--save', url], {
+        .fork(helper.npminstall, [url], {
           cwd: tmp,
         })
         .expect('code', 0)
@@ -206,7 +206,7 @@ if (process.platform !== 'win32') {
 
     it('should install from github with commit hash mozilla/nunjucks#0f8b21b8df7e8e852b2e1889388653b7075f0d09 and update dependencies', done => {
       coffee
-        .fork(helper.npminstall, ['--save', '-d', 'mozilla/nunjucks#0f8b21b8df7e8e852b2e1889388653b7075f0d09'], {
+        .fork(helper.npminstall, ['--detail', 'mozilla/nunjucks#0f8b21b8df7e8e852b2e1889388653b7075f0d09'], {
           cwd: tmp,
         })
         .expect('stdout', /nunjucks@mozilla\/nunjucks#0f8b21b8df7e8e852b2e1889388653b7075f0d09 installed/)

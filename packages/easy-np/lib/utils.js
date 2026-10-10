@@ -1,6 +1,7 @@
 const debug = require('node:util').debuglog('np:utils');
 const fs = require('node:fs/promises');
 const { accessSync } = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const cp = require('node:child_process');
@@ -392,25 +393,69 @@ exports.runScript = async (pkgDir, script, globalOptions, runInForeground = fals
   }
 
   try {
-    const options = { cwd: pkgDir, env, stdio: runInForeground ? 'inherit' : 'ignore', shell: true };
+    // 后台执行时收集输出, 失败时写入日志文件; stdin 保持 ignore, 等待输入的脚本不会挂起
+    const options = runInForeground
+      ? { cwd: pkgDir, env, stdio: 'inherit', shell: true }
+      : { cwd: pkgDir, env, stdio: ['ignore', 'pipe', 'pipe'], all: true, shell: true };
     return await (timeout ? commandWithTimeout(script, options, timeout) : command(script, options));
   } catch (err) {
     if (ignoreError) {
       globalOptions.console.info('[np:runScript] ignore runscript error: %s', err);
     } else {
+      if (!runInForeground) await exports.writeScriptLog(pkgDir, pkg, script, err, err.all, globalOptions);
       throw err;
     }
   }
 };
 
+const SCRIPT_LOG_DIR = 'np-script-logs';
+const SCRIPT_LOG_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+
+// 后台脚本失败时把命令与输出写入 <缓存目录>/np-script-logs, err.message 改为简短错误加日志路径; 写日志失败时保留原错误
+// 缓存目录优先取本次安装的 cacheDir, --no-cache 时按 np_cache, npm_config_cache, ~/.np_tarball 的顺序取
+exports.writeScriptLog = async (pkgDir, pkg, script, err, output, globalOptions) => {
+  const cacheRoot =
+    globalOptions.cacheDir ||
+    process.env.np_cache ||
+    process.env.npm_config_cache ||
+    path.join(os.homedir(), '.np_tarball');
+  const dir = path.join(cacheRoot, SCRIPT_LOG_DIR);
+  const time = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+  const name = `${String(pkg.name || 'unknown').replace(/[\\/]/g, '+')}@${pkg.version || '0.0.0'}`;
+  const file = path.join(dir, `${time}-${name}-${crypto.randomUUID().slice(0, 8)}.log`);
+  const content = [
+    `cwd: ${pkgDir}`,
+    `script: ${exports.redactUrl(script)}`,
+    `error: ${exports.redactUrl(err.shortMessage || err.message)}`,
+    '',
+    output ? exports.redactUrl(String(output)) : '(no output)',
+    '',
+  ].join('\n');
+  try {
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(file, content);
+    err.message = `${err.shortMessage || err.message}\nscript output: ${file}`;
+    err.logFile = file;
+  } catch (writeErr) {
+    debug('write script log %s error: %s', file, writeErr.message);
+    return;
+  }
+  // 顺带清理过期日志
+  try {
+    const now = Date.now();
+    for (const entry of await fs.readdir(dir)) {
+      const stat = await fs.stat(path.join(dir, entry)).catch(() => null);
+      if (stat && now - stat.mtimeMs > SCRIPT_LOG_MAX_AGE) await fs.rm(path.join(dir, entry), { force: true });
+    }
+  } catch (cleanErr) {
+    debug('clean script logs %s error: %s', dir, cleanErr.message);
+  }
+};
+
 // 结束整个进程树: 只结束直接子进程时, shell 或脚本再启动的孙进程会残留; POSIX 下要求子进程以 detached 启动成为进程组组长
-// 超时结束整个进程树; 后台执行时收集 stderr, 调用方把末尾几行附在报错里
+// 超时结束整个进程树; 后台执行时收集输出, 调用方把 stderr 末尾几行附在报错里
 async function commandWithTimeout(script, options, timeout) {
-  const child = command(script, {
-    ...options,
-    stdio: options.stdio === 'inherit' ? 'inherit' : ['ignore', 'ignore', 'pipe'],
-    detached: process.platform !== 'win32',
-  });
+  const child = command(script, { ...options, detached: process.platform !== 'win32' });
   const untrack = exports.trackChildProcess(child.pid);
   let timedOut = false;
   const timer = setTimeout(() => {
@@ -423,6 +468,8 @@ async function commandWithTimeout(script, options, timeout) {
     err.message = timedOut
       ? `${err.shortMessage}, timed out after ${timeout / 1000}s`
       : err.shortMessage || err.message;
+    // 带上超时说明, 写脚本日志时沿用
+    err.shortMessage = err.message;
     throw err;
   } finally {
     clearTimeout(timer);
@@ -922,7 +969,6 @@ async function getRemotePackage(name, registry, globalOptions) {
   } else if (!globalOptions?.offline) {
     const registries = [registry].concat([
       'https://registry.npmmirror.com',
-      'https://r.cnpmjs.org',
       'https://registry.npmjs.com',
     ]);
     for (const registry of registries) {
@@ -1066,12 +1112,35 @@ exports.getDisplayName = (pkg, ancestors) => {
 
 exports.exec = promisify(cp.exec);
 
-exports.formatWorkspaceNames = argv => {
-  let workspaceNames = argv.workspace || [];
-  if (!argv.workspaces && workspaceNames && typeof workspaceNames === 'string') {
-    workspaceNames = [workspaceNames];
+// 子命令中已移除的参数报错而不是忽略: 未声明的参数会把紧跟其后的包名当作自己的值吞掉
+// removed: { root: '提示', w: '提示' }, 单个字母表示短参数
+exports.rejectRemovedArgs = (args, removed) => {
+  const end = args.indexOf('--');
+  for (const arg of end === -1 ? args : args.slice(0, end)) {
+    const long = /^--(?:no-)?([^=]+)/.exec(arg)?.[1];
+    const name = long ?? (/^-[^-]/.test(arg) ? [...arg.slice(1).split('=')[0]].find(letter => removed[letter]) : null);
+    if (name && removed[name])
+      throw new Error(`${name.length === 1 ? '-' : '--'}${name} has been removed, ${removed[name]}`);
   }
-  return workspaceNames;
+};
+
+// 与 npm 7+ 一致: 当前目录是上层项目的某个 workspace 时, 以上层项目为根, 只处理这个 workspace
+// 返回 { root, workspaceRoot: 根项目目录, workspaceName: 当前目录对应的 workspace 名, 不在 workspace 内时为 null }
+exports.resolveProjectRoot = async (cwd = process.cwd()) => {
+  const realCwd = await fs.realpath(cwd).catch(() => cwd);
+  let dir = path.dirname(realCwd);
+  while (dir !== path.dirname(dir)) {
+    if (await exports.exists(path.join(dir, 'package.json'))) {
+      const { workspacesMap } = await exports.readWorkspaces(dir);
+      for (const [name, info] of workspacesMap) {
+        if ((await fs.realpath(info.root).catch(() => info.root)) === realCwd) {
+          return { root: dir, workspaceName: name };
+        }
+      }
+    }
+    dir = path.dirname(dir);
+  }
+  return { root: cwd, workspaceName: null };
 };
 
 // 被依赖的 workspace 排在依赖方之前, 无依赖关系的保持 glob 顺序; 不能改回 Array#sort 比较器, 依赖关系不满足传递性, 比较器排序会给出错误顺序
@@ -1111,9 +1180,12 @@ exports.readWorkspaces = async root => {
   const workspaceInfos = [];
   const rootPkgFile = path.join(root, 'package.json');
   const rootPkg = await exports.readJSON(rootPkgFile);
-  if (Array.isArray(rootPkg.workspaces) && rootPkg.workspaces.length > 0) {
+  let workspaces = Array.isArray(rootPkg.workspaces) ? rootPkg.workspaces : [];
+  // np-x: package.json 没有 workspaces 时取 pnpm-workspace.yaml 的 packages
+  if (workspaces.length === 0) workspaces = require('./foreign_config').pnpmWorkspaces(root);
+  if (workspaces.length > 0) {
     // should contains package.json
-    const patterns = rootPkg.workspaces.map(workspace => {
+    const patterns = workspaces.map(workspace => {
       // 'packages/*', 'packages/*/'
       return workspace + (workspace.endsWith('/') ? '' : '/') + 'package.json';
     });

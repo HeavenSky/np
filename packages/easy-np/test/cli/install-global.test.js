@@ -132,9 +132,9 @@ describe('test/cli/install-global.test.js', () => {
       const args = [`--prefix=${tmp}`, '-g', 'glob-host', `--registry=${registryServer.prefix.slice(0, -1)}`];
       const env = { ...process.env, np_cache: path.join(tmp, 'cache') };
       await coffee
-        .fork(helper.npminstall, args, { env })
+        .fork(helper.x, ['install', ...args], { env })
         .expect('stderr', /inner@file:\.\/inner \(declared by glob-host@1\.0\.0\) \(postinstall\)/)
-        .expect('stderr', /reinstall with: np -g "--allow-scripts=glob-host@1\.0\.0" glob-host/)
+        .expect('stderr', /reinstall with: np-x install -g "--allow-scripts=glob-host@1\.0\.0" glob-host/)
         .notExpect('stderr', /approve-scripts/)
         .expect('code', 0)
         .end();
@@ -142,7 +142,7 @@ describe('test/cli/install-global.test.js', () => {
       assert.equal(await exists(marker), false);
 
       await coffee
-        .fork(helper.npminstall, [...args, '--allow-scripts=glob-host'], { env })
+        .fork(helper.x, ['install', ...args, '--allow-scripts=glob-host'], { env })
         .expect('code', 0)
         .end();
       assert.equal(await exists(marker), true);

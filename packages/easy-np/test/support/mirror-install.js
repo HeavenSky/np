@@ -3,7 +3,7 @@ const mirror = require('../../lib/mirror');
 const { installLocal } = require('../..');
 
 const { root, pkgs, order, sources, cacheDir } = JSON.parse(process.argv[2]);
-const state = mirror.create({ order, binaryOrder: order, sources });
+const state = mirror.create({ order, binaryOrder: ['mirror', 'official'], sources });
 installLocal({ root, pkgs, registry: state.registry, cacheDir, mirror: state }).catch(err => {
   console.error(err);
   process.exit(1);

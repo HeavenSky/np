@@ -1,7 +1,7 @@
 {
   "name": "easy-npd",
-  "version": "0.0.3",
-  "description": "Fast npm installer forked from npminstall 6.8.0, with flat _name@version@name layout, latest-version hoisting and node 14 support",
+  "version": "0.0.4",
+  "description": "Fast npm installer with a flat _name@version@name layout, latest-version hoisting, allowScripts, np-lock.json and npm / pnpm config compatibility, supports Node.js 14",
   "keywords": [
     "dedup",
     "hoist",
@@ -36,11 +36,12 @@
     "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
-    "test": "npm run lint && mocha \"test/*/*.test.js\"",
+    "test": "npm run lint:check && mocha \"test/*/*.test.js\"",
     "test-cov": "c8 --reporter=text --reporter=lcov mocha \"test/*/*.test.js\"",
     "test-local": "npm_china=true local=true mocha --full-trace \"test/*/*.test.js\"",
-    "lint": "oxlint",
-    "fmt": "oxfmt",
+    "lint": "oxlint --fix",
+    "lint:check": "oxlint",
+    "fmt": "oxfmt --write",
     "fmt:check": "oxfmt --check",
     "ci": "npm run lint && npm run test-cov",
     "prepublishOnly": "npm run lint"
@@ -58,6 +59,7 @@
     "destroy": "^1.0.4",
     "detect-libc": "^2.0.1",
     "fs-extra": "^7.0.1",
+    "js-yaml": "^4.1.0",
     "minimatch": "^3.0.4",
     "minimist": "^1.2.0",
     "ms": "^2.1.1",
@@ -68,6 +70,7 @@
     "npm-packlist": "^5.1.3",
     "ora": "^4.0.5",
     "p-map": "^2.1.0",
+    "rc": "^1.2.8",
     "runscript": "^1.3.0",
     "semver": "^7.0.0",
     "tar": "^7.5.22",

@@ -15,11 +15,15 @@ module.exports = async function pruneCommand(args) {
 };
 
 async function main(args) {
+  utils.rejectRemovedArgs(args, { root: 'run np-x prune in that folder instead' });
   const argv = parseArgs(args, {
-    string: ['root'],
-    boolean: ['help', 'dry-run', 'global'],
-    alias: { h: 'help', g: 'global' },
+    boolean: ['help', 'version', 'dry-run', 'global'],
+    alias: { h: 'help', v: 'version', g: 'global' },
   });
+  if (argv.version) {
+    console.log(`np v${require('../../package.json').version}`);
+    return;
+  }
   if (argv.help) {
     console.log(help.prune());
     return;
@@ -27,7 +31,8 @@ async function main(args) {
   if (argv.global) {
     throw new Error('-g is not supported, global packages have no shared .store');
   }
-  const root = path.resolve(argv.root || process.cwd());
+  // 在 workspace 目录中运行时回收整个项目的 .store
+  const { root } = await utils.resolveProjectRoot();
   const dryRun = argv['dry-run'];
   const { removed, kept } = await prune({ root, dryRun });
   for (const entry of removed) {

@@ -51,6 +51,7 @@ describe('test/registry/download.test.js', () => {
           root: tmp,
           pkgs: [{ name: 'pedding' }],
           production: true,
+          cacheDir: '',
         });
         throw new Error('should not run this');
       } catch (err) {
@@ -132,6 +133,7 @@ describe('test/registry/download.test.js', () => {
           root: tmp,
           pkgs: [{ name: 'pedding', version: '1.0.0' }],
           production: true,
+          cacheDir: '',
         });
         throw new Error('should not run this');
       } catch (err) {
@@ -184,6 +186,7 @@ describe('test/registry/download.test.js', () => {
           root: tmp,
           pkgs: [{ name: 'pedding', version: '1.0.0' }],
           production: true,
+          cacheDir: '',
         });
         throw new Error('should not run this');
       } catch (err) {
@@ -229,6 +232,7 @@ describe('test/registry/download.test.js', () => {
           root: tmp,
           pkgs: [{ name: 'pedding' }],
           production: true,
+          cacheDir: '',
         });
         throw new Error('should not run this');
       } catch (err) {
@@ -265,6 +269,7 @@ describe('test/registry/download.test.js', () => {
           root: tmp,
           pkgs: [{ name: 'pedding' }],
           production: true,
+          cacheDir: '',
         });
         throw new Error('should not run this');
       } catch (err) {

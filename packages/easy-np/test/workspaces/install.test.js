@@ -80,23 +80,18 @@ describe('test/install-workpsaces.test.js', () => {
         name: 'c',
       })
     );
-    // npm install abbrev -w c
-    await coffee.fork(helper.npminstall, ['abbrev', '-w', 'c'], { cwd: root }).debug().expect('code', 0).end();
+    // 在 workspace 目录中运行等同 npm install abbrev -w c
+    await coffee.fork(helper.npminstall, ['abbrev'], { cwd: pkgDir }).debug().expect('code', 0).end();
     let pkg = await helper.readJSON(pkgFile);
     assert.equal(pkg.name, 'c');
     assert.equal(typeof pkg.dependencies.abbrev, 'string');
 
-    await coffee.fork(helper.npminstall, ['abbrev@1.1.1', '-w', 'c'], { cwd: root }).debug().expect('code', 0).end();
+    await coffee.fork(helper.npminstall, ['abbrev@1.1.1'], { cwd: pkgDir }).debug().expect('code', 0).end();
     pkg = await helper.readJSON(pkgFile);
     assert.equal(pkg.name, 'c');
     assert.equal(pkg.dependencies.abbrev, '^1.1.1');
 
-    // should support workspace-path
-    await coffee
-      .fork(helper.npminstall, ['abbrev@1.1.0', '--workspace', 'packages/c'], { cwd: root })
-      .debug()
-      .expect('code', 0)
-      .end();
+    await coffee.fork(helper.npminstall, ['abbrev@1.1.0'], { cwd: pkgDir }).debug().expect('code', 0).end();
     pkg = await helper.readJSON(pkgFile);
     assert.equal(pkg.name, 'c');
     assert.equal(pkg.dependencies.abbrev, '^1.1.0');
@@ -116,7 +111,7 @@ describe('test/install-workpsaces.test.js', () => {
     assert.equal(typeof pkg.dependencies.pedding, 'string');
 
     await coffee
-      .fork(helper.npminstall, ['pedding@1.0.0', '--workspaces', '-D'], { cwd: tmp })
+      .fork(helper.npminstall, ['pedding@1.0.0', '--workspaces', '--write=dev'], { cwd: tmp })
       .debug()
       .expect('code', 0)
       .end();
@@ -156,7 +151,7 @@ describe('test/install-workpsaces.test.js', () => {
         name: 'c',
       })
     );
-    await coffee.fork(helper.npminstall, ['aa', '-w', 'c'], { cwd: root }).debug().expect('code', 0).end();
+    await coffee.fork(helper.npminstall, ['aa'], { cwd: pkgDir }).debug().expect('code', 0).end();
     let pkg = await helper.readJSON(pkgFile);
     assert.equal(pkg.name, 'c');
     assert.equal(pkg.dependencies.aa, '^1.0.0');
@@ -165,21 +160,17 @@ describe('test/install-workpsaces.test.js', () => {
     assert.equal(pkg.name, 'aa');
     pkg = await helper.readJSON(path.join(root, 'packages/c/node_modules/aa/package.json'));
     assert.equal(pkg.name, undefined);
-    await coffee.fork(helper.npminstall, ['aa@1', '-w', 'c'], { cwd: root }).debug().expect('code', 0).end();
+    await coffee.fork(helper.npminstall, ['aa@1'], { cwd: pkgDir }).debug().expect('code', 0).end();
     pkg = await helper.readJSON(pkgFile);
     assert.equal(pkg.name, 'c');
     assert.equal(pkg.dependencies.aa, '^1.0.0');
     // wrong version should work
-    await coffee.fork(helper.npminstall, ['aa@2', '-w', 'c'], { cwd: root }).debug().expect('code', 0).end();
+    await coffee.fork(helper.npminstall, ['aa@2'], { cwd: pkgDir }).debug().expect('code', 0).end();
     pkg = await helper.readJSON(pkgFile);
     assert.equal(pkg.name, 'c');
     assert.equal(pkg.dependencies.aa, '^1.0.0');
     // scoped package work
-    await coffee
-      .fork(helper.npminstall, ['@cnpm/foo', '-w', 'c', '--save-dev'], { cwd: root })
-      .debug()
-      .expect('code', 0)
-      .end();
+    await coffee.fork(helper.npminstall, ['@cnpm/foo', '--write=dev'], { cwd: pkgDir }).debug().expect('code', 0).end();
     pkg = await helper.readJSON(pkgFile);
     assert.equal(pkg.name, 'c');
     assert.equal(pkg.devDependencies['@cnpm/foo'], '^1.0.0');
@@ -197,51 +188,16 @@ describe('test/install-workpsaces.test.js', () => {
     await coffee.fork(helper.npminstall, [], { cwd: root }).debug().expect('code', 0).end();
   });
 
-  it('should throw error when workspace not exists', async () => {
+  it('should reject the removed --workspace and -w', async () => {
     await coffee
-      .fork(helper.npminstall, ['abbrev', '--workspace', 'not-exists'], { cwd: root })
-      .debug()
+      .fork(helper.npminstall, ['abbrev', '--workspace', 'aa'], { cwd: root })
       .expect('code', 1)
-      .expect('stderr', /No workspaces found: --workspace=not-exists/)
+      .expect('stderr', /--workspace has been removed/)
       .end();
-  });
-
-  // https://docs.npmjs.com/cli/v8/commands/npm-install#workspace
-  it('should install workspace-package on path to a parent workspace directory', async () => {
     await coffee
-      .fork(helper.npminstall, ['is-number', '--workspace', 'core'], { cwd: root })
-      .debug()
-      .expect('code', 0)
-      .end();
-    let pkgFile = path.join(root, 'core/bar/node_modules/is-number/package.json');
-    assertFile(pkgFile);
-    let pkg = await helper.readJSON(path.join(root, 'core/bar/package.json'));
-    assert.equal(typeof pkg.dependencies['is-number'], 'string');
-    pkgFile = path.join(root, 'core/foo/node_modules/is-number/package.json');
-    assertFile(pkgFile);
-    pkg = await helper.readJSON(path.join(root, 'core/foo/package.json'));
-    assert.equal(typeof pkg.dependencies['is-number'], 'string');
-    pkgFile = path.join(root, 'core/scoped/node_modules/is-number/package.json');
-    assertFile(pkgFile);
-    pkg = await helper.readJSON(path.join(root, 'core/scoped/package.json'));
-    assert.equal(typeof pkg.dependencies['is-number'], 'string');
-    // uninstall should work
-    await coffee
-      .fork(helper.x, ['uninstall', 'is-number', '--save', '--workspace', 'core'], { cwd: root })
-      .debug()
-      .expect('code', 0)
-      .end();
-    assertFile.fail(path.join(root, 'core/foo/node_modules/is-number/package.json'));
-    pkg = await helper.readJSON(path.join(root, 'core/bar/package.json'));
-    assert.equal(pkg.dependencies['is-number'], undefined);
-  });
-
-  it('should throw error when workspace not exists', async () => {
-    await coffee
-      .fork(helper.npminstall, ['abbrev', '--workspace', 'not-exists'], { cwd: root })
-      .debug()
+      .fork(helper.x, ['update', '-w', 'aa'], { cwd: root })
       .expect('code', 1)
-      .expect('stderr', /No workspaces found: --workspace=not-exists/)
+      .expect('stderr', /-w has been removed/)
       .end();
   });
 
@@ -262,7 +218,7 @@ describe('test/install-workpsaces.test.js', () => {
 
   it('should update one workspace', async () => {
     await coffee
-      .fork(helper.x, ['update', '-w', 'aa'], { cwd: root })
+      .fork(helper.x, ['update'], { cwd: path.join(root, 'packages/a') })
       .debug()
       .expect('code', 0)
       .expect('stdout', /\[np-x update] removing/)
@@ -275,16 +231,5 @@ describe('test/install-workpsaces.test.js', () => {
     assert.equal(pkg.version, '2.0.0');
     // dont install b deps
     assertFile.fail(path.join(root, 'node_modules/b/node_modules/abbrev/package.json'));
-
-    // support workpsace-path
-    await coffee
-      .fork(helper.x, ['update', '-w', 'packages/a'], { cwd: root })
-      .debug()
-      .expect('code', 0)
-      .expect('stdout', /\[np-x update] removing/)
-      .end();
-    pkg = await helper.readJSON(path.join(root, 'node_modules/aa/node_modules/abbrev/package.json'));
-    assert.equal(pkg.name, 'abbrev');
-    assert.equal(pkg.version, '2.0.0');
   });
 });

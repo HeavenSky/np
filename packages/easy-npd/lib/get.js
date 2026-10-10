@@ -22,9 +22,11 @@ function getHttpClient() {
   return httpclient;
 }
 
-// 公共源交替尝试的总次数: 两个源各 2 次
-const MIRROR_ATTEMPTS = 4;
+// 公共源逐个尝试的总次数: 测速最快的 3 个源按先后各 2 次
+const MIRROR_ATTEMPTS = 6;
 get.MIRROR_ATTEMPTS = MIRROR_ATTEMPTS;
+// 安装脚本在二进制镜像与官方地址之间交替重跑的总次数: 两个源各 2 次
+get.BINARY_ATTEMPTS = 4;
 
 async function get(url, options, globalOptions) {
   if (options.mirrorUrls && options.mirrorUrls.length > 1) {
@@ -36,13 +38,19 @@ async function get(url, options, globalOptions) {
     options.headers.Referer = globalOptions.referer;
   }
   // need auth
+  // .npmrc 的 _authToken 只发给与 registry 同 host 的请求, 去掉该判断会把 token 泄露给 tarball CDN 与备用 registry
+  if (globalOptions?.registryAuthorization) {
+    if (isSameHost(url, globalOptions.registry)) {
+      options.headers.Authorization = `Bearer ${globalOptions.registryAuthorization}`;
+    }
+  }
   const registryUrl = npConfig.get('registry');
   const registryUri = (registryUrl && registryUrl.replace(urlParser.parse(registryUrl).protocol, '')) || '';
   const hasUserSettings =
     typeof npConfig.get(registryUri + ':username') === 'string' &&
     typeof npConfig.get(registryUri + ':_password') === 'string';
   // 凭据只发给与 registry 同 host 的请求, always-auth 也不例外; 放宽会把凭据泄露给备用 registry, tarball CDN 与二进制镜像
-  if (hasUserSettings && isSameHost(url, registryUrl)) {
+  if (!globalOptions?.registryAuthorization && hasUserSettings && isSameHost(url, registryUrl)) {
     const authToken = `${npConfig.get(registryUri + ':username')}:${Buffer.from(npConfig.get(registryUri + ':_password'), 'base64').toString()}`;
     options.headers.Authorization = `Basic ${Buffer.from(authToken).toString('base64')}`;
   }
@@ -73,7 +81,7 @@ async function get(url, options, globalOptions) {
   return result;
 }
 
-// 按 mirrorUrls 的先后交替尝试, 4xx / 5xx 也换源: 镜像同步滞后时新版本在镜像上是 404
+// 按 mirrorUrls 的先后循环尝试, 4xx / 5xx 也换源: 镜像同步滞后时新版本在镜像上是 404
 async function getFromMirrors(options, globalOptions) {
   const { mirrorUrls, ...requestOptions } = options;
   let lastErr;

@@ -1,11 +1,11 @@
-// --dedup 提升到根目录的同名包取本次安装内的最高版本, 根目录直接依赖保持声明版本
+// --shamefully-hoist 提升到根目录的同名包取本次安装内的最高版本, 根目录直接依赖保持声明版本
 const assert = require('node:assert');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const coffee = require('coffee');
 const helper = require('../support/helper');
 
-describe('test/resolution/dedup-latest.test.js', () => {
+describe('test/resolution/shamefully-hoist-latest.test.js', () => {
   const [tmp, cleanup] = helper.tmp();
 
   beforeEach(cleanup);
@@ -20,9 +20,9 @@ describe('test/resolution/dedup-latest.test.js', () => {
     return (await helper.readJSON(path.join(tmp, 'node_modules', name, 'package.json'))).version;
   }
 
-  function install(args = []) {
+  function install(args = [], cwd = tmp) {
     return coffee
-      .fork(helper.npminstall, ['--dedup', ...args], { cwd: tmp })
+      .fork(helper.npminstall, ['--shamefully-hoist', ...args], { cwd })
       .debug()
       .expect('code', 0)
       .end();
@@ -101,7 +101,7 @@ describe('test/resolution/dedup-latest.test.js', () => {
     });
     await install();
     assert.equal(await version('ms'), '2.0.0');
-    await install(['-w', 'b']);
+    await install([], path.join(tmp, 'packages/b'));
     assert.equal(await version('ms'), '2.0.0');
     // Windows 的 junction 读出来是绝对路径, 末尾可能带分隔符
     const link = await fs.readlink(path.join(tmp, 'node_modules/b'));

@@ -8,7 +8,6 @@ const config = {
     // like "node-pre-gyp http GET https://npmmirror.com/mirrors/fsevents/v1.0.6/fse-v1.0.6-node-v46-darwin-x64.tar.gz"
     npm_config_loglevel: 'http',
   },
-  chineseRegistry: 'https://registry.npmmirror.com',
   userAgent: `easy-np/${pkg.version} npm/? node/${process.version} ${process.platform} ${process.arch}`,
   npmrc: rc('npm'),
 };

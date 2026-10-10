@@ -17,7 +17,7 @@ describe('test/deps/ignore-optional.test.js', () => {
   it('should install ignore optionalDependencies', async () => {
     cwd = path.join(__dirname, '../fixtures', 'ignore-optional');
     await coffee
-      .fork(npminstall, ['--no-optional', '--production', '-d'], { cwd })
+      .fork(npminstall, ['--omit=optional', '--production', '--detail'], { cwd })
       .debug()
       .notExpect('stderr', /node-gyp rebuild/)
       .expect('stdout', /pinyin@2.8.3 installed/)

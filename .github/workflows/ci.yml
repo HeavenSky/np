@@ -24,7 +24,7 @@ jobs:
         with:
           node-version: 22.x
       - run: npm i
-      - run: npm run lint
+      - run: npm run lint:check
 
   # engines 下限 Node 14.18: mocha 11 不支持, 用 mocha 10 跑全量用例
   # Node 14 自带的 npm 6 不认 npx -y, mocha 10 改为全局安装

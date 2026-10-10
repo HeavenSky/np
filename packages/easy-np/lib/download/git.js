@@ -327,7 +327,7 @@ async function prepareRepo(dir, resolved, options) {
   // 依赖的安装脚本不执行(与 npm 12 默认不执行未授权的依赖脚本一致), 否则只用于测试的 devDependencies(例如 phantomjs-prebuilt)下载失败也会让整个 git 依赖装不上
   const env = { ...process.env, [NO_PREPARE_ENV]: noPrepare.join('\n'), [allowScripts.GIT_PREPARE_CHILD_ENV]: '1' };
   delete env.NODE_ENV;
-  const args = [NP_BIN, `--root=${dir}`, '--ignore-scripts', '--no-lockfile'];
+  const args = [NP_BIN, '--ignore-scripts', '--no-lockfile'];
   if (options.registry) {
     args.push(`--registry=${options.registry}`);
   }

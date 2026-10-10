@@ -8,6 +8,7 @@ const npa = require('npm-package-arg');
 const parseArgs = require('minimist');
 const utils = require('../utils');
 const allowScripts = require('../allow_scripts');
+const foreignConfig = require('../foreign_config');
 const { buildTriggers } = require('../download/git');
 const help = require('./help');
 
@@ -18,26 +19,29 @@ async function runCommand(command, args) {
   try {
     await main(command, args);
   } catch (err) {
-    console.error(chalk.red(`npd-x ${command}: ${err.message}`));
-    process.exit(1);
+    utils.exitWithError(`npd-x ${command}`, err);
   }
 }
 
 async function main(command, args) {
   const deny = command === 'deny-scripts';
+  utils.rejectRemovedArgs(args, { root: `run npd-x ${command} in that folder instead` });
   const argv = parseArgs(args, {
-    string: ['root'],
-    boolean: ['help', 'all', 'pending', 'pin', 'global'],
+    boolean: ['help', 'version', 'all', 'pending', 'pin', 'global'],
     default: { pin: true },
-    alias: { h: 'help', g: 'global' },
+    alias: { h: 'help', v: 'version', g: 'global' },
   });
+  if (argv.version) {
+    console.log(`npd v${require('../../package.json').version}`);
+    return;
+  }
   const usage = deny ? help.denyScripts() : help.approveScripts();
   if (argv.help) {
     console.log(usage);
     return;
   }
   if (argv.global) {
-    throw new Error('global installs have no project package.json, use npd -g --allow-scripts=<pkg> instead');
+    throw new Error('global installs have no project package.json, use npd-x install -g --allow-scripts=<pkg> instead');
   }
   const names = argv._.map(String);
   if (!(argv.pending && !deny) && !argv.all && names.length === 0) {
@@ -46,12 +50,23 @@ async function main(command, args) {
     return;
   }
 
-  const root = path.resolve(argv.root || process.cwd());
+  const root = process.cwd();
   const pkgFile = path.join(root, 'package.json');
   const text = await fs.readFile(pkgFile, 'utf8');
   const rootPkg = JSON.parse(text);
-  const policy = rootPkg.allowScripts && typeof rootPkg.allowScripts === 'object' ? rootPkg.allowScripts : {};
+  let policy = rootPkg.allowScripts && typeof rootPkg.allowScripts === 'object' ? rootPkg.allowScripts : {};
   const installed = await listInstalledWithScripts(root);
+  // 写入 allowScripts 后 pnpm 构建策略不再生效, 先把它的条目并入, 已放行或拒绝的依赖不会变回未审核;
+  // 只有 neverBuiltDependencies 时未列出的依赖原本都放行, 把已安装的这些依赖按包名写成放行
+  if (Object.keys(policy).length === 0) {
+    const fromPnpm = foreignConfig.pnpmScriptPolicy(foreignConfig.pnpm(root));
+    policy = { ...fromPnpm.policy };
+    if (fromPnpm.allowUnreviewed) {
+      for (const item of installed) {
+        if (allowScripts.check(policy, item.identity) === null) policy[allowScripts.keyOf(item.identity, false)] = true;
+      }
+    }
+  }
   const pending = installed.filter(item => allowScripts.check(policy, item.identity) === null);
 
   if (argv.pending && !deny) {

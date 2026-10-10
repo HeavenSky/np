@@ -5,23 +5,27 @@ const path = require('path');
 const chalk = require('chalk');
 const parseArgs = require('minimist');
 const prune = require('../prune');
+const utils = require('../utils');
 const help = require('./help');
 
 module.exports = async function pruneCommand(args) {
   try {
     await main(args);
   } catch (err) {
-    console.error(chalk.red(`npd-x prune: ${err.message}`));
-    process.exit(1);
+    utils.exitWithError('npd-x prune', err);
   }
 };
 
 async function main(args) {
+  utils.rejectRemovedArgs(args, { root: 'run npd-x prune in that folder instead' });
   const argv = parseArgs(args, {
-    string: ['root'],
-    boolean: ['help', 'dry-run', 'global'],
-    alias: { h: 'help', g: 'global' },
+    boolean: ['help', 'version', 'dry-run', 'global'],
+    alias: { h: 'help', v: 'version', g: 'global' },
   });
+  if (argv.version) {
+    console.log(`npd v${require('../../package.json').version}`);
+    return;
+  }
   if (argv.help) {
     console.log(help.prune());
     return;
@@ -29,7 +33,7 @@ async function main(args) {
   if (argv.global) {
     throw new Error('-g is not supported, global packages are not supported');
   }
-  const root = path.resolve(argv.root || process.cwd());
+  const root = process.cwd();
   const dryRun = argv['dry-run'];
   const { removed, kept } = await prune({ root, dryRun });
   for (const entry of removed) {

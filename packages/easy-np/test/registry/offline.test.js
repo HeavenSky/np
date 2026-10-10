@@ -32,7 +32,7 @@ describe('test/registry/offline.test.js', () => {
 
   it('should install success when cache manifests exists', async () => {
     await coffee
-      .fork(helper.npminstall, ['-d'], {
+      .fork(helper.npminstall, ['--detail'], {
         cwd: demo,
         env: Object.assign({}, process.env, {
           npm_config_cache: path.join(homedir, 'foocache/.npminstall_tarball'),
@@ -45,7 +45,7 @@ describe('test/registry/offline.test.js', () => {
 
     await cleanupModules();
     await coffee
-      .fork(helper.npminstall, ['-d', '--offline'], {
+      .fork(helper.npminstall, ['--detail', '--offline'], {
         cwd: demo,
         env: Object.assign({}, process.env, {
           npm_config_cache: path.join(homedir, 'foocache/.npminstall_tarball'),

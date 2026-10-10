@@ -34,7 +34,7 @@ describe('test/cli/link-folder.test.js', () => {
 
   it('should link two folder work', async () => {
     await coffee
-      .fork(npmlink, ['link', './linked-package', './linked-package-2', '-d'], {
+      .fork(npmlink, ['link', './linked-package', './linked-package-2', '--detail'], {
         cwd: root,
       })
       .debug()

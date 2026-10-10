@@ -5,10 +5,10 @@ const npa = require('npm-package-arg');
 const path = require('path');
 const fs = require('fs/promises');
 const parseArgs = require('minimist');
-const chalk = require('chalk');
 const execSync = require('child_process').execSync;
 
 const utils = require('../utils');
+const prune = require('../prune');
 const uninstall = require('../uninstall');
 const help = require('./help');
 
@@ -16,28 +16,39 @@ module.exports = async function uninstallCommand(args) {
   try {
     await main(args);
   } catch (err) {
-    console.error(chalk.red(utils.redactUrl(String(err))));
-    console.error(chalk.red(utils.redactUrl(err.stack)));
-    process.exit(1);
+    utils.exitWithError('npd-x uninstall', err);
   }
 };
 
 async function main(args) {
+  utils.rejectRemovedArgs(args, {
+    root: 'run npd-x uninstall in that folder instead',
+    'ignore-scripts': 'uninstall runs no lifecycle scripts',
+    save: 'packages are removed from dependencies, devDependencies, optionalDependencies and peerDependencies by default',
+    'save-dev': 'use --write=dev',
+    'save-optional': 'use --write=optional',
+    S: 'packages are removed from dependencies by default',
+    D: 'use --write=dev',
+    O: 'use --write=optional',
+  });
   const argv = parseArgs(args, {
-    string: ['root', 'prefix'],
-    boolean: ['version', 'help', 'global', 'save', 'save-dev', 'save-optional', 'ignore-scripts'],
+    string: ['prefix', 'write'],
+    boolean: ['version', 'help', 'global'],
     alias: {
       v: 'version',
       h: 'help',
       g: 'global',
-      S: 'save',
-      D: 'save-dev',
-      O: 'save-optional',
     },
   });
+  // npd-x uninstall --write bar 会把包名 bar 当作类型吞掉, 只接受 --write=<type>
+  if (args.includes('--write')) throw new Error('--write only accepts the --write=<type> form, e.g. --write=dev');
+  const writeType = argv.write === undefined ? null : String(argv.write);
+  if (writeType !== null && !/^[a-z][a-zA-Z0-9]*$/.test(writeType)) {
+    throw new Error(`--write takes one dependency type like prod or dev, got "${writeType}"`);
+  }
 
   if (argv.version) {
-    console.log('v%s', require('../../package.json').version);
+    console.log(`npd v${require('../../package.json').version}`);
     process.exit(0);
   }
 
@@ -52,7 +63,7 @@ async function main(args) {
 
   if (!pkgs.length) printHelp();
 
-  const root = argv.root || process.cwd();
+  const root = process.cwd();
   const config = {
     root,
     pkgs,
@@ -75,16 +86,24 @@ async function main(args) {
   debug('uninstall in %s with pkg: %j, config: %j', root, pkgs, config);
   const uninstalled = await uninstall(config);
   if (uninstalled.length > 0) {
-    // support --save, --save-dev and --save-optional
-    if (argv.save) {
-      await updateDependencies(root, pkgs, 'dependencies');
-    } else if (argv['save-dev']) {
-      await updateDependencies(root, pkgs, 'devDependencies');
-    } else if (argv['save-optional']) {
-      await updateDependencies(root, pkgs, 'optionalDependencies');
+    // --write=<type> 同时从 package.json 的对应字段删除, prod 对应 dependencies
+    if (writeType) {
+      const fields = {
+        prod: 'dependencies',
+        dev: 'devDependencies',
+        optional: 'optionalDependencies',
+        peer: 'peerDependencies',
+      };
+      await updateDependencies(root, pkgs, fields[writeType] || `${writeType}Dependencies`);
     }
   }
-  await updateDependencies(root, uninstalled);
+  // 与 npm 一致, 卸载后回收不再被任何链接引用的版本目录
+  if (!argv.global) await pruneUnreferenced(root);
+}
+
+async function pruneUnreferenced(root) {
+  const { removed } = await prune({ root });
+  for (const entry of removed) console.log('- %s', entry);
 }
 
 async function updateDependencies(root, pkgs, propName) {

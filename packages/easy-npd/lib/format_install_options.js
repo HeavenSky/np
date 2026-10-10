@@ -10,6 +10,7 @@ const EventEmitter = require('events');
 const util = require('util');
 const ora = require('ora');
 const { redactUrl } = require('./utils');
+const foreignConfig = require('./foreign_config');
 
 module.exports = function formatInstallOptions(options) {
   options.trace = !!options.trace;
@@ -66,6 +67,10 @@ module.exports = function formatInstallOptions(options) {
 
   assert(options.root && typeof options.root === 'string', 'options.root required and must be string');
   options.registry = options.registry || 'https://registry.npmjs.com';
+  // 与 easy-np 一致读取 .npmrc 中 registry 的 _authToken, 如 '//packages.aliyun.com/xxx/npm/npm-registry/:_authToken'
+  const registryKey = options.registry.replace('https://', '').replace('http://', '');
+  options.registryAuthorization =
+    foreignConfig.npmrcGet(`//${registryKey}/:_authToken`) || foreignConfig.npmrcGet(`//${registryKey}:_authToken`);
   if (!options.targetDir) {
     options.targetDir = options.root;
   }
@@ -102,16 +107,8 @@ module.exports = function formatInstallOptions(options) {
   options.gitPackages = 0;
   options.binaryMirrors = options.binaryMirrors || {};
   const defaultCacheDir = path.join(os.homedir(), '.np_tarball');
-  if (options.cacheStrict) {
-    options.cacheDir = options.cacheDir || defaultCacheDir;
-  } else {
-    if (options.production) {
-      options.cacheDir = '';
-    } else {
-      if (typeof options.cacheDir !== 'string') {
-        options.cacheDir = defaultCacheDir;
-      }
-    }
+  if (typeof options.cacheDir !== 'string') {
+    options.cacheDir = defaultCacheDir;
   }
   // https://github.com/sass/node-sass/blob/master/lib/extensions.js#L270
   // make sure npm_config_cache env exists

@@ -37,7 +37,6 @@ const allowScripts = require('./allow_scripts');
  *  - {Boolean} [production] - production mode install, default is `false`
  *  - {Object} [env] - postinstall and preinstall scripts custom env.
  *  - {String} [cacheDir] - tarball cache store dir, default is `$HOME/.np_tarball`.
- *  	if `production` mode enable, `cacheDir` will be disable.
  *  - {Object} [binaryMirrors] - binary mirror config, default is `{}`
  *  - {Boolean} [ignoreScripts] - ignore pre / post install scripts, default is `false`
  *  - {Array} [forbiddenLicenses] - forbid installing packages that use these licenses
@@ -118,7 +117,7 @@ async function _install(options, context) {
   const rootPkg = await utils.readJSON(rootPkgFile);
   const displayName = `${rootPkg.name}@${rootPkg.version}`;
   let pkgs = options.pkgs;
-  const rootPkgDependencies = dependencies(rootPkg, options, context.nested);
+  const rootPkgDependencies = dependencies(rootPkg, options, context.nested, options.rootFields);
   options.rootPkgDependencies = rootPkgDependencies;
   // 与 npm 一致, workspace 只认 workspace 根 package.json 的 overrides
   const overridesPkg =
@@ -129,15 +128,13 @@ async function _install(options, context) {
   // peer 自动安装要知道 workspace 根已声明哪些依赖, 在安装子依赖之前加载
   if (options.enableWorkspace && options.isWorkspacePackage) await getWorkspaceRootDepNames(options, context);
   if (pkgs.length === 0) {
-    if (options.client) {
-      pkgs = rootPkgDependencies.client;
-    } else if (options.production) {
+    if (options.production) {
       pkgs = rootPkgDependencies.prod;
     } else {
       pkgs = rootPkgDependencies.all;
     }
     debug(
-      `about to locally install pkgs (production: ${options.production}, client: ${options.client}): ${JSON.stringify(pkgs, null, 2)}`
+      `about to locally install pkgs (production: ${options.production}, rootFields: ${options.rootFields}): ${JSON.stringify(pkgs, null, 2)}`
     );
   } else {
     debug('pkgs: %o', pkgs);
@@ -228,9 +225,6 @@ async function _install(options, context) {
 
   // record all installed packages' versions
   recordPackageVersions(options);
-
-  // record dependencies tree resolved from npm
-  recordDependenciesTree(options);
 
   printOptionalFailures(options);
   const scriptPolicyError = allowScripts.report(options);
@@ -477,16 +471,9 @@ async function linkHoistedPackage(pkg, nodeModulesDir, options, context) {
   );
 }
 
-function getDeclaredDepNames(pkg) {
+function getDeclaredDepNames(pkg, extraFields = []) {
   const names = new Set();
-  for (const field of [
-    'dependencies',
-    'devDependencies',
-    'optionalDependencies',
-    'clientDependencies',
-    'buildDependencies',
-    'isomorphicDependencies',
-  ]) {
+  for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', ...extraFields]) {
     for (const name in pkg[field] || {}) names.add(name);
   }
   return names;
@@ -495,7 +482,8 @@ function getDeclaredDepNames(pkg) {
 async function getWorkspaceRootDepNames(options, context) {
   if (!context.workspaceRootDepNames) {
     context.workspaceRootDepNames = getDeclaredDepNames(
-      await utils.readJSON(path.join(options.workspaceRoot, 'package.json'))
+      await utils.readJSON(path.join(options.workspaceRoot, 'package.json')),
+      options.rootFields
     );
   }
   return context.workspaceRootDepNames;
@@ -505,9 +493,7 @@ async function getWorkspaceRootDepNames(options, context) {
 function getInstalledRootPkgNames(options) {
   const { rootPkgDependencies } = options;
   let rootPkgs;
-  if (options.client) {
-    rootPkgs = rootPkgDependencies.client;
-  } else if (options.production) {
+  if (options.production) {
     rootPkgs = rootPkgDependencies.prod;
   } else {
     rootPkgs = rootPkgDependencies.all;
@@ -657,17 +643,6 @@ function recordPackageVersions(options) {
   }
   const packageVersionsFile = path.join(options.storeDir, '.package_versions.json');
   writeFileSync(packageVersionsFile, JSON.stringify(versions, null, 2));
-}
-
-function recordDependenciesTree(options) {
-  if (!options.saveDependenciesTree) return;
-
-  const tree = {};
-  for (const key in options.cache.dependenciesTree) {
-    tree[key] = utils.omitPackage(options.cache.dependenciesTree[key]);
-  }
-  const installCacheFile = path.join(options.storeDir, '.dependencies_tree.json');
-  writeFileSync(installCacheFile, JSON.stringify(tree, null, 2));
 }
 
 function finishInstall(options) {
