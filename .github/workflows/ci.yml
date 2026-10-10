@@ -1,5 +1,7 @@
 # 两个包各自安装依赖, 各自 lint 与测试, 不共享 node_modules
-name: Node CI
+name: CI
+# 默认以提交信息作标题, 与同一提交触发的 Release 无法区分
+run-name: CI ${{ github.event_name == 'pull_request' && format('PR #{0}', github.event.number) || github.ref_name }}
 
 on:
   push:

@@ -1,6 +1,7 @@
 # 推送 <包名>@<版本> 形式的 tag 时发布对应的包, 例: easy-np@0.0.5, easy-npd@0.0.5
 # npm 登录走 Trusted Publishing(OIDC), 不需要 NPM_TOKEN; 需先在 npmjs.com 的包设置里登记本仓库与 release.yml
 name: Release
+run-name: Release ${{ github.ref_name }}
 
 on:
   push:
@@ -12,12 +13,13 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     permissions:
+      actions: read # 查询 CI 结果
       contents: write # 创建 GitHub Release
       id-token: write # npm Trusted Publishing
     env:
       TAG: ${{ github.ref_name }}
-      NODE_OPTIONS: --max_old_space_size=6144
     steps:
       - uses: actions/checkout@v4
 
@@ -48,9 +50,29 @@ jobs:
             echo "prerelease=$prerelease"
           } >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+      # 不重复跑 lint 与单测: 等待同一提交在 main 上的 CI 结束, 通过才发布
+      - name: Wait for CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          started=$SECONDS
+          while :; do
+            state="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&event=push&per_page=1" \
+              --jq '.workflow_runs[0] | if . == null then "missing" else "\(.status)/\(.conclusion // "")" end')"
+            case "$state" in
+              completed/success) echo "CI 已通过"; exit 0 ;;
+              completed/*) echo "::error::CI 未通过($state), 不发布"; exit 1 ;;
+              missing)
+                # 与 main 同时推送时 CI 可能稍后才出现; 5 分钟仍没有说明该提交没推到 main
+                if [ $((SECONDS - started)) -gt 300 ]; then
+                  echo "::error::提交 $GITHUB_SHA 没有 CI 运行记录, 先把它推送到 main"
+                  exit 1
+                fi ;;
+            esac
+            echo "CI 状态: $state, 30 秒后重试"
+            sleep 30
+          done
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
@@ -58,16 +80,10 @@ jobs:
       # Trusted Publishing 需要 npm >= 11.5.1
       - run: npm i -g npm@11
 
-      - name: Test
-        working-directory: packages/${{ steps.pkg.outputs.name }}
-        run: |
-          npm i
-          npm test
-
-      # prepublishOnly 会再跑一次 lint:check
+      # lint 已由 CI 负责, 跳过 prepublishOnly, 也就不需要安装依赖
       - name: Publish
         working-directory: packages/${{ steps.pkg.outputs.name }}
-        run: npm publish --provenance --access public --tag "${{ steps.pkg.outputs.dist_tag }}"
+        run: npm publish --ignore-scripts --provenance --access public --tag "${{ steps.pkg.outputs.dist_tag }}"
 
       # 取 CHANGELOG 中「## <版本>」到下一个二级标题之间的内容作为 Release 说明
       - name: GitHub Release
